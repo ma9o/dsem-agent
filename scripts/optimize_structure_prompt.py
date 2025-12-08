@@ -76,9 +76,15 @@ def validate_structure(structure_json: str, hints: dict) -> tuple[float, str]:
     dim_names = {d.name for d in structure.dimensions}
     for edge in structure.edges:
         if edge.cause not in dim_names:
-            return 0.3, f"Edge cause '{edge.cause}' not in dimensions"
+            return 0.0, f"Edge cause '{edge.cause}' not in dimensions"
         if edge.effect not in dim_names:
-            return 0.3, f"Edge effect '{edge.effect}' not in dimensions"
+            return 0.0, f"Edge effect '{edge.effect}' not in dimensions"
+
+    # Check no orphan dimensions (every dim must be in at least one edge)
+    nodes_in_edges = {e.cause for e in structure.edges} | {e.effect for e in structure.edges}
+    orphans = dim_names - nodes_in_edges
+    if orphans:
+        return 0.0, f"Orphan dimensions not in any edge: {orphans}"
 
     # Base score for valid structure
     score = 0.5
