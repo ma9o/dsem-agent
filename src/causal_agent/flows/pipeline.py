@@ -8,6 +8,7 @@ from causal_agent.utils.data import (
     load_text_chunks as load_text_chunks_util,
     resolve_input_path,
     load_query,
+    SAMPLE_CHUNKS,
 )
 
 
@@ -103,7 +104,7 @@ def causal_inference_pipeline(
     print(f"Loaded {len(chunks)} chunks")
 
     # Stage 1: Propose structure from sample
-    schema = propose_structure(question, chunks[:3])
+    schema = propose_structure(question, chunks[:SAMPLE_CHUNKS])
 
     # Stage 2: Parallel dimension population
     worker_results = populate_dimensions.map(

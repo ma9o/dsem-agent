@@ -13,6 +13,7 @@ from pathlib import Path
 
 from causal_agent.utils.data import (
     CHUNK_SIZE,
+    SAMPLE_CHUNKS,
     get_latest_preprocessed_file,
     load_text_chunks,
     PREPROCESSED_DIR,
@@ -37,7 +38,7 @@ def sample_chunks(input_file: Path, n: int, seed: int | None = None) -> list[str
 
 def main():
     parser = argparse.ArgumentParser(description="Sample data chunks for manual testing")
-    parser.add_argument("-n", type=int, default=3, help="Number of chunks to sample")
+    parser.add_argument("-n", type=int, default=SAMPLE_CHUNKS, help="Number of chunks to sample")
     parser.add_argument("-i", "--input", type=str, help="Input file name (in data/preprocessed/)")
     parser.add_argument("--seed", type=int, help="Random seed for reproducibility")
     args = parser.parse_args()

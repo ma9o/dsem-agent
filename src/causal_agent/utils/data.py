@@ -10,6 +10,7 @@ PREPROCESSED_DIR = DATA_DIR / "preprocessed"
 QUERIES_DIR = DATA_DIR / "test-queries"
 
 CHUNK_SIZE = int(os.environ.get("CHUNK_SIZE", 50))
+SAMPLE_CHUNKS = int(os.environ.get("SAMPLE_CHUNKS", 10))
 
 
 def load_lines(path: Path) -> list[str]:
