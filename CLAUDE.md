@@ -1,3 +1,5 @@
+0. At the start of each session, check if `scratchpad/TODO.md` exists. If so, read it to understand where work left off. Only update it when the user explicitly ends the session. This file is gitignored and used for local continuity.
+
 1. Every time you commit make sure to split commits atomically, avoiding clumping multiple increments into a single one.
 
 2. Every time you make a change to the file structure make sure to report it under Structure in the README
