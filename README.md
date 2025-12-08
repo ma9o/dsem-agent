@@ -110,13 +110,17 @@ Then open http://localhost:4200 to trigger runs with custom parameters.
 causal-agent/
 ├── data/
 │   ├── google-takeout/     # Raw zip exports (gitignored)
+│   ├── optimization/       # DSPy training examples and optimized modules
+│   │   └── structure_examples.jsonl
 │   ├── preprocessed/       # Converted text chunks (gitignored)
 │   └── test-queries/       # Causal research questions (gitignored)
 ├── scripts/
-│   └── preprocess_google_takeout.py
+│   ├── preprocess_google_takeout.py
+│   └── optimize_structure_prompt.py  # DSPy MIPROv2 optimization
 ├── src/causal_agent/
 │   ├── orchestrator/       # Orchestrator LLM (structure proposal, merging)
 │   │   ├── agents.py       # Inspect agents
+│   │   ├── dspy_module.py  # DSPy signature for optimization
 │   │   ├── prompts.py      # System prompts
 │   │   └── schemas.py      # Pydantic output schemas
 │   ├── workers/            # Worker LLMs (dimension population, priors)
