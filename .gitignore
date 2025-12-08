@@ -21,4 +21,8 @@ data/**
 
 # Always track gitkeeps
 !**/.gitkeep
+
+# Track test queries
+!data/test-queries/
+!data/test-queries/**
 scratchpad/**
