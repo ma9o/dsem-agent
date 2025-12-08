@@ -4,8 +4,11 @@ from prefect import flow, task
 from prefect.cache_policies import INPUTS
 from typing import Any
 
-from causal_agent.utils.data import load_text_chunks as load_text_chunks_util
-from causal_agent.utils.data import resolve_input_path
+from causal_agent.utils.data import (
+    load_text_chunks as load_text_chunks_util,
+    resolve_input_path,
+    load_query,
+)
 
 
 @task(cache_policy=INPUTS)
@@ -15,9 +18,11 @@ def load_text_chunks(input_path: Path, separator: str = "\n\n---\n\n") -> list[s
 
 
 @task(retries=2, retry_delay_seconds=30, cache_policy=INPUTS)
-def propose_structure(data_sample: list[str]) -> dict:
+def propose_structure(question: str, data_sample: list[str]) -> dict:
     """Stage 1: Orchestrator proposes dimensions, autocorrelations, time granularities, DAG."""
-    pass
+    from causal_agent.orchestrator.agents import propose_structure as propose_structure_agent
+
+    return propose_structure_agent(question, data_sample)
 
 
 @task(
@@ -74,6 +79,7 @@ def run_interventions(fitted_model: Any, interventions: list[str]) -> list[dict]
 
 @flow(log_prints=True)
 def causal_inference_pipeline(
+    query_file: str,
     target_effects: list[str],
     input_file: str | None = None,
     chunk_separator: str = "\n\n---\n\n",
@@ -82,11 +88,16 @@ def causal_inference_pipeline(
     Main causal inference pipeline.
 
     Args:
+        query_file: Filename in data/test-queries/ (e.g., 'smoking-cancer')
         target_effects: Causal effects to estimate
         input_file: Filename in data/preprocessed/ (default: latest file)
         chunk_separator: Delimiter between text chunks
     """
-    # Stage 0: Resolve input and load chunks
+    # Stage 0: Load question and data chunks
+    question = load_query(query_file)
+    print(f"Query: {query_file}")
+    print(f"Question: {question[:100]}..." if len(question) > 100 else f"Question: {question}")
+
     input_path = resolve_input_path(input_file)
     print(f"Using input file: {input_path.name}")
 
@@ -94,7 +105,7 @@ def causal_inference_pipeline(
     print(f"Loaded {len(chunks)} chunks")
 
     # Stage 1: Propose structure from sample
-    schema = propose_structure(chunks[:3])
+    schema = propose_structure(question, chunks[:3])
 
     # Stage 2: Parallel dimension population
     worker_results = populate_dimensions.map(
