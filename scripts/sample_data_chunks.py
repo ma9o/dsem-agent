@@ -24,7 +24,7 @@ def get_latest_file() -> Path:
 
 
 def sample_chunks(input_file: Path, n: int, seed: int | None = None) -> list[str]:
-    """Sample n random chunks from input file."""
+    """Sample n contiguous chunks from input file."""
     with open(input_file) as f:
         lines = [line.strip() for line in f if line.strip()]
 
@@ -32,7 +32,10 @@ def sample_chunks(input_file: Path, n: int, seed: int | None = None) -> list[str
         random.seed(seed)
 
     n = min(n, len(lines))
-    return random.sample(lines, n)
+    # Pick a random start position and take contiguous block
+    max_start = len(lines) - n
+    start = random.randint(0, max_start) if max_start > 0 else 0
+    return lines[start : start + n]
 
 
 def main():
