@@ -49,24 +49,35 @@ uv run python scripts/preprocess_google_takeout.py
 uv run python scripts/preprocess_google_takeout.py -i data/google-takeout/export.zip
 ```
 
-This outputs `data/preprocessed/<filename>.txt` with text chunks separated by `---`.
+This outputs `data/preprocessed/<filename>_<timestamp>.txt` with text chunks separated by `---`.
 
 ### Running the Pipeline
 
+**Option 1: Direct execution**
 ```bash
-# Start Prefect server (optional, for UI)
-uv run prefect server start
-
-# Run pipeline on preprocessed data
 uv run python -c "
-from pathlib import Path
 from causal_agent.flows.pipeline import causal_inference_pipeline
 
+# Uses latest preprocessed file automatically
+causal_inference_pipeline(target_effects=['effect_of_X_on_Y'])
+
+# Or specify a file
 causal_inference_pipeline(
-    input_path=Path('data/preprocessed/export.txt'),
     target_effects=['effect_of_X_on_Y'],
+    input_file='export_20241208_153022.txt',
 )
 "
 ```
+
+**Option 2: Serve with UI**
+```bash
+# Terminal 1: Start Prefect server
+uv run prefect server start
+
+# Terminal 2: Serve the flow
+uv run python -m causal_agent.flows.pipeline
+```
+
+Then open http://localhost:4200 to trigger runs with custom parameters.
 
 ## Structure
