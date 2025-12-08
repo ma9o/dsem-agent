@@ -4,6 +4,9 @@
 
 ------
 
+# polars
+Docs: https://docs.pola.rs/api/python/stable/reference/index.html
+
 # uv
 Docs: https://docs.astral.sh/uv/
 

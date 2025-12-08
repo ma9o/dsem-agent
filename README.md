@@ -4,6 +4,7 @@ This project explores an end-to-end, LLM-orchestrated framework for causal infer
 
 ## Tech stack
 
+- polars dataframes
 - uv
 - Prefect for pipeline orchestration
 - AISI's inspect agent framework
