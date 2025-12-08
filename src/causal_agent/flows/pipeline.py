@@ -12,7 +12,7 @@ from causal_agent.utils.data import (
 
 
 @task(cache_policy=INPUTS)
-def load_text_chunks(input_path: Path, separator: str = "\n\n---\n\n") -> list[str]:
+def load_text_chunks(input_path: Path, separator: str = "\n") -> list[str]:
     """Stage 0: Load preprocessed text chunks from file."""
     return load_text_chunks_util(input_path, separator)
 
@@ -82,7 +82,7 @@ def causal_inference_pipeline(
     query_file: str,
     target_effects: list[str],
     input_file: str | None = None,
-    chunk_separator: str = "\n\n---\n\n",
+    chunk_separator: str = "\n",
 ):
     """
     Main causal inference pipeline.

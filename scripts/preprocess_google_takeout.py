@@ -109,7 +109,7 @@ def export_as_text_chunks(df: pl.DataFrame, output_path: Path) -> None:
         chunk = f"[{row['datetime']}] ({row['day_of_week']} {row['hour']:02d}:00){loc_str} [{row['activity_type']}] {row['content']}"
         chunks.append(chunk)
 
-    output_path.write_text("\n\n---\n\n".join(chunks))
+    output_path.write_text("\n".join(chunks))
     print(f"Wrote {len(chunks)} chunks to {output_path}")
 
 
