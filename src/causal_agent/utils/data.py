@@ -1,14 +1,45 @@
+import os
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parent.parent.parent.parent / ".env")
 
 DATA_DIR = Path(__file__).parent.parent.parent.parent / "data"
 PREPROCESSED_DIR = DATA_DIR / "preprocessed"
 QUERIES_DIR = DATA_DIR / "test-queries"
 
+CHUNK_SIZE = int(os.environ.get("CHUNK_SIZE", 50))
 
-def load_text_chunks(path: Path, separator: str = "\n\n---\n\n") -> list[str]:
-    """Load text chunks from a preprocessed file."""
-    content = path.read_text()
-    return [chunk.strip() for chunk in content.split(separator) if chunk.strip()]
+
+def load_lines(path: Path) -> list[str]:
+    """Load individual lines from a preprocessed file."""
+    with open(path) as f:
+        return [line.strip() for line in f if line.strip()]
+
+
+def load_text_chunks(path: Path, chunk_size: int | None = None) -> list[str]:
+    """
+    Load text chunks from a preprocessed file.
+
+    Each chunk is a group of contiguous lines joined by newlines.
+
+    Args:
+        path: Path to preprocessed file (one record per line)
+        chunk_size: Lines per chunk (default: CHUNK_SIZE from .env)
+
+    Returns:
+        List of chunks, where each chunk is multiple lines joined together
+    """
+    chunk_size = chunk_size or CHUNK_SIZE
+    lines = load_lines(path)
+
+    chunks = []
+    for i in range(0, len(lines), chunk_size):
+        chunk_lines = lines[i : i + chunk_size]
+        chunks.append("\n".join(chunk_lines))
+
+    return chunks
 
 
 def get_latest_preprocessed_file(directory: Path | None = None) -> Path | None:
