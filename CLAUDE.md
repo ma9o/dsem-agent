@@ -35,6 +35,25 @@ Docs: https://docs.prefect.io/v3/get-started
 - Use `task.map(items)` for parallel execution over iterables
 - Native Python async/await supported for concurrent I/O
 
+### Deployments
+- Use `flow.serve()` to create deployment and start listener process
+- Parameters with type hints get UI input forms via OpenAPI schema
+- Set default parameters in `serve()`, users can override in UI
+- Use `str | None = None` for optional params with smart defaults
+
+```python
+@flow(log_prints=True)
+def pipeline(required_param: str, optional_file: str | None = None):
+    ...
+
+if __name__ == "__main__":
+    pipeline.serve(
+        name="my-deployment",
+        tags=["tag1"],
+        parameters={"required_param": "default"},  # defaults
+    )
+```
+
 ### Patterns
 ```python
 @task(retries=3, retry_delay_seconds=10, cache_key_fn=task_input_hash)
