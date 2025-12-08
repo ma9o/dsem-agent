@@ -63,6 +63,16 @@ uv run python scripts/preprocess_google_takeout.py -i data/google-takeout/export
 
 This outputs `data/preprocessed/google_activity_<timestamp>.txt` with one text chunk per line.
 
+### Manual Testing
+
+Sample contiguous data chunks for testing graph construction with external LLMs:
+
+```bash
+uv run python scripts/sample_data_chunks.py -n 20
+```
+
+Output goes to `data/orchestrator-samples-manual.txt`.
+
 ### Running the Pipeline
 
 **Option 1: Direct execution**
@@ -116,6 +126,7 @@ causal-agent/
 │   └── test-queries/       # Causal research questions (gitignored)
 ├── scripts/
 │   ├── preprocess_google_takeout.py
+│   ├── sample_data_chunks.py         # Sample contiguous chunks for manual testing
 │   └── optimize_structure_prompt.py  # DSPy MIPROv2 optimization
 ├── src/causal_agent/
 │   ├── orchestrator/       # Orchestrator LLM (structure proposal, merging)
