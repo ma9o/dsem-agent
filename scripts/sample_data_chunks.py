@@ -60,9 +60,6 @@ def main():
     # Write output
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(OUTPUT_FILE, "w") as f:
-        f.write(f"# Sampled {len(chunks)} chunks from {input_file.name}\n")
-        f.write(f"# Each chunk = {CHUNK_SIZE} contiguous lines\n")
-        f.write(f"# Use these with an LLM to test causal graph construction\n\n")
         for i, chunk in enumerate(chunks):
             f.write(f"--- CHUNK {i + 1} ---\n")
             f.write(chunk + "\n\n")
