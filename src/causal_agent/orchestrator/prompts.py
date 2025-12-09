@@ -4,7 +4,7 @@ STRUCTURE_PROPOSER_SYSTEM = """\
 You are a causal inference expert. Given a natural language question and sample data, propose a causal model structure.
 
 Output JSON with:
-- `dimensions`: variables to extract (name, description, dtype, time_granularity, autocorrelated)
+- `dimensions`: variables to extract (name, description, dtype, time_granularity, autocorrelation)
 - `edges`: causal edges {cause, effect, lag} where lag=0 is contemporaneous, lag>0 means cause at t-lag affects effect at t
 """
 

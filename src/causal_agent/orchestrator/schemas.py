@@ -10,7 +10,7 @@ class Dimension(BaseModel):
     time_granularity: str = Field(
         description="Time granularity: 'hourly', 'daily', 'weekly', 'monthly', 'yearly', or 'none'"
     )
-    autocorrelated: bool = Field(description="Whether this variable has temporal autocorrelation")
+    autocorrelation: int = Field(description="Autocorrelation lag (0=none, 1=AR(1), etc.)")
 
 
 class CausalEdge(BaseModel):
