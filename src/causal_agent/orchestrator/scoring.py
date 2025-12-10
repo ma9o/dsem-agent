@@ -56,6 +56,137 @@ def score_structure_proposal(example, pred, trace=None) -> float:
     return _count_rule_points(structure)
 
 
+def _count_rule_points_detailed(structure: DSEMStructure) -> dict:
+    """Count points with detailed breakdown per category.
+
+    Returns dict with:
+        - total: float total score
+        - dimensions: dict of dimension-level scoring
+        - edges: dict of edge-level scoring
+        - breakdown: list of human-readable scoring explanations
+    """
+    breakdown = []
+    dim_points = {}
+    edge_points = {}
+    total = 0.0
+    dim_map = {d.name: d for d in structure.dimensions}
+
+    # Points for dimensions
+    for dim in structure.dimensions:
+        pts = 0
+        details = []
+
+        # Valid role
+        pts += 1
+        details.append(f"+1 valid role ({dim.role.value})")
+
+        # Valid observability
+        pts += 1
+        details.append(f"+1 valid observability ({dim.observability.value})")
+
+        # Valid temporal_status
+        pts += 1
+        details.append(f"+1 valid temporal_status ({dim.temporal_status.value})")
+
+        is_time_varying = dim.temporal_status == TemporalStatus.TIME_VARYING
+
+        # Correct causal_granularity constraint
+        if is_time_varying:
+            if dim.causal_granularity is not None:
+                pts += 1
+                details.append(f"+1 has causal_granularity ({dim.causal_granularity})")
+                if dim.causal_granularity in GRANULARITY_HOURS:
+                    pts += 1
+                    details.append("+1 valid granularity value")
+        else:
+            if dim.causal_granularity is None:
+                pts += 1
+                details.append("+1 correctly omits causal_granularity (time_invariant)")
+
+        # Correct aggregation constraint
+        if is_time_varying:
+            if dim.aggregation is not None:
+                pts += 1
+                details.append(f"+1 has aggregation ({dim.aggregation})")
+                if dim.aggregation in AGGREGATION_REGISTRY:
+                    pts += 1
+                    details.append("+1 valid aggregation name")
+        else:
+            if dim.aggregation is None:
+                pts += 1
+                details.append("+1 correctly omits aggregation (time_invariant)")
+
+        # Valid base_dtype
+        if dim.base_dtype in ("continuous", "binary", "count", "ordinal", "categorical"):
+            pts += 1
+            details.append(f"+1 valid base_dtype ({dim.base_dtype})")
+
+        # Bonus for latent variables
+        if dim.observability == Observability.LATENT:
+            pts += 1
+            details.append("+1 latent variable bonus")
+
+        dim_points[dim.name] = {"points": pts, "details": details}
+        total += pts
+
+    # Points for edges
+    for edge in structure.edges:
+        pts = 0
+        details = []
+
+        if edge.cause in dim_map:
+            pts += 1
+            details.append("+1 cause exists")
+
+        if edge.effect in dim_map:
+            pts += 1
+            details.append("+1 effect exists")
+
+        cause_dim = dim_map.get(edge.cause)
+        effect_dim = dim_map.get(edge.effect)
+
+        if cause_dim and effect_dim:
+            if effect_dim.role == Role.ENDOGENOUS:
+                pts += 1
+                details.append("+1 effect is endogenous")
+
+            cause_gran = cause_dim.causal_granularity
+            effect_gran = effect_dim.causal_granularity
+
+            if cause_gran == effect_gran:
+                pts += 1
+                details.append(f"+1 same timescale ({cause_gran or 'invariant'})")
+            else:
+                pts += 2
+                details.append(f"+2 cross-timescale bonus ({cause_gran} → {effect_gran})")
+
+        edge_key = f"{edge.cause} → {edge.effect}"
+        edge_points[edge_key] = {"points": pts, "details": details}
+        total += pts
+
+    # Build breakdown summary
+    breakdown.append(f"DIMENSIONS ({len(structure.dimensions)}):")
+    for name, info in dim_points.items():
+        breakdown.append(f"  {name}: {info['points']} pts")
+        for d in info["details"]:
+            breakdown.append(f"    {d}")
+
+    breakdown.append(f"\nEDGES ({len(structure.edges)}):")
+    for edge_key, info in edge_points.items():
+        breakdown.append(f"  {edge_key}: {info['points']} pts")
+        for d in info["details"]:
+            breakdown.append(f"    {d}")
+
+    breakdown.append(f"\nTOTAL: {total} points")
+
+    return {
+        "total": total,
+        "dimensions": dim_points,
+        "edges": edge_points,
+        "breakdown": "\n".join(breakdown),
+    }
+
+
 def _count_rule_points(structure: DSEMStructure) -> float:
     """Count points for each rule instance correctly applied.
 

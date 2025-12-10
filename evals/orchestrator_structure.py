@@ -24,7 +24,7 @@ from causal_agent.orchestrator.prompts import (
     STRUCTURE_PROPOSER_SYSTEM,
     STRUCTURE_PROPOSER_USER,
 )
-from causal_agent.orchestrator.scoring import _count_rule_points
+from causal_agent.orchestrator.scoring import _count_rule_points_detailed
 from causal_agent.orchestrator.schemas import DSEMStructure
 from causal_agent.utils.data import (
     PROCESSED_DIR,
@@ -213,16 +213,19 @@ def dsem_structure_scorer():
                 explanation=f"ERROR: Schema validation failed - {e}",
             )
 
-        # Count points for valid structure
-        points = _count_rule_points(structure)
+        # Count points with detailed breakdown
+        scoring = _count_rule_points_detailed(structure)
 
         return Score(
-            value=points,
+            value=scoring["total"],
             answer=json_str[:500] + "..." if len(json_str) > 500 else json_str,
-            explanation=(
-                f"Valid structure: {len(structure.dimensions)} dimensions, "
-                f"{len(structure.edges)} edges, {points} points"
-            ),
+            explanation=scoring["breakdown"],
+            metadata={
+                "dimensions": scoring["dimensions"],
+                "edges": scoring["edges"],
+                "n_dimensions": len(structure.dimensions),
+                "n_edges": len(structure.edges),
+            },
         )
 
     return score
