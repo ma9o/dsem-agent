@@ -20,6 +20,9 @@ build/
 data/raw/**
 data/processed/**
 
+# Inspect AI eval logs
+logs/
+
 # Always track gitkeeps
 !**/.gitkeep
 

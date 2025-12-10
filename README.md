@@ -78,6 +78,32 @@ uv run python scripts/sample_data_chunks.py --prompt
 
 Output goes to `data/processed/orchestrator-samples-manual.txt`.
 
+### Running Evaluations
+
+Evaluate LLM performance on structure proposal tasks using Inspect AI:
+
+```bash
+# Run eval with a specific model
+uv run inspect eval src/causal_agent/orchestrator/eval.py \
+    --model openrouter/google/gemini-2.0-flash-001
+
+# Run with Claude
+uv run inspect eval src/causal_agent/orchestrator/eval.py \
+    --model openrouter/anthropic/claude-sonnet-4
+
+# Customize eval parameters
+uv run inspect eval src/causal_agent/orchestrator/eval.py \
+    --model openrouter/openai/gpt-4o \
+    -T n_chunks=10 \
+    -T seed=123 \
+    --limit 3
+
+# View results
+uv run inspect view
+```
+
+Logs are saved to `logs/` directory. The eval measures whether models can generate valid DSEM structures that pass schema validation.
+
 ### Running the Pipeline
 
 **Option 1: Direct execution**
@@ -134,6 +160,7 @@ causal-agent/
 ├── src/causal_agent/
 │   ├── orchestrator/       # Orchestrator LLM (structure proposal, merging)
 │   │   ├── agents.py       # Inspect agents
+│   │   ├── eval.py         # Inspect AI eval for structure proposals
 │   │   ├── prompts.py      # System prompts
 │   │   ├── schemas.py      # Pydantic output schemas
 │   │   └── scoring.py      # Structure scoring function

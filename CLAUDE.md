@@ -117,6 +117,57 @@ def sync_wrapper(prompt: str) -> dict:
     return asyncio.run(my_agent(prompt))
 ```
 
+### Evals with Tasks
+- Define tasks with `@task` decorator returning `Task(dataset, solver, scorer)`
+- Use `MemoryDataset([Sample(...)])` for programmatic datasets
+- Sample fields: `input` (required), `target`, `id`, `metadata`
+- Solvers: `system_message(prompt)`, `generate()` (calls model)
+- Custom scorers with `@scorer(metrics=[accuracy(), stderr()])`
+
+```python
+from inspect_ai import Task, task
+from inspect_ai.dataset import MemoryDataset, Sample
+from inspect_ai.scorer import Score, Target, accuracy, scorer, stderr
+from inspect_ai.solver import TaskState, generate, system_message
+
+@scorer(metrics=[accuracy(), stderr()])
+def my_scorer():
+    async def score(state: TaskState, target: Target) -> Score:
+        completion = state.output.completion
+        is_correct = validate(completion)
+        return Score(
+            value="C" if is_correct else "I",
+            answer=completion[:500],
+            explanation="reason",
+            metadata={"extra": "data"},
+        )
+    return score
+
+@task
+def my_eval(param: int = 5):
+    return Task(
+        dataset=MemoryDataset([
+            Sample(input="prompt", id="s1", metadata={"key": "val"})
+        ]),
+        solver=[system_message("system prompt"), generate()],
+        scorer=my_scorer(),
+    )
+```
+
+### Running Evals
+```bash
+inspect eval path/to/eval.py --model openrouter/google/gemini-2.0-flash-001
+inspect eval path/to/eval.py --model openrouter/anthropic/claude-sonnet-4 -T param=10 --limit 5
+```
+
+### Reading Logs
+```python
+from inspect_ai.log import read_eval_log
+log = read_eval_log('logs/xxx.eval')
+for s in log.samples:
+    print(s.id, s.scores)
+```
+
 # PyMC 
 Docs: https://www.pymc.io/welcome.html
 
