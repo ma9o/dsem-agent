@@ -1,9 +1,11 @@
-"""DSPy scoring function for DSEM structure proposals.
+"""Scoring function for DSEM structure proposals.
 
 Scoring strategy:
 - Award points for each INSTANCE of a hard rule being respected
 - Complex valid structures score higher (more dimensions/edges = more rule instances)
 - Return 0 immediately if ANY validation rule is violated
+
+Can be used for manual evaluation or with DSPy optimization.
 """
 
 import json
@@ -23,12 +25,14 @@ from causal_agent.utils.aggregations import AGGREGATION_REGISTRY
 
 
 def score_structure_proposal(example, pred, trace=None) -> float:
-    """Score a DSEM structure proposal for DSPy optimization.
+    """Score a DSEM structure proposal.
+
+    Compatible with DSPy metric interface but can be used standalone.
 
     Args:
-        example: DSPy example (unused, required by DSPy interface)
-        pred: DSPy prediction with 'structure' field containing JSON
-        trace: Optional trace (unused, required by DSPy interface)
+        example: Context/reference (unused, for DSPy compatibility)
+        pred: Object with 'structure' field containing JSON string
+        trace: Optional trace (unused, for DSPy compatibility)
 
     Returns:
         Float score: 0 if any rule violated, otherwise sum of rule instance points

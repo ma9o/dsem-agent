@@ -47,10 +47,7 @@ data/
 ├── raw/           # Raw input data (gitignored)
 ├── processed/     # Converted text files (gitignored)
 ├── queries/       # Test queries for pipeline (committed)
-└── training/      # DSPy training examples (committed)
-
-models/
-└── dspy/          # Optimized DSPy programs (committed)
+└── eval/          # Evaluation questions (committed)
 ```
 
 ### Preprocessing
@@ -130,22 +127,16 @@ causal-agent/
 │   ├── raw/                # Raw input data (gitignored)
 │   ├── processed/          # Converted text chunks (gitignored)
 │   ├── queries/            # Test queries for pipeline (committed)
-│   └── training/           # DSPy training examples (committed)
-│       └── structure_proposer.json
-├── models/
-│   └── dspy/               # Optimized DSPy programs (committed)
-│       └── structure_proposer.json
+│   └── eval/               # Evaluation questions (committed)
 ├── scripts/
 │   ├── preprocess_google_takeout.py
-│   ├── sample_data_chunks.py            # Sample chunks for manual testing
-│   └── optimize_structure_proposer.py   # DSPy MIPROv2 optimization
+│   └── sample_data_chunks.py            # Sample chunks for manual testing
 ├── src/causal_agent/
 │   ├── orchestrator/       # Orchestrator LLM (structure proposal, merging)
 │   │   ├── agents.py       # Inspect agents
-│   │   ├── dspy_module.py  # DSPy signature and module
 │   │   ├── prompts.py      # System prompts
 │   │   ├── schemas.py      # Pydantic output schemas
-│   │   └── scoring.py      # DSPy scoring function
+│   │   └── scoring.py      # Structure scoring function
 │   ├── workers/            # Worker LLMs (dimension population, priors)
 │   ├── causal/             # DoWhy identifiability, sensitivity analysis
 │   ├── models/             # PyMC GLM specification
@@ -157,7 +148,7 @@ causal-agent/
 ├── tests/
 │   ├── test_aggregations.py # Aggregation registry tests
 │   ├── test_schemas.py      # DSEM schema validation tests
-│   └── test_scoring.py      # DSPy scoring function tests
+│   └── test_scoring.py      # Structure scoring tests
 └── docs/
     └── dsem_spec.md         # DSEM specification
 ```
