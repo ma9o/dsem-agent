@@ -1,4 +1,6 @@
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from causal_agent.utils.aggregations import AGGREGATION_REGISTRY
 
 
 # Hours per granularity unit
@@ -27,8 +29,16 @@ class Dimension(BaseModel):
     )
     aggregation: str | None = Field(
         default=None,
-        description="Aggregation function: 'mean', 'sum', 'max', 'min', 'last', 'variance'. Required when raw data is finer than time_granularity.",
+        description=f"Aggregation function from registry. Available: {', '.join(sorted(AGGREGATION_REGISTRY.keys()))}",
     )
+
+    @field_validator("aggregation")
+    @classmethod
+    def validate_aggregation(cls, v: str | None) -> str | None:
+        if v is not None and v not in AGGREGATION_REGISTRY:
+            available = ", ".join(sorted(AGGREGATION_REGISTRY.keys()))
+            raise ValueError(f"Unknown aggregation '{v}'. Available: {available}")
+        return v
 
     @model_validator(mode="after")
     def validate_dimension(self):
@@ -59,8 +69,16 @@ class CausalEdge(BaseModel):
     )
     aggregation: str | None = Field(
         default=None,
-        description="Required when cause is finer-grained than effect: 'mean', 'sum', 'max', 'min', 'last', 'variance'.",
+        description=f"Required when cause is finer-grained than effect. Available: {', '.join(sorted(AGGREGATION_REGISTRY.keys()))}",
     )
+
+    @field_validator("aggregation")
+    @classmethod
+    def validate_aggregation(cls, v: str | None) -> str | None:
+        if v is not None and v not in AGGREGATION_REGISTRY:
+            available = ", ".join(sorted(AGGREGATION_REGISTRY.keys()))
+            raise ValueError(f"Unknown aggregation '{v}'. Available: {available}")
+        return v
 
 
 class DSEMStructure(BaseModel):
