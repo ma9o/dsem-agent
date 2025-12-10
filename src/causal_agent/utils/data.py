@@ -48,18 +48,64 @@ def load_text_chunks(path: Path, chunk_size: int | None = None) -> list[str]:
     return chunks
 
 
-def get_latest_preprocessed_file(directory: Path | None = None) -> Path | None:
+def sample_chunks(
+    input_file: Path,
+    n: int,
+    seed: int | None = None,
+) -> list[str]:
+    """Sample n chunks evenly spaced across the input file with jitter.
+
+    Args:
+        input_file: Path to preprocessed file
+        n: Number of chunks to sample
+        seed: Random seed for reproducibility
+
+    Returns:
+        List of sampled chunks
+    """
+    import random
+
+    chunks = load_text_chunks(input_file)
+
+    if seed is not None:
+        random.seed(seed)
+
+    n = min(n, len(chunks))
+
+    if n >= len(chunks):
+        return chunks
+
+    # Evenly space the samples across the dataset
+    # Add small random jitter within each segment to avoid predictable sampling
+    segment_size = len(chunks) / n
+    sampled = []
+    for i in range(n):
+        segment_start = int(i * segment_size)
+        segment_end = int((i + 1) * segment_size)
+        # Pick randomly within this segment
+        idx = random.randint(segment_start, segment_end - 1)
+        sampled.append(chunks[idx])
+
+    return sampled
+
+
+def get_latest_preprocessed_file(
+    directory: Path | None = None,
+    exclude: set[str] | None = None,
+) -> Path | None:
     """
     Find the most recently modified .txt file in the processed directory.
 
     Args:
         directory: Directory to search (default: data/processed/)
+        exclude: Set of filenames to exclude (e.g., script outputs)
 
     Returns:
         Path to latest file, or None if no files found
     """
     search_dir = directory or PREPROCESSED_DIR
-    txt_files = list(search_dir.glob("*.txt"))
+    exclude = exclude or set()
+    txt_files = [f for f in search_dir.glob("*.txt") if f.name not in exclude]
 
     if not txt_files:
         return None
