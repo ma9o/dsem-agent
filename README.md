@@ -141,5 +141,7 @@ causal-agent/
 │   │   └── pipeline.py
 │   └── utils/
 │       └── data.py         # Data loading utilities
+├── tests/
+│   └── test_schemas.py     # DSEM schema validation tests
 └── configs/
 ```
