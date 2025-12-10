@@ -46,7 +46,7 @@ Choose based on meaning: mean (average level), sum (cumulative), max/min (extrem
       "description": "what this represents",
       "variable_type": "outcome" | "input" | "covariate" | "random_effect",
       "time_granularity": "hourly" | "daily" | "weekly" | "monthly" | "yearly" | null,
-      "dtype": "continuous" | "binary" | "ordinal" | "categorical",
+      "base_dtype": "continuous" | "binary" | "ordinal" | "categorical",
       "aggregation": "<aggregation_name>" | null
     }
   ],

@@ -43,7 +43,7 @@ class Dimension(BaseModel):
         default=None,
         description="'hourly', 'daily', 'weekly', 'monthly', 'yearly'. Required for outcome/input types.",
     )
-    dtype: str = Field(description="'continuous', 'binary', 'ordinal', 'categorical'")
+    base_dtype: str = Field(description="'continuous', 'binary', 'ordinal', 'categorical'")
     aggregation: str | None = Field(
         default=None,
         description=f"Aggregation function from registry. Available: {', '.join(sorted(AGGREGATION_REGISTRY.keys()))}",

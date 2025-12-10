@@ -22,7 +22,7 @@ class TestDimension:
             description="Daily mood rating",
             variable_type=VariableType.OUTCOME,
             time_granularity="daily",
-            dtype="continuous",
+            base_dtype="continuous",
         )
         assert dim.role == "endogenous"
         assert dim.is_latent is False
@@ -34,7 +34,7 @@ class TestDimension:
             description="Daily temperature",
             variable_type=VariableType.INPUT,
             time_granularity="daily",
-            dtype="continuous",
+            base_dtype="continuous",
         )
         assert dim.role == "exogenous"
         assert dim.is_latent is False
@@ -45,7 +45,7 @@ class TestDimension:
             name="age",
             description="Participant age",
             variable_type=VariableType.COVARIATE,
-            dtype="continuous",
+            base_dtype="continuous",
         )
         assert dim.role == "exogenous"
         assert dim.is_latent is False
@@ -57,7 +57,7 @@ class TestDimension:
             name="person_intercept",
             description="Person-specific baseline",
             variable_type=VariableType.RANDOM_EFFECT,
-            dtype="continuous",
+            base_dtype="continuous",
         )
         assert dim.role == "exogenous"
         assert dim.is_latent is True
@@ -70,7 +70,7 @@ class TestDimension:
                 name="mood",
                 description="Invalid",
                 variable_type=VariableType.OUTCOME,
-                dtype="continuous",
+                base_dtype="continuous",
             )
 
     def test_input_requires_time_granularity(self):
@@ -80,7 +80,7 @@ class TestDimension:
                 name="weather",
                 description="Invalid",
                 variable_type=VariableType.INPUT,
-                dtype="continuous",
+                base_dtype="continuous",
             )
 
     def test_covariate_forbids_time_granularity(self):
@@ -91,7 +91,7 @@ class TestDimension:
                 description="Invalid",
                 variable_type=VariableType.COVARIATE,
                 time_granularity="daily",
-                dtype="continuous",
+                base_dtype="continuous",
             )
 
     def test_random_effect_forbids_time_granularity(self):
@@ -102,7 +102,7 @@ class TestDimension:
                 description="Invalid",
                 variable_type=VariableType.RANDOM_EFFECT,
                 time_granularity="daily",
-                dtype="continuous",
+                base_dtype="continuous",
             )
 
 
@@ -136,7 +136,7 @@ class TestDSEMStructure:
                 description=f"{name} description",
                 variable_type=vtype,
                 time_granularity=gran,
-                dtype="continuous",
+                base_dtype="continuous",
             )
             for name, gran, vtype in specs
         ]

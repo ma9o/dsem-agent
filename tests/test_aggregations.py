@@ -142,7 +142,7 @@ class TestSchemaAggregationValidation:
             description="test var",
             variable_type=VariableType.OUTCOME,
             time_granularity="daily",
-            dtype="continuous",
+            base_dtype="continuous",
             aggregation="mean",
         )
         assert dim.aggregation == "mean"
@@ -157,7 +157,7 @@ class TestSchemaAggregationValidation:
                 description="test var",
                 variable_type=VariableType.OUTCOME,
                 time_granularity="daily",
-                dtype="continuous",
+                base_dtype="continuous",
                 aggregation="invalid",
             )
 
