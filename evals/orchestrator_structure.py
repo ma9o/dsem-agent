@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 from inspect_ai import Task, task
 from inspect_ai.dataset import MemoryDataset, Sample
-from inspect_ai.scorer import Score, Target, accuracy, scorer, stderr
+from inspect_ai.scorer import Score, Target, mean, scorer, stderr
 from inspect_ai.solver import TaskState, generate, system_message
 
 from causal_agent.orchestrator.prompts import (
@@ -168,14 +168,13 @@ def extract_json_from_response(text: str) -> str | None:
     return None
 
 
-@scorer(metrics=[accuracy(), stderr()])
+@scorer(metrics=[mean(), stderr()])
 def dsem_structure_scorer():
-    """Score DSEM structure proposals using the validation and point system.
+    """Score DSEM structure proposals using cumulative points.
 
-    Returns:
-        - "C" (correct) if structure is valid (parses and validates)
-        - "I" (incorrect) if structure is invalid
-        - Numeric score (points) stored in metadata for detailed analysis
+    Returns numeric score:
+        - 0.0 if structure is invalid (with detailed error explanation)
+        - Cumulative points from _count_rule_points() if valid
     """
 
     async def score(state: TaskState, target: Target) -> Score:
@@ -185,10 +184,12 @@ def dsem_structure_scorer():
         json_str = extract_json_from_response(completion)
         if json_str is None:
             return Score(
-                value="I",
+                value=0.0,
                 answer="[No valid JSON found]",
-                explanation="Could not extract JSON from model response",
-                metadata={"points": 0.0, "error": "no_json"},
+                explanation=(
+                    "ERROR: Could not extract JSON from model response.\n"
+                    f"Response preview: {completion[:500]}..."
+                ),
             )
 
         # Parse JSON
@@ -196,10 +197,9 @@ def dsem_structure_scorer():
             data = json.loads(json_str)
         except json.JSONDecodeError as e:
             return Score(
-                value="I",
+                value=0.0,
                 answer=json_str[:200] + "..." if len(json_str) > 200 else json_str,
-                explanation=f"JSON parse error: {e}",
-                metadata={"points": 0.0, "error": "json_parse"},
+                explanation=f"ERROR: JSON parse failed - {e}",
             )
 
         # Validate against schema
@@ -207,24 +207,21 @@ def dsem_structure_scorer():
             structure = DSEMStructure(**data)
         except Exception as e:
             return Score(
-                value="I",
-                answer=json_str[:200] + "..." if len(json_str) > 200 else json_str,
-                explanation=f"Schema validation error: {e}",
-                metadata={"points": 0.0, "error": "schema_validation"},
+                value=0.0,
+                answer=json_str[:500] + "..." if len(json_str) > 500 else json_str,
+                explanation=f"ERROR: Schema validation failed - {e}",
             )
 
         # Count points for valid structure
         points = _count_rule_points(structure)
 
         return Score(
-            value="C",
+            value=points,
             answer=json_str[:500] + "..." if len(json_str) > 500 else json_str,
-            explanation=f"Valid structure with {len(structure.dimensions)} dimensions, {len(structure.edges)} edges",
-            metadata={
-                "points": points,
-                "n_dimensions": len(structure.dimensions),
-                "n_edges": len(structure.edges),
-            },
+            explanation=(
+                f"Valid structure: {len(structure.dimensions)} dimensions, "
+                f"{len(structure.edges)} edges, {points} points"
+            ),
         )
 
     return score
