@@ -27,13 +27,18 @@ def _build_json_schema() -> dict:
     return DSEMStructure.model_json_schema()
 
 
-async def propose_structure_async(question: str, data_sample: list[str]) -> dict:
+async def propose_structure_async(
+    question: str,
+    data_sample: list[str],
+    dataset_summary: str = "",
+) -> dict:
     """
     Use the orchestrator LLM to propose a causal model structure.
 
     Args:
         question: The causal research question (natural language)
         data_sample: Sample chunks from the dataset
+        dataset_summary: Brief overview of the full dataset (size, timespan, etc.)
 
     Returns:
         DSEMStructure as a dictionary
@@ -48,6 +53,7 @@ async def propose_structure_async(question: str, data_sample: list[str]) -> dict
         ChatMessageUser(
             content=STRUCTURE_PROPOSER_USER.format(
                 question=question,
+                dataset_summary=dataset_summary or "Not provided",
                 chunks=chunks_text,
             )
         ),
@@ -85,17 +91,22 @@ async def propose_structure_async(question: str, data_sample: list[str]) -> dict
     return structure.model_dump()
 
 
-def propose_structure(question: str, data_sample: list[str]) -> dict:
+def propose_structure(
+    question: str,
+    data_sample: list[str],
+    dataset_summary: str = "",
+) -> dict:
     """
     Synchronous wrapper for propose_structure_async.
 
     Args:
         question: The causal research question
         data_sample: Sample chunks from the dataset
+        dataset_summary: Brief overview of the full dataset (size, timespan, etc.)
 
     Returns:
         DSEMStructure as a dictionary
     """
     import asyncio
 
-    return asyncio.run(propose_structure_async(question, data_sample))
+    return asyncio.run(propose_structure_async(question, data_sample, dataset_summary))

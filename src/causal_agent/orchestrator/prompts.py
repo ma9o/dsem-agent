@@ -104,6 +104,9 @@ Choose based on meaning: mean (average level), sum (cumulative), max/min (extrem
 STRUCTURE_PROPOSER_USER = """\
 Question: {question}
 
+Dataset overview:
+{dataset_summary}
+
 Sample data:
 {chunks}
 """
