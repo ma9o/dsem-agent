@@ -413,12 +413,12 @@ class TestExogenousEffectViolation:
         assert score_structure_proposal(None, pred) == 0.0
 
 
-class TestAggregationRuleViolation:
-    """Test aggregation rule violations return 0."""
+class TestCrossScaleEdges:
+    """Test cross-scale edges are valid."""
 
-    def test_finer_to_coarser_without_aggregation_returns_zero(self):
-        """Finer->coarser edge without aggregation should fail."""
-        invalid = {
+    def test_finer_to_coarser_valid(self):
+        """Finer->coarser edge is valid."""
+        valid = {
             "dimensions": [
                 {
                     "name": "hourly_stress",
@@ -442,15 +442,15 @@ class TestAggregationRuleViolation:
                 },
             ],
             "edges": [
-                {"cause": "hourly_stress", "effect": "daily_mood", "description": "Missing aggregation"}
+                {"cause": "hourly_stress", "effect": "daily_mood", "description": "Hourly affects daily"}
             ],
         }
-        pred = MockPrediction(structure=json.dumps(invalid))
-        assert score_structure_proposal(None, pred) == 0.0
+        pred = MockPrediction(structure=json.dumps(valid))
+        assert score_structure_proposal(None, pred) > 0.0
 
-    def test_coarser_to_finer_with_aggregation_returns_zero(self):
-        """Coarser->finer edge with aggregation should fail."""
-        invalid = {
+    def test_coarser_to_finer_valid(self):
+        """Coarser->finer edge is valid."""
+        valid = {
             "dimensions": [
                 {
                     "name": "weekly_stress",
@@ -474,13 +474,8 @@ class TestAggregationRuleViolation:
                 },
             ],
             "edges": [
-                {
-                    "cause": "weekly_stress",
-                    "effect": "daily_mood",
-                    "description": "Invalid aggregation",
-                    "aggregation": "mean",  # Not allowed
-                }
+                {"cause": "weekly_stress", "effect": "daily_mood", "description": "Weekly affects daily"}
             ],
         }
-        pred = MockPrediction(structure=json.dumps(invalid))
-        assert score_structure_proposal(None, pred) == 0.0
+        pred = MockPrediction(structure=json.dumps(valid))
+        assert score_structure_proposal(None, pred) > 0.0

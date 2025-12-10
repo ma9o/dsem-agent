@@ -165,16 +165,3 @@ class TestSchemaAggregationValidation:
                 aggregation="invalid",
             )
 
-    def test_edge_valid_aggregation(self):
-        """CausalEdge accepts valid aggregation name."""
-        from causal_agent.orchestrator.schemas import CausalEdge
-
-        edge = CausalEdge(cause="X", effect="Y", description="X causes Y", aggregation="sum")
-        assert edge.aggregation == "sum"
-
-    def test_edge_invalid_aggregation(self):
-        """CausalEdge rejects invalid aggregation name."""
-        from causal_agent.orchestrator.schemas import CausalEdge
-
-        with pytest.raises(ValueError, match="Unknown aggregation 'bad_agg'"):
-            CausalEdge(cause="X", effect="Y", description="Test", aggregation="bad_agg")

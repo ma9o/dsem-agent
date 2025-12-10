@@ -152,3 +152,15 @@ causal-agent/
 └── docs/
     └── dsem_spec.md         # DSEM specification
 ```
+
+## Implementation Notes
+
+### Cross-Timescale Edge Aggregation (TODO: Functional Layer)
+
+When implementing the functional layer, cross-timescale edges require aggregation:
+
+- **Finer → Coarser** (e.g., hourly → daily): Aggregate the cause variable using its dimension's `aggregation` field. For example, if hourly `steps` (aggregation: "sum") affects daily `mood`, sum the 24 hourly step counts before modeling the relationship.
+
+- **Coarser → Finer** (e.g., weekly → daily): No aggregation needed. The coarser variable's value is broadcast to all finer time points within its period.
+
+The aggregation function is defined once per dimension (not per edge) because it captures the semantic meaning of how that variable should be rolled up (e.g., steps are summed, temperature is averaged).

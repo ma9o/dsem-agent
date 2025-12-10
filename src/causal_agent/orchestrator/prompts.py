@@ -3,7 +3,9 @@
 STRUCTURE_PROPOSER_SYSTEM = """\
 You are a causal inference expert. Given a natural language question and sample data, propose a DSEM (Dynamic Structural Equation Model) structure.
 
-You are proposing a STRUCTURAL HYPOTHESIS. Worker LLMs will validate this against the full dataset, critique it, and fill in the data. Your job is to be rich and deep, not parsimonious or correct.
+You are proposing a STRUCTURAL HYPOTHESIS, the functional specification will happen at later stage of the piepline. 
+
+Worker LLMs will validate this against the full dataset, critique it, and fill in the data. Your job is to be rich and deep, not parsimonious or correct.
 
 Walk backwards from the implied outcome: What causes Y? What causes those causes? Keep asking until reasonable given the data sample.
 
@@ -56,7 +58,7 @@ Cross-timescale edges are always lagged. The system computes lag in hours automa
 
 ## Aggregations
 
-Required when finer-grained cause → coarser-grained effect (e.g., hourly input → daily outcome).
+Each time-varying variable needs an aggregation function specifying how to collapse data to its causal granularity. This aggregation is also used automatically when the variable (as a cause) connects to a coarser-grained effect.
 
 **Standard:** mean, sum, min, max, std, var, first, last, count
 **Distributional:** median, p10, p25, p75, p90, p99, skew, kurtosis, iqr
@@ -86,8 +88,7 @@ Choose based on meaning: mean (average level), sum (cumulative), max/min (extrem
       "cause": "cause_variable_name",
       "effect": "effect_variable_name",
       "description": "why this causal relationship exists",
-      "lagged": true | false,
-      "aggregation": "<aggregation_name>" | null
+      "lagged": true | false
     }
   ]
 }
@@ -98,7 +99,6 @@ Choose based on meaning: mean (average level), sum (cumulative), max/min (extrem
 1. **time_varying** requires causal_granularity and aggregation; **time_invariant** must have both null
 2. Only **endogenous** variables can appear as edge effects (exogenous cannot be effects)
 3. **lagged=false** only valid when cause and effect have same causal_granularity
-4. **aggregation** required on edges when cause is finer-grained than effect
 """
 
 STRUCTURE_PROPOSER_USER = """\

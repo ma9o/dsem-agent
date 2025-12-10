@@ -14,8 +14,6 @@ from pydantic import ValidationError
 
 from causal_agent.orchestrator.schemas import (
     GRANULARITY_HOURS,
-    CausalEdge,
-    Dimension,
     DSEMStructure,
     Observability,
     Role,
@@ -76,8 +74,6 @@ def _count_rule_points(structure: DSEMStructure) -> float:
     - +1 effect exists in dimensions
     - +1 effect is endogenous
     - +1 correct timescale handling (same-scale or cross-scale rules)
-    - +1 correct aggregation constraint (finer->coarser requires, coarser->finer forbids)
-    - +1 valid aggregation name (if specified)
 
     Bonus points:
     - +2 per cross-timescale edge (more complex modeling)
@@ -158,24 +154,6 @@ def _count_rule_points(structure: DSEMStructure) -> float:
                 # Cross-timescale: bonus for complexity
                 points += 2
 
-                # Check aggregation rules for cross-timescale
-                if cause_gran and effect_gran:
-                    cause_hours = GRANULARITY_HOURS.get(cause_gran, 0)
-                    effect_hours = GRANULARITY_HOURS.get(effect_gran, 0)
-
-                    if cause_hours < effect_hours:
-                        # Finer->coarser: aggregation required
-                        if edge.aggregation is not None:
-                            points += 1
-                    else:
-                        # Coarser->finer: aggregation forbidden
-                        if edge.aggregation is None:
-                            points += 1
-
-        # Valid edge aggregation name (if specified)
-        if edge.aggregation is not None and edge.aggregation in AGGREGATION_REGISTRY:
-            points += 1
-
     return points
 
 
@@ -198,9 +176,9 @@ def score_structure_proposal_normalized(example, pred, trace=None) -> float:
         return 0.0
 
     # Theoretical max per dimension: ~8-9 points (3 classification + 2 granularity + 2 aggregation + 1 dtype + 1 latent bonus)
-    # Theoretical max per edge: ~5-6 points
+    # Theoretical max per edge: ~4 points (cause + effect + endogenous + timescale/cross-timescale bonus)
     max_dim_points = n_dims * 9
-    max_edge_points = n_edges * 6
+    max_edge_points = n_edges * 4
     max_points = max_dim_points + max_edge_points
 
     if max_points == 0:

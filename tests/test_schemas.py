@@ -145,10 +145,6 @@ class TestCausalEdge:
         edge = CausalEdge(cause="sleep", effect="mood", description="Sleep quality affects next day mood")
         assert edge.lagged is True
 
-    def test_edge_with_aggregation(self):
-        """Edge with aggregation is valid."""
-        edge = CausalEdge(cause="hourly_stress", effect="daily_mood", description="Hourly stress aggregates to daily mood", aggregation="mean")
-        assert edge.aggregation == "mean"
 
 
 class TestDSEMStructure:
@@ -253,43 +249,9 @@ class TestDSEMStructure:
                 self._make_dim("hourly_activity", "hourly", Role.EXOGENOUS),
                 self._make_dim("daily_mood", "daily", Role.ENDOGENOUS),
             ],
-            edges=[CausalEdge(cause="hourly_activity", effect="daily_mood", description="Activity affects mood", aggregation="mean")],
+            edges=[CausalEdge(cause="hourly_activity", effect="daily_mood", description="Activity affects mood")],
         )
         assert structure.edges[0].lag_hours == 24  # 1 day (coarser granularity)
-
-    def test_invalid_finer_to_coarser_needs_aggregation(self):
-        """Finer cause -> coarser effect requires aggregation."""
-        with pytest.raises(ValueError, match="Aggregation required for finer->coarser edge"):
-            DSEMStructure(
-                dimensions=[
-                    self._make_dim("hourly_activity", "hourly", Role.EXOGENOUS),
-                    self._make_dim("daily_mood", "daily", Role.ENDOGENOUS),
-                ],
-                edges=[CausalEdge(cause="hourly_activity", effect="daily_mood", description="Missing aggregation")],
-            )
-
-    def test_valid_finer_to_coarser_with_aggregation(self):
-        """Finer cause -> coarser effect with aggregation is valid."""
-        structure = DSEMStructure(
-            dimensions=[
-                self._make_dim("hourly_activity", "hourly", Role.EXOGENOUS),
-                self._make_dim("daily_mood", "daily", Role.ENDOGENOUS),
-            ],
-            edges=[CausalEdge(cause="hourly_activity", effect="daily_mood", description="Activity affects mood", aggregation="mean")],
-        )
-        assert structure.edges[0].aggregation == "mean"
-        assert structure.edges[0].lag_hours == 24
-
-    def test_invalid_coarser_to_finer_no_aggregation_allowed(self):
-        """Coarser cause -> finer effect must not have aggregation."""
-        with pytest.raises(ValueError, match="Aggregation not allowed for coarser->finer edge"):
-            DSEMStructure(
-                dimensions=[
-                    self._make_dim("weekly_stress", "weekly", Role.EXOGENOUS),
-                    self._make_dim("daily_mood", "daily", Role.ENDOGENOUS),
-                ],
-                edges=[CausalEdge(cause="weekly_stress", effect="daily_mood", description="Invalid aggregation", aggregation="mean")],
-            )
 
     def test_to_networkx(self):
         """Structure converts to NetworkX graph with computed lag_hours."""

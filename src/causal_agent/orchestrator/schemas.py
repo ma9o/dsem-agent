@@ -110,23 +110,11 @@ class CausalEdge(BaseModel):
             "Cross-timescale edges are always lagged."
         ),
     )
-    aggregation: str | None = Field(
-        default=None,
-        description=f"Required when cause is finer-grained than effect. Available: {', '.join(sorted(AGGREGATION_REGISTRY.keys()))}",
-    )
     # Computed field - set by DSEMStructure validator
     lag_hours: int | None = Field(
         default=None,
         description="Lag in hours. Computed from granularities - do not set manually.",
     )
-
-    @field_validator("aggregation")
-    @classmethod
-    def validate_aggregation(cls, v: str | None) -> str | None:
-        if v is not None and v not in AGGREGATION_REGISTRY:
-            available = ", ".join(sorted(AGGREGATION_REGISTRY.keys()))
-            raise ValueError(f"Unknown aggregation '{v}'. Available: {available}")
-        return v
 
 
 def compute_lag_hours(
@@ -189,25 +177,6 @@ class DSEMStructure(BaseModel):
                     f"{edge.cause} ({cause_gran}) -> {edge.effect} ({effect_gran})"
                 )
 
-            # Cross-timescale aggregation rules
-            if cause_gran != effect_gran and cause_gran is not None and effect_gran is not None:
-                cause_hours = GRANULARITY_HOURS.get(cause_gran, 0)
-                effect_hours = GRANULARITY_HOURS.get(effect_gran, 0)
-
-                # Aggregation required when finer cause -> coarser effect
-                if cause_hours < effect_hours and edge.aggregation is None:
-                    raise ValueError(
-                        f"Aggregation required for finer->coarser edge: "
-                        f"{edge.cause} ({cause_gran}) -> {edge.effect} ({effect_gran})"
-                    )
-
-                # Aggregation prohibited when coarser cause -> finer effect
-                if cause_hours >= effect_hours and edge.aggregation is not None:
-                    raise ValueError(
-                        f"Aggregation not allowed for coarser->finer edge: "
-                        f"{edge.cause} ({cause_gran}) -> {edge.effect} ({effect_gran})"
-                    )
-
             # Compute and set lag_hours
             edge.lag_hours = compute_lag_hours(cause_gran, effect_gran, edge.lagged)
 
@@ -227,7 +196,6 @@ class DSEMStructure(BaseModel):
                 description=edge.description,
                 lag_hours=edge.lag_hours,
                 lagged=edge.lagged,
-                aggregation=edge.aggregation,
             )
         return G
 
