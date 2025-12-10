@@ -7,6 +7,7 @@ from causal_agent.orchestrator.schemas import (
     Dimension,
     DSEMStructure,
     GRANULARITY_HOURS,
+    VariableType,
     compute_lag_hours,
 )
 
@@ -14,85 +15,94 @@ from causal_agent.orchestrator.schemas import (
 class TestDimension:
     """Tests for Dimension validation."""
 
-    def test_valid_endogenous_time_varying(self):
-        """Endogenous time-varying dimension is valid."""
+    def test_outcome_derives_endogenous(self):
+        """Outcome type derives role=endogenous, is_latent=False."""
         dim = Dimension(
             name="mood",
             description="Daily mood rating",
+            variable_type=VariableType.OUTCOME,
             time_granularity="daily",
             dtype="continuous",
-            role="endogenous",
         )
-        assert dim.name == "mood"
         assert dim.role == "endogenous"
+        assert dim.is_latent is False
 
-    def test_valid_exogenous_time_varying(self):
-        """Exogenous time-varying dimension is valid."""
+    def test_input_derives_exogenous(self):
+        """Input type derives role=exogenous, is_latent=False."""
         dim = Dimension(
             name="weather",
             description="Daily temperature",
+            variable_type=VariableType.INPUT,
             time_granularity="daily",
             dtype="continuous",
-            role="exogenous",
         )
         assert dim.role == "exogenous"
+        assert dim.is_latent is False
 
-    def test_valid_exogenous_time_invariant(self):
-        """Exogenous time-invariant dimension is valid."""
+    def test_covariate_derives_exogenous_time_invariant(self):
+        """Covariate type derives role=exogenous, is_latent=False, no time_granularity."""
         dim = Dimension(
             name="age",
             description="Participant age",
-            time_granularity=None,
+            variable_type=VariableType.COVARIATE,
             dtype="continuous",
-            role="exogenous",
         )
+        assert dim.role == "exogenous"
+        assert dim.is_latent is False
         assert dim.time_granularity is None
 
-    def test_valid_latent_random_effect(self):
-        """Latent random effect (exogenous + time-invariant) is valid."""
+    def test_random_effect_derives_latent(self):
+        """Random effect type derives role=exogenous, is_latent=True."""
         dim = Dimension(
             name="person_intercept",
             description="Person-specific baseline",
-            time_granularity=None,
+            variable_type=VariableType.RANDOM_EFFECT,
             dtype="continuous",
-            role="exogenous",
-            is_latent=True,
         )
+        assert dim.role == "exogenous"
         assert dim.is_latent is True
+        assert dim.time_granularity is None
 
-    def test_invalid_latent_must_be_exogenous(self):
-        """Latent dimension must be exogenous."""
-        with pytest.raises(ValueError, match="is_latent=True requires role='exogenous'"):
+    def test_outcome_requires_time_granularity(self):
+        """Outcome type requires time_granularity."""
+        with pytest.raises(ValueError, match="Outcome .* requires time_granularity"):
             Dimension(
-                name="bad",
+                name="mood",
                 description="Invalid",
-                time_granularity=None,
+                variable_type=VariableType.OUTCOME,
                 dtype="continuous",
-                role="endogenous",
-                is_latent=True,
             )
 
-    def test_invalid_latent_must_be_time_invariant(self):
-        """Latent dimension must be time-invariant."""
-        with pytest.raises(ValueError, match="is_latent=True requires time_granularity=None"):
+    def test_input_requires_time_granularity(self):
+        """Input type requires time_granularity."""
+        with pytest.raises(ValueError, match="Input .* requires time_granularity"):
             Dimension(
-                name="bad",
+                name="weather",
                 description="Invalid",
+                variable_type=VariableType.INPUT,
+                dtype="continuous",
+            )
+
+    def test_covariate_forbids_time_granularity(self):
+        """Covariate type must not have time_granularity."""
+        with pytest.raises(ValueError, match="Covariate .* must not have time_granularity"):
+            Dimension(
+                name="age",
+                description="Invalid",
+                variable_type=VariableType.COVARIATE,
                 time_granularity="daily",
                 dtype="continuous",
-                role="exogenous",
-                is_latent=True,
             )
 
-    def test_invalid_endogenous_must_be_time_varying(self):
-        """Endogenous dimension must be time-varying."""
-        with pytest.raises(ValueError, match="Endogenous variables must be time-varying"):
+    def test_random_effect_forbids_time_granularity(self):
+        """Random effect type must not have time_granularity."""
+        with pytest.raises(ValueError, match="Random effect .* must not have time_granularity"):
             Dimension(
-                name="bad",
+                name="intercept",
                 description="Invalid",
-                time_granularity=None,
+                variable_type=VariableType.RANDOM_EFFECT,
+                time_granularity="daily",
                 dtype="continuous",
-                role="endogenous",
             )
 
 
@@ -119,24 +129,24 @@ class TestDSEMStructure:
     """Tests for DSEMStructure validation."""
 
     def _make_dims(self, *specs):
-        """Helper to create dimensions from (name, granularity, role) tuples."""
+        """Helper to create dimensions from (name, granularity, variable_type) tuples."""
         return [
             Dimension(
                 name=name,
                 description=f"{name} description",
+                variable_type=vtype,
                 time_granularity=gran,
                 dtype="continuous",
-                role=role,
             )
-            for name, gran, role in specs
+            for name, gran, vtype in specs
         ]
 
     def test_valid_simple_structure(self):
         """Simple valid structure passes validation."""
         structure = DSEMStructure(
             dimensions=self._make_dims(
-                ("stress", "daily", "exogenous"),
-                ("mood", "daily", "endogenous"),
+                ("stress", "daily", VariableType.INPUT),
+                ("mood", "daily", VariableType.OUTCOME),
             ),
             edges=[CausalEdge(cause="stress", effect="mood", lagged=False)],
         )
@@ -148,8 +158,8 @@ class TestDSEMStructure:
         """Same-timescale lagged edge computes correct lag_hours."""
         structure = DSEMStructure(
             dimensions=self._make_dims(
-                ("sleep", "daily", "endogenous"),
-                ("mood", "daily", "endogenous"),
+                ("sleep", "daily", VariableType.OUTCOME),
+                ("mood", "daily", VariableType.OUTCOME),
             ),
             edges=[CausalEdge(cause="sleep", effect="mood", lagged=True)],
         )
@@ -159,7 +169,7 @@ class TestDSEMStructure:
         """Edge cause must exist in dimensions."""
         with pytest.raises(ValueError, match="Edge cause 'unknown' not in dimensions"):
             DSEMStructure(
-                dimensions=self._make_dims(("mood", "daily", "endogenous")),
+                dimensions=self._make_dims(("mood", "daily", VariableType.OUTCOME)),
                 edges=[CausalEdge(cause="unknown", effect="mood")],
             )
 
@@ -167,17 +177,17 @@ class TestDSEMStructure:
         """Edge effect must exist in dimensions."""
         with pytest.raises(ValueError, match="Edge effect 'unknown' not in dimensions"):
             DSEMStructure(
-                dimensions=self._make_dims(("stress", "daily", "exogenous")),
+                dimensions=self._make_dims(("stress", "daily", VariableType.INPUT)),
                 edges=[CausalEdge(cause="stress", effect="unknown")],
             )
 
     def test_invalid_exogenous_cannot_be_effect(self):
-        """Exogenous variable cannot be an effect."""
+        """Exogenous variable (input) cannot be an effect."""
         with pytest.raises(ValueError, match="Exogenous variable 'weather' cannot be an effect"):
             DSEMStructure(
                 dimensions=self._make_dims(
-                    ("mood", "daily", "endogenous"),
-                    ("weather", "daily", "exogenous"),
+                    ("mood", "daily", VariableType.OUTCOME),
+                    ("weather", "daily", VariableType.INPUT),
                 ),
                 edges=[CausalEdge(cause="mood", effect="weather", lagged=False)],
             )
@@ -187,8 +197,8 @@ class TestDSEMStructure:
         with pytest.raises(ValueError, match="Contemporaneous edge.*requires same timescale"):
             DSEMStructure(
                 dimensions=self._make_dims(
-                    ("hourly_stress", "hourly", "exogenous"),
-                    ("daily_mood", "daily", "endogenous"),
+                    ("hourly_stress", "hourly", VariableType.INPUT),
+                    ("daily_mood", "daily", VariableType.OUTCOME),
                 ),
                 edges=[CausalEdge(cause="hourly_stress", effect="daily_mood", lagged=False)],
             )
@@ -197,8 +207,8 @@ class TestDSEMStructure:
         """Coarser cause -> finer effect computes correct lag_hours."""
         structure = DSEMStructure(
             dimensions=self._make_dims(
-                ("weekly_stress", "weekly", "exogenous"),
-                ("daily_mood", "daily", "endogenous"),
+                ("weekly_stress", "weekly", VariableType.INPUT),
+                ("daily_mood", "daily", VariableType.OUTCOME),
             ),
             edges=[CausalEdge(cause="weekly_stress", effect="daily_mood")],  # lagged=True by default
         )
@@ -208,8 +218,8 @@ class TestDSEMStructure:
         """Finer cause -> coarser effect computes correct lag_hours."""
         structure = DSEMStructure(
             dimensions=self._make_dims(
-                ("hourly_activity", "hourly", "exogenous"),
-                ("daily_mood", "daily", "endogenous"),
+                ("hourly_activity", "hourly", VariableType.INPUT),
+                ("daily_mood", "daily", VariableType.OUTCOME),
             ),
             edges=[CausalEdge(cause="hourly_activity", effect="daily_mood", aggregation="mean")],
         )
@@ -220,8 +230,8 @@ class TestDSEMStructure:
         with pytest.raises(ValueError, match="Aggregation required for finer->coarser edge"):
             DSEMStructure(
                 dimensions=self._make_dims(
-                    ("hourly_activity", "hourly", "exogenous"),
-                    ("daily_mood", "daily", "endogenous"),
+                    ("hourly_activity", "hourly", VariableType.INPUT),
+                    ("daily_mood", "daily", VariableType.OUTCOME),
                 ),
                 edges=[CausalEdge(cause="hourly_activity", effect="daily_mood")],
             )
@@ -230,8 +240,8 @@ class TestDSEMStructure:
         """Finer cause -> coarser effect with aggregation is valid."""
         structure = DSEMStructure(
             dimensions=self._make_dims(
-                ("hourly_activity", "hourly", "exogenous"),
-                ("daily_mood", "daily", "endogenous"),
+                ("hourly_activity", "hourly", VariableType.INPUT),
+                ("daily_mood", "daily", VariableType.OUTCOME),
             ),
             edges=[CausalEdge(cause="hourly_activity", effect="daily_mood", aggregation="mean")],
         )
@@ -243,8 +253,8 @@ class TestDSEMStructure:
         with pytest.raises(ValueError, match="Aggregation not allowed for coarser->finer edge"):
             DSEMStructure(
                 dimensions=self._make_dims(
-                    ("weekly_stress", "weekly", "exogenous"),
-                    ("daily_mood", "daily", "endogenous"),
+                    ("weekly_stress", "weekly", VariableType.INPUT),
+                    ("daily_mood", "daily", VariableType.OUTCOME),
                 ),
                 edges=[CausalEdge(cause="weekly_stress", effect="daily_mood", aggregation="mean")],
             )
@@ -253,8 +263,8 @@ class TestDSEMStructure:
         """Structure converts to NetworkX graph with computed lag_hours."""
         structure = DSEMStructure(
             dimensions=self._make_dims(
-                ("stress", "daily", "exogenous"),
-                ("mood", "daily", "endogenous"),
+                ("stress", "daily", VariableType.INPUT),
+                ("mood", "daily", VariableType.OUTCOME),
             ),
             edges=[CausalEdge(cause="stress", effect="mood", lagged=False)],
         )

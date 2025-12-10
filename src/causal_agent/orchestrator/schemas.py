@@ -1,6 +1,24 @@
+from enum import Enum
+
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from causal_agent.utils.aggregations import AGGREGATION_REGISTRY
+
+
+class VariableType(str, Enum):
+    """Supported variable types in DSEM.
+
+    Maps to combinations of (role, observability, temporal status):
+    - OUTCOME: Endogenous, Observed, Time-varying (core dynamic system)
+    - INPUT: Exogenous, Observed, Time-varying (external time-varying inputs)
+    - COVARIATE: Exogenous, Observed, Time-invariant (between-person covariates)
+    - RANDOM_EFFECT: Exogenous, Latent, Time-invariant (person-specific intercepts)
+    """
+
+    OUTCOME = "outcome"  # What we're modeling (mood, sleep quality)
+    INPUT = "input"  # External drivers (weather, day of week)
+    COVARIATE = "covariate"  # Fixed characteristics (age, gender)
+    RANDOM_EFFECT = "random_effect"  # Person-specific baseline
 
 
 # Hours per granularity unit
@@ -18,19 +36,21 @@ class Dimension(BaseModel):
 
     name: str = Field(description="Variable name (e.g., 'sleep_quality')")
     description: str = Field(description="What this variable represents")
+    variable_type: VariableType = Field(
+        description="Type of variable: 'outcome', 'input', 'covariate', or 'random_effect'"
+    )
     time_granularity: str | None = Field(
-        description="'hourly', 'daily', 'weekly', 'monthly', 'yearly', or None for time-invariant"
+        default=None,
+        description="'hourly', 'daily', 'weekly', 'monthly', 'yearly'. Required for outcome/input types.",
     )
     dtype: str = Field(description="'continuous', 'binary', 'ordinal', 'categorical'")
-    role: str = Field(description="'endogenous' or 'exogenous'")
-    is_latent: bool = Field(
-        default=False,
-        description="True for random effects. Only valid when role='exogenous' and time_granularity=None",
-    )
     aggregation: str | None = Field(
         default=None,
         description=f"Aggregation function from registry. Available: {', '.join(sorted(AGGREGATION_REGISTRY.keys()))}",
     )
+    # Computed fields - derived from variable_type
+    role: str | None = Field(default=None, description="Computed: 'endogenous' or 'exogenous'")
+    is_latent: bool | None = Field(default=None, description="Computed: True for random effects")
 
     @field_validator("aggregation")
     @classmethod
@@ -41,17 +61,31 @@ class Dimension(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def validate_dimension(self):
-        # Latent validity: is_latent requires exogenous + time-invariant
-        if self.is_latent:
-            if self.role != "exogenous":
-                raise ValueError("is_latent=True requires role='exogenous'")
-            if self.time_granularity is not None:
-                raise ValueError("is_latent=True requires time_granularity=None")
+    def validate_and_derive_fields(self):
+        """Validate time_granularity constraints and derive role/is_latent from variable_type."""
+        vtype = self.variable_type
 
-        # Endogenous requires time-varying
-        if self.role == "endogenous" and self.time_granularity is None:
-            raise ValueError("Endogenous variables must be time-varying (time_granularity cannot be None)")
+        # Derive role and is_latent from variable_type
+        if vtype == VariableType.OUTCOME:
+            self.role = "endogenous"
+            self.is_latent = False
+            if self.time_granularity is None:
+                raise ValueError(f"Outcome '{self.name}' requires time_granularity (time-varying)")
+        elif vtype == VariableType.INPUT:
+            self.role = "exogenous"
+            self.is_latent = False
+            if self.time_granularity is None:
+                raise ValueError(f"Input '{self.name}' requires time_granularity (time-varying)")
+        elif vtype == VariableType.COVARIATE:
+            self.role = "exogenous"
+            self.is_latent = False
+            if self.time_granularity is not None:
+                raise ValueError(f"Covariate '{self.name}' must not have time_granularity (time-invariant)")
+        elif vtype == VariableType.RANDOM_EFFECT:
+            self.role = "exogenous"
+            self.is_latent = True
+            if self.time_granularity is not None:
+                raise ValueError(f"Random effect '{self.name}' must not have time_granularity (time-invariant)")
 
         return self
 

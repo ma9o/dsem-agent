@@ -33,23 +33,23 @@ def test_preprocessing_script():
 
 
 def test_schema_to_networkx():
-    from causal_agent.orchestrator.schemas import DSEMStructure, Dimension, CausalEdge
+    from causal_agent.orchestrator.schemas import DSEMStructure, Dimension, CausalEdge, VariableType
 
     structure = DSEMStructure(
         dimensions=[
             Dimension(
                 name="X",
                 description="cause variable",
+                variable_type=VariableType.INPUT,
                 time_granularity="hourly",
                 dtype="continuous",
-                role="exogenous",
             ),
             Dimension(
                 name="Y",
                 description="effect variable",
+                variable_type=VariableType.OUTCOME,
                 time_granularity="hourly",
                 dtype="continuous",
-                role="endogenous",
             ),
         ],
         edges=[CausalEdge(cause="X", effect="Y", lagged=True)],

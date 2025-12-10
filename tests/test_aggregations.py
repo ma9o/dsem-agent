@@ -135,29 +135,29 @@ class TestSchemaAggregationValidation:
 
     def test_dimension_valid_aggregation(self):
         """Dimension accepts valid aggregation name."""
-        from causal_agent.orchestrator.schemas import Dimension
+        from causal_agent.orchestrator.schemas import Dimension, VariableType
 
         dim = Dimension(
             name="test",
             description="test var",
+            variable_type=VariableType.OUTCOME,
             time_granularity="daily",
             dtype="continuous",
-            role="endogenous",
             aggregation="mean",
         )
         assert dim.aggregation == "mean"
 
     def test_dimension_invalid_aggregation(self):
         """Dimension rejects invalid aggregation name."""
-        from causal_agent.orchestrator.schemas import Dimension
+        from causal_agent.orchestrator.schemas import Dimension, VariableType
 
         with pytest.raises(ValueError, match="Unknown aggregation 'invalid'"):
             Dimension(
                 name="test",
                 description="test var",
+                variable_type=VariableType.OUTCOME,
                 time_granularity="daily",
                 dtype="continuous",
-                role="endogenous",
                 aggregation="invalid",
             )
 
@@ -165,7 +165,7 @@ class TestSchemaAggregationValidation:
         """CausalEdge accepts valid aggregation name."""
         from causal_agent.orchestrator.schemas import CausalEdge
 
-        edge = CausalEdge(cause="X", effect="Y", lag=24, aggregation="sum")
+        edge = CausalEdge(cause="X", effect="Y", aggregation="sum")
         assert edge.aggregation == "sum"
 
     def test_edge_invalid_aggregation(self):
@@ -173,4 +173,4 @@ class TestSchemaAggregationValidation:
         from causal_agent.orchestrator.schemas import CausalEdge
 
         with pytest.raises(ValueError, match="Unknown aggregation 'bad_agg'"):
-            CausalEdge(cause="X", effect="Y", lag=24, aggregation="bad_agg")
+            CausalEdge(cause="X", effect="Y", aggregation="bad_agg")
