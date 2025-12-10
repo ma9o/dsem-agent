@@ -57,10 +57,10 @@ data/
 
 ```bash
 # Process all zips in data/raw/
-uv run python scripts/preprocess_google_takeout.py
+uv run python evals/scripts/preprocess_google_takeout.py
 
 # Process a specific file
-uv run python scripts/preprocess_google_takeout.py -i data/raw/export.zip
+uv run python evals/scripts/preprocess_google_takeout.py -i data/raw/export.zip
 ```
 
 This outputs `data/processed/google_activity_<timestamp>.txt` with one text chunk per line.
@@ -70,10 +70,10 @@ This outputs `data/processed/google_activity_<timestamp>.txt` with one text chun
 Sample contiguous data chunks for testing graph construction with external LLMs:
 
 ```bash
-uv run python scripts/sample_data_chunks.py -n 20
+uv run python evals/scripts/sample_data_chunks.py -n 20
 
 # Include system prompt for generating training examples
-uv run python scripts/sample_data_chunks.py --prompt
+uv run python evals/scripts/sample_data_chunks.py --prompt
 ```
 
 Output goes to `data/processed/orchestrator-samples-manual.txt`.
@@ -166,11 +166,11 @@ causal-agent/
 │   ├── processed/          # Converted text chunks (gitignored)
 │   ├── queries/            # Test queries for pipeline (committed)
 │   └── eval/               # Evaluation questions (committed)
-├── scripts/
-│   ├── preprocess_google_takeout.py
-│   └── sample_data_chunks.py            # Sample chunks for manual testing
 ├── evals/
-│   └── orchestrator_structure.py  # Inspect AI eval for structure proposals
+│   ├── orchestrator_structure.py  # Inspect AI eval for structure proposals
+│   └── scripts/
+│       ├── preprocess_google_takeout.py  # Convert raw data to text chunks
+│       └── sample_data_chunks.py         # Sample chunks for manual testing
 ├── src/causal_agent/
 │   ├── orchestrator/       # Orchestrator LLM (structure proposal, merging)
 │   │   ├── agents.py       # Inspect agents
