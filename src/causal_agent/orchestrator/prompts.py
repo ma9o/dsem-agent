@@ -24,7 +24,7 @@ Choose one of these four types for each variable:
 | **categorical** | Unordered categories | day_of_week, activity_type |
 | **continuous** | Real-valued measurements | temperature, mood_rating, hours_slept |
 
-**Precedence:** Always select the most specific type. binary ⊂ ordinal ⊂ continuous (e.g., use binary not ordinal for yes/no; use ordinal not continuous for 1-5 ratings).
+**Precedence:** Always select the most specific type. binary ⊂ ordinal/count ⊂ continuous 
 
 ## Autoregressive Structure
 
