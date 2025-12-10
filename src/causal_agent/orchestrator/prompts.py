@@ -18,11 +18,13 @@ Choose one of these four types for each variable:
 
 | Type | Description | Example |
 |------|-------------|---------|
-| **continuous** | Real-valued measurements | temperature, mood_rating, hours_slept |
-| **binary** | Two categories (0/1, yes/no) | is_weekend, took_medication |
+| **binary** | Exactly two categories (0/1, yes/no) | is_weekend, took_medication |
+| **ordinal** | Ordered categories (3+ levels) | stress_level (1-5), education_level |
 | **count** | Non-negative integers | num_emails, steps, cups_of_coffee |
-| **ordinal** | Ordered categories | stress_level (1-5), education_level |
 | **categorical** | Unordered categories | day_of_week, activity_type |
+| **continuous** | Real-valued measurements | temperature, mood_rating, hours_slept |
+
+**Precedence:** Always select the most specific type. binary ⊂ ordinal ⊂ continuous (e.g., use binary not ordinal for yes/no; use ordinal not continuous for 1-5 ratings).
 
 ## Autoregressive Structure
 
