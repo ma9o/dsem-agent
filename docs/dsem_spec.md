@@ -27,6 +27,16 @@ Variables are classified along three dimensions:
 
 ---
 
+## Measurement Philosophy
+
+**Observed** means data exists, not perfect measurement. Outcomes and inputs may be proxies of underlying constructs (e.g., "mood" measured via app ratings, "stress" inferred from heart rate variability). Measurement error is absorbed into residual variance—we model relationships between measured quantities, not "true" latent constructs. This is a pragmatic choice: proxy-based inference is useful even when imperfect.
+
+**Latent** means no direct data whatsoever. Random effects are identified purely from the variance structure of repeated observations—no proxy, no indicator, no measurement. They capture stable between-person heterogeneity that we infer exists but never directly observe.
+
+The excluded latent types (Types 3, 7, 8) require either multiple indicators or strong structural assumptions for identification. If you theorize an unobserved construct, use the best available proxy and acknowledge the measurement limitation in interpretation.
+
+---
+
 ## Justifications for Supported Types
 
 ### Type 1: Exogenous, Observed, Time-varying
