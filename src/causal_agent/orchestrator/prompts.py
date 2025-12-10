@@ -57,7 +57,7 @@ Choose based on meaning: mean (average level), sum (cumulative), max/min (extrem
   "dimensions": [
     {
       "name": "variable_name",
-      "description": "what this represents",
+      "description": "what this represents (and how it's measured if outcome type)",
       "variable_type": "outcome" | "input" | "covariate" | "random_effect",
       "causal_granularity": "hourly" | "daily" | "weekly" | "monthly" | "yearly" | null,
       "base_dtype": "continuous" | "binary" | "count" | "ordinal" | "categorical",
@@ -68,6 +68,7 @@ Choose based on meaning: mean (average level), sum (cumulative), max/min (extrem
     {
       "cause": "cause_variable_name",
       "effect": "effect_variable_name",
+      "description": "why this causal relationship exists",
       "lagged": true | false,
       "aggregation": "<aggregation_name>" | null
     }

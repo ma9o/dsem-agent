@@ -14,7 +14,7 @@ class StructureProposalBase(dspy.Signature):
     data_sample: str = dspy.InputField(desc="Sample chunks from the dataset")
     structure: str = dspy.OutputField(
         desc="JSON with dimensions (name, description, variable_type, causal_granularity, base_dtype, aggregation), "
-        "edges (cause, effect, lagged, aggregation)"
+        "edges (cause, effect, description, lagged, aggregation)"
     )
 
 

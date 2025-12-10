@@ -108,6 +108,7 @@ class CausalEdge(BaseModel):
 
     cause: str = Field(description="Name of cause variable")
     effect: str = Field(description="Name of effect variable")
+    description: str = Field(description="Why this causal relationship exists")
     lagged: bool = Field(
         default=True,
         description=(
@@ -230,6 +231,7 @@ class DSEMStructure(BaseModel):
             G.add_edge(
                 edge.cause,
                 edge.effect,
+                description=edge.description,
                 lag_hours=edge.lag_hours,
                 lagged=edge.lagged,
                 aggregation=edge.aggregation,

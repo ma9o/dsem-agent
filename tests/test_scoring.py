@@ -77,7 +77,7 @@ class TestScoreStructureProposal:
                     "aggregation": "mean",
                 }
             ],
-            "edges": [{"cause": "nonexistent", "effect": "mood"}],
+            "edges": [{"cause": "nonexistent", "effect": "mood", "description": "Test"}],
         }
         pred = MockPrediction(structure=json.dumps(invalid))
         assert score_structure_proposal(None, pred) == 0.0
@@ -103,7 +103,7 @@ class TestScoreStructureProposal:
                     "aggregation": "mean",
                 },
             ],
-            "edges": [{"cause": "stress", "effect": "mood", "lagged": False}],
+            "edges": [{"cause": "stress", "effect": "mood", "description": "Stress affects mood", "lagged": False}],
         }
         pred = MockPrediction(structure=json.dumps(valid))
         score = score_structure_proposal(None, pred)
@@ -130,7 +130,7 @@ class TestScoreStructureProposal:
                     "aggregation": "mean",
                 },
             ],
-            "edges": [{"cause": "X", "effect": "Y"}],
+            "edges": [{"cause": "X", "effect": "Y", "description": "X causes Y"}],
         }
 
         complex_struct = {
@@ -173,9 +173,9 @@ class TestScoreStructureProposal:
                 },
             ],
             "edges": [
-                {"cause": "stress", "effect": "mood", "aggregation": "mean"},
-                {"cause": "sleep", "effect": "mood", "lagged": False},
-                {"cause": "mood", "effect": "sleep"},
+                {"cause": "stress", "effect": "mood", "description": "Stress affects mood", "aggregation": "mean"},
+                {"cause": "sleep", "effect": "mood", "description": "Sleep affects mood", "lagged": False},
+                {"cause": "mood", "effect": "sleep", "description": "Mood affects sleep"},
             ],
         }
 
@@ -267,7 +267,7 @@ class TestCountRulePoints:
                     aggregation="mean",
                 ),
             ],
-            edges=[CausalEdge(cause="X", effect="Y")],
+            edges=[CausalEdge(cause="X", effect="Y", description="X causes Y")],
         )
         points = _count_rule_points(structure)
         # Dimension points + edge points (cause exists, effect exists, effect endogenous, same timescale)
@@ -294,7 +294,7 @@ class TestCountRulePoints:
                     aggregation="mean",
                 ),
             ],
-            edges=[CausalEdge(cause="hourly_stress", effect="daily_mood", aggregation="mean")],
+            edges=[CausalEdge(cause="hourly_stress", effect="daily_mood", description="Stress affects mood", aggregation="mean")],
         )
         points = _count_rule_points(structure)
         # Cross-timescale gives +2 instead of +1
@@ -330,7 +330,7 @@ class TestNormalizedScoring:
                     "aggregation": "mean",
                 },
             ],
-            "edges": [{"cause": "X", "effect": "Y"}],
+            "edges": [{"cause": "X", "effect": "Y", "description": "X causes Y"}],
         }
         pred = MockPrediction(structure=json.dumps(valid))
         score = score_structure_proposal_normalized(None, pred)
@@ -361,7 +361,7 @@ class TestExogenousEffectViolation:
                     "aggregation": "mean",
                 },
             ],
-            "edges": [{"cause": "mood", "effect": "weather"}],  # Invalid: exogenous effect
+            "edges": [{"cause": "mood", "effect": "weather", "description": "Invalid"}],  # Invalid: exogenous effect
         }
         pred = MockPrediction(structure=json.dumps(invalid))
         assert score_structure_proposal(None, pred) == 0.0
@@ -392,7 +392,7 @@ class TestAggregationRuleViolation:
                 },
             ],
             "edges": [
-                {"cause": "hourly_stress", "effect": "daily_mood"}  # Missing aggregation
+                {"cause": "hourly_stress", "effect": "daily_mood", "description": "Missing aggregation"}
             ],
         }
         pred = MockPrediction(structure=json.dumps(invalid))
@@ -423,6 +423,7 @@ class TestAggregationRuleViolation:
                 {
                     "cause": "weekly_stress",
                     "effect": "daily_mood",
+                    "description": "Invalid aggregation",
                     "aggregation": "mean",  # Not allowed
                 }
             ],

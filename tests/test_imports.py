@@ -54,7 +54,7 @@ def test_schema_to_networkx():
                 aggregation="mean",
             ),
         ],
-        edges=[CausalEdge(cause="X", effect="Y", lagged=True)],
+        edges=[CausalEdge(cause="X", effect="Y", description="X causes Y", lagged=True)],
     )
 
     G = structure.to_networkx()

@@ -159,17 +159,17 @@ class TestCausalEdge:
 
     def test_contemporaneous_edge(self):
         """Contemporaneous edge (lagged=False) is valid."""
-        edge = CausalEdge(cause="stress", effect="mood", lagged=False)
+        edge = CausalEdge(cause="stress", effect="mood", description="Stress affects mood", lagged=False)
         assert edge.lagged is False
 
     def test_lagged_edge(self):
         """Lagged edge (default) is valid."""
-        edge = CausalEdge(cause="sleep", effect="mood")
+        edge = CausalEdge(cause="sleep", effect="mood", description="Sleep quality affects next day mood")
         assert edge.lagged is True
 
     def test_edge_with_aggregation(self):
         """Edge with aggregation is valid."""
-        edge = CausalEdge(cause="hourly_stress", effect="daily_mood", aggregation="mean")
+        edge = CausalEdge(cause="hourly_stress", effect="daily_mood", description="Hourly stress aggregates to daily mood", aggregation="mean")
         assert edge.aggregation == "mean"
 
 
@@ -204,7 +204,7 @@ class TestDSEMStructure:
                 ("stress", "daily", VariableType.INPUT),
                 ("mood", "daily", VariableType.OUTCOME),
             ),
-            edges=[CausalEdge(cause="stress", effect="mood", lagged=False)],
+            edges=[CausalEdge(cause="stress", effect="mood", description="Stress affects mood", lagged=False)],
         )
         assert len(structure.dimensions) == 2
         assert len(structure.edges) == 1
@@ -217,7 +217,7 @@ class TestDSEMStructure:
                 ("sleep", "daily", VariableType.OUTCOME),
                 ("mood", "daily", VariableType.OUTCOME),
             ),
-            edges=[CausalEdge(cause="sleep", effect="mood", lagged=True)],
+            edges=[CausalEdge(cause="sleep", effect="mood", description="Sleep affects mood", lagged=True)],
         )
         assert structure.edges[0].lag_hours == 24  # 1 day
 
@@ -226,7 +226,7 @@ class TestDSEMStructure:
         with pytest.raises(ValueError, match="Edge cause 'unknown' not in dimensions"):
             DSEMStructure(
                 dimensions=self._make_dims(("mood", "daily", VariableType.OUTCOME)),
-                edges=[CausalEdge(cause="unknown", effect="mood")],
+                edges=[CausalEdge(cause="unknown", effect="mood", description="Test edge")],
             )
 
     def test_invalid_edge_effect_not_in_dimensions(self):
@@ -234,7 +234,7 @@ class TestDSEMStructure:
         with pytest.raises(ValueError, match="Edge effect 'unknown' not in dimensions"):
             DSEMStructure(
                 dimensions=self._make_dims(("stress", "daily", VariableType.INPUT)),
-                edges=[CausalEdge(cause="stress", effect="unknown")],
+                edges=[CausalEdge(cause="stress", effect="unknown", description="Test edge")],
             )
 
     def test_invalid_exogenous_cannot_be_effect(self):
@@ -245,7 +245,7 @@ class TestDSEMStructure:
                     ("mood", "daily", VariableType.OUTCOME),
                     ("weather", "daily", VariableType.INPUT),
                 ),
-                edges=[CausalEdge(cause="mood", effect="weather", lagged=False)],
+                edges=[CausalEdge(cause="mood", effect="weather", description="Invalid edge", lagged=False)],
             )
 
     def test_invalid_contemporaneous_cross_timescale(self):
@@ -256,7 +256,7 @@ class TestDSEMStructure:
                     ("hourly_stress", "hourly", VariableType.INPUT),
                     ("daily_mood", "daily", VariableType.OUTCOME),
                 ),
-                edges=[CausalEdge(cause="hourly_stress", effect="daily_mood", lagged=False)],
+                edges=[CausalEdge(cause="hourly_stress", effect="daily_mood", description="Invalid cross-timescale", lagged=False)],
             )
 
     def test_valid_cross_scale_coarser_to_finer(self):
@@ -266,7 +266,7 @@ class TestDSEMStructure:
                 ("weekly_stress", "weekly", VariableType.INPUT),
                 ("daily_mood", "daily", VariableType.OUTCOME),
             ),
-            edges=[CausalEdge(cause="weekly_stress", effect="daily_mood")],  # lagged=True by default
+            edges=[CausalEdge(cause="weekly_stress", effect="daily_mood", description="Weekly stress affects daily mood")],  # lagged=True by default
         )
         assert structure.edges[0].lag_hours == 168  # 1 week (coarser granularity)
 
@@ -277,7 +277,7 @@ class TestDSEMStructure:
                 ("hourly_activity", "hourly", VariableType.INPUT),
                 ("daily_mood", "daily", VariableType.OUTCOME),
             ),
-            edges=[CausalEdge(cause="hourly_activity", effect="daily_mood", aggregation="mean")],
+            edges=[CausalEdge(cause="hourly_activity", effect="daily_mood", description="Activity affects mood", aggregation="mean")],
         )
         assert structure.edges[0].lag_hours == 24  # 1 day (coarser granularity)
 
@@ -289,7 +289,7 @@ class TestDSEMStructure:
                     ("hourly_activity", "hourly", VariableType.INPUT),
                     ("daily_mood", "daily", VariableType.OUTCOME),
                 ),
-                edges=[CausalEdge(cause="hourly_activity", effect="daily_mood")],
+                edges=[CausalEdge(cause="hourly_activity", effect="daily_mood", description="Missing aggregation")],
             )
 
     def test_valid_finer_to_coarser_with_aggregation(self):
@@ -299,7 +299,7 @@ class TestDSEMStructure:
                 ("hourly_activity", "hourly", VariableType.INPUT),
                 ("daily_mood", "daily", VariableType.OUTCOME),
             ),
-            edges=[CausalEdge(cause="hourly_activity", effect="daily_mood", aggregation="mean")],
+            edges=[CausalEdge(cause="hourly_activity", effect="daily_mood", description="Activity affects mood", aggregation="mean")],
         )
         assert structure.edges[0].aggregation == "mean"
         assert structure.edges[0].lag_hours == 24
@@ -312,7 +312,7 @@ class TestDSEMStructure:
                     ("weekly_stress", "weekly", VariableType.INPUT),
                     ("daily_mood", "daily", VariableType.OUTCOME),
                 ),
-                edges=[CausalEdge(cause="weekly_stress", effect="daily_mood", aggregation="mean")],
+                edges=[CausalEdge(cause="weekly_stress", effect="daily_mood", description="Invalid aggregation", aggregation="mean")],
             )
 
     def test_to_networkx(self):
@@ -322,7 +322,7 @@ class TestDSEMStructure:
                 ("stress", "daily", VariableType.INPUT),
                 ("mood", "daily", VariableType.OUTCOME),
             ),
-            edges=[CausalEdge(cause="stress", effect="mood", lagged=False)],
+            edges=[CausalEdge(cause="stress", effect="mood", description="Stress affects mood", lagged=False)],
         )
         G = structure.to_networkx()
         assert "stress" in G.nodes
