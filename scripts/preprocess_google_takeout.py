@@ -2,12 +2,12 @@
 """
 Preprocess Google Takeout MyActivity data into text chunks.
 
-Reads zip archives from data/google-takeout/ and outputs sorted text files
-to data/preprocessed/.
+Reads zip archives from data/raw/ and outputs sorted text files
+to data/processed/.
 
 Usage:
     uv run python scripts/preprocess_google_takeout.py
-    uv run python scripts/preprocess_google_takeout.py --input data/google-takeout/takeout.zip
+    uv run python scripts/preprocess_google_takeout.py --input data/raw/takeout.zip
 """
 import argparse
 import json
@@ -19,8 +19,8 @@ from zipfile import ZipFile, is_zipfile
 import polars as pl
 
 DATA_DIR = Path(__file__).parent.parent / "data"
-INPUT_DIR = DATA_DIR / "google-takeout"
-OUTPUT_DIR = DATA_DIR / "preprocessed"
+INPUT_DIR = DATA_DIR / "raw"
+OUTPUT_DIR = DATA_DIR / "processed"
 
 MYACTIVITY_PATH = "Takeout/My Activity/Search/MyActivity.json"
 
@@ -120,7 +120,7 @@ def main():
     parser.add_argument(
         "--input", "-i",
         type=Path,
-        help="Specific zip file to process (default: all zips in data/google-takeout/)",
+        help="Specific zip file to process (default: all zips in data/raw/)",
     )
     parser.add_argument(
         "--output-dir", "-o",

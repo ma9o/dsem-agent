@@ -44,24 +44,29 @@ The pipeline is **input-agnostic** and operates on preprocessed text chunks. Raw
 
 ```
 data/
-├── google-takeout/    # Raw zip exports (gitignored)
-└── preprocessed/      # Converted text files (gitignored)
+├── raw/           # Raw input data (gitignored)
+├── processed/     # Converted text files (gitignored)
+├── queries/       # Test queries for pipeline (committed)
+└── training/      # DSPy training examples (committed)
+
+models/
+└── dspy/          # Optimized DSPy programs (committed)
 ```
 
 ### Preprocessing
 
-1. Place raw data exports in the appropriate `data/` subdirectory
+1. Place raw data exports in `data/raw/`
 2. Run the preprocessing script to convert to text chunks:
 
 ```bash
-# Process all zips in data/google-takeout/
+# Process all zips in data/raw/
 uv run python scripts/preprocess_google_takeout.py
 
 # Process a specific file
-uv run python scripts/preprocess_google_takeout.py -i data/google-takeout/export.zip
+uv run python scripts/preprocess_google_takeout.py -i data/raw/export.zip
 ```
 
-This outputs `data/preprocessed/google_activity_<timestamp>.txt` with one text chunk per line.
+This outputs `data/processed/google_activity_<timestamp>.txt` with one text chunk per line.
 
 ### Manual Testing
 
@@ -69,15 +74,18 @@ Sample contiguous data chunks for testing graph construction with external LLMs:
 
 ```bash
 uv run python scripts/sample_data_chunks.py -n 20
+
+# Include system prompt for generating training examples
+uv run python scripts/sample_data_chunks.py --prompt
 ```
 
-Output goes to `data/orchestrator-samples-manual.txt`.
+Output goes to `data/processed/orchestrator-samples-manual.txt`.
 
 ### Running the Pipeline
 
 **Option 1: Direct execution**
 
-First, create a query file in `data/test-queries/` (e.g., `smoking-cancer.txt`):
+First, create a query file in `data/queries/` (e.g., `smoking-cancer.txt`):
 ```
 What is the causal effect of smoking on lung cancer risk,
 controlling for age and genetic predisposition?
@@ -119,21 +127,25 @@ Then open http://localhost:4200 to trigger runs with custom parameters.
 ```
 causal-agent/
 ├── data/
-│   ├── google-takeout/     # Raw zip exports (gitignored)
-│   ├── optimization/       # DSPy training examples and optimized modules
-│   │   └── structure_examples.jsonl
-│   ├── preprocessed/       # Converted text chunks (gitignored)
-│   └── test-queries/       # Causal research questions (gitignored)
+│   ├── raw/                # Raw input data (gitignored)
+│   ├── processed/          # Converted text chunks (gitignored)
+│   ├── queries/            # Test queries for pipeline (committed)
+│   └── training/           # DSPy training examples (committed)
+│       └── structure_proposer.json
+├── models/
+│   └── dspy/               # Optimized DSPy programs (committed)
+│       └── structure_proposer.json
 ├── scripts/
 │   ├── preprocess_google_takeout.py
-│   ├── sample_data_chunks.py         # Sample contiguous chunks for manual testing
-│   └── optimize_structure_prompt.py  # DSPy MIPROv2 optimization
+│   ├── sample_data_chunks.py            # Sample chunks for manual testing
+│   └── optimize_structure_proposer.py   # DSPy MIPROv2 optimization
 ├── src/causal_agent/
 │   ├── orchestrator/       # Orchestrator LLM (structure proposal, merging)
 │   │   ├── agents.py       # Inspect agents
-│   │   ├── dspy_module.py  # DSPy signature for optimization
+│   │   ├── dspy_module.py  # DSPy signature and module
 │   │   ├── prompts.py      # System prompts
-│   │   └── schemas.py      # Pydantic output schemas
+│   │   ├── schemas.py      # Pydantic output schemas
+│   │   └── scoring.py      # DSPy scoring function
 │   ├── workers/            # Worker LLMs (dimension population, priors)
 │   ├── causal/             # DoWhy identifiability, sensitivity analysis
 │   ├── models/             # PyMC GLM specification
@@ -144,6 +156,8 @@ causal-agent/
 │       └── data.py         # Data loading utilities
 ├── tests/
 │   ├── test_aggregations.py # Aggregation registry tests
-│   └── test_schemas.py      # DSEM schema validation tests
-└── configs/
+│   ├── test_schemas.py      # DSEM schema validation tests
+│   └── test_scoring.py      # DSPy scoring function tests
+└── docs/
+    └── dsem_spec.md         # DSEM specification
 ```

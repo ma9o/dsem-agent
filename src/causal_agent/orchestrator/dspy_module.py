@@ -22,7 +22,8 @@ class StructureProposalBase(dspy.Signature):
 StructureProposal = StructureProposalBase.with_instructions(STRUCTURE_PROPOSER_SYSTEM)
 
 # Default path for optimized program
-OPTIMIZED_PROGRAM_PATH = Path(__file__).parent / "optimized" / "structure_proposer.json"
+MODELS_DIR = Path(__file__).parent.parent.parent.parent / "models"
+OPTIMIZED_PROGRAM_PATH = MODELS_DIR / "dspy" / "structure_proposer.json"
 
 
 class StructureProposer(dspy.Module):

@@ -16,19 +16,20 @@ build/
 *.log
 .DS_Store
 
-# Data files
-data/**
+# Data files (raw and processed are gitignored, training and queries are tracked)
+data/raw/**
+data/processed/**
 
 # Always track gitkeeps
 !**/.gitkeep
 
-# Track test queries
-!data/test-queries/
-!data/test-queries/**
+# Track queries and training data (committed)
+# data/queries/ - test queries for pipeline
+# data/training/ - DSPy training examples
 
-# Track optimization examples (not personal data)
-!data/optimization/
-!data/optimization/**
+# Models (optimized programs - committed if small)
+# models/dspy/ - DSPy optimized programs
+
 scratchpad/**
 
 repomix-output.xml

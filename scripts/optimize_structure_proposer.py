@@ -2,7 +2,7 @@
 """Optimize the StructureProposer DSPy module using MIPROv2.
 
 Usage:
-    uv run python scripts/optimize_structure_proposer.py --trainset data/trainset.json
+    uv run python scripts/optimize_structure_proposer.py --trainset data/training/structure_proposer.json
 
 The trainset JSON should contain a list of examples:
 [

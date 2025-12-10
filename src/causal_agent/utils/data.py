@@ -6,8 +6,13 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent.parent.parent / ".env")
 
 DATA_DIR = Path(__file__).parent.parent.parent.parent / "data"
-PREPROCESSED_DIR = DATA_DIR / "preprocessed"
-QUERIES_DIR = DATA_DIR / "test-queries"
+RAW_DIR = DATA_DIR / "raw"
+PROCESSED_DIR = DATA_DIR / "processed"
+QUERIES_DIR = DATA_DIR / "queries"
+TRAINING_DIR = DATA_DIR / "training"
+
+# Backwards compatibility alias
+PREPROCESSED_DIR = PROCESSED_DIR
 
 CHUNK_SIZE = int(os.environ.get("CHUNK_SIZE", 50))
 SAMPLE_CHUNKS = int(os.environ.get("SAMPLE_CHUNKS", 10))
@@ -45,10 +50,10 @@ def load_text_chunks(path: Path, chunk_size: int | None = None) -> list[str]:
 
 def get_latest_preprocessed_file(directory: Path | None = None) -> Path | None:
     """
-    Find the most recently modified .txt file in the preprocessed directory.
+    Find the most recently modified .txt file in the processed directory.
 
     Args:
-        directory: Directory to search (default: data/preprocessed/)
+        directory: Directory to search (default: data/processed/)
 
     Returns:
         Path to latest file, or None if no files found

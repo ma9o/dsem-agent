@@ -17,11 +17,11 @@ from causal_agent.utils.data import (
     SAMPLE_CHUNKS,
     get_latest_preprocessed_file,
     load_text_chunks,
-    PREPROCESSED_DIR,
+    PROCESSED_DIR,
 )
 from causal_agent.orchestrator.prompts import STRUCTURE_PROPOSER_SYSTEM
 
-OUTPUT_FILE = Path(__file__).parent.parent / "data/orchestrator-samples-manual.txt"
+OUTPUT_FILE = PROCESSED_DIR / "orchestrator-samples-manual.txt"
 
 
 def sample_chunks(input_file: Path, n: int, seed: int | None = None) -> list[str]:
@@ -41,7 +41,7 @@ def sample_chunks(input_file: Path, n: int, seed: int | None = None) -> list[str
 def main():
     parser = argparse.ArgumentParser(description="Sample data chunks for manual testing")
     parser.add_argument("-n", type=int, default=SAMPLE_CHUNKS, help="Number of chunks to sample")
-    parser.add_argument("-i", "--input", type=str, help="Input file name (in data/preprocessed/)")
+    parser.add_argument("-i", "--input", type=str, help="Input file name (in data/processed/)")
     parser.add_argument("--seed", type=int, help="Random seed for reproducibility")
     parser.add_argument("--prompt", action="store_true", help="Include system prompt for training data generation")
     args = parser.parse_args()

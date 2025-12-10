@@ -88,9 +88,9 @@ def causal_inference_pipeline(
     Main causal inference pipeline.
 
     Args:
-        query_file: Filename in data/test-queries/ (e.g., 'smoking-cancer')
+        query_file: Filename in data/queries/ (e.g., 'smoking-cancer')
         target_effects: Causal effects to estimate
-        input_file: Filename in data/preprocessed/ (default: latest file)
+        input_file: Filename in data/processed/ (default: latest file)
     """
     # Stage 0: Load question and data chunks
     question = load_query(query_file)
