@@ -169,11 +169,20 @@ causal-agent/
 │   │   ├── prompts.py      # System prompts
 │   │   ├── schemas.py      # Pydantic output schemas
 │   │   └── scoring.py      # Structure scoring function
-│   ├── workers/            # Worker LLMs (dimension population, priors)
+│   ├── workers/            # Worker LLMs (dimension population, graph critique)
+│   │   ├── agents.py       # Worker agent implementation
+│   │   ├── prompts.py      # Worker system prompts
+│   │   └── schemas.py      # Worker output schemas
 │   ├── causal/             # DoWhy identifiability, sensitivity analysis
 │   ├── models/             # PyMC GLM specification
 │   ├── flows/              # Prefect pipeline
-│   │   └── pipeline.py
+│   │   ├── pipeline.py     # Main flow orchestrator
+│   │   └── stages/         # One file per pipeline stage
+│   │       ├── stage1_structure.py      # Structure proposal
+│   │       ├── stage2_workers.py        # Dimension population
+│   │       ├── stage3_identifiability.py # DoWhy checks
+│   │       ├── stage4_model.py          # PyMC specification
+│   │       └── stage5_inference.py      # Fitting & interventions
 │   └── utils/
 │       ├── aggregations.py # Polars aggregation registry
 │       ├── config.py       # YAML config loader
