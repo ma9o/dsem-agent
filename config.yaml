@@ -2,25 +2,22 @@
 
 # Stage 1: Structure Proposal (Orchestrator)
 # The orchestrator proposes dimensions, autocorrelations, time granularities, and DAG
-structure_proposal:
+stage1_structure_proposal:
   model: openrouter/anthropic/claude-opus-4.5
+  sample_chunks: 10  # Number of chunks to show orchestrator
 
 # Stage 2: Dimension Population (Workers)
 # Workers process chunks in parallel to populate dimensions and suggest graph edits
-workers:
+stage2_workers:
   model: openrouter/google/gemini-2.0-flash-001
+  chunk_size: 50  # Lines per chunk for each worker
 
 # Stage 3: Identifiability & Sensitivity Analysis
 # Uses DoWhy - no LLM needed
 
 # Stage 4: Model Specification & Prior Elicitation
-prior_elicitation:
+stage4_prior_elicitation:
   model: openrouter/anthropic/claude-opus-4.5
 
 # Stage 5: Intervention Analysis
 # Uses PyMC - no LLM needed
-
-# Data sampling settings
-data:
-  sample_chunks: 10  # Number of chunks to show orchestrator for structure proposal
-  chunk_size: 50     # Lines per chunk during preprocessing

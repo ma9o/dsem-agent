@@ -8,28 +8,35 @@ import yaml
 
 
 @dataclass(frozen=True)
-class ModelConfig:
-    """Configuration for an LLM model."""
+class Stage1Config:
+    """Stage 1: Structure Proposal (Orchestrator)."""
 
     model: str
+    sample_chunks: int
 
 
 @dataclass(frozen=True)
-class DataConfig:
-    """Configuration for data processing."""
+class Stage2Config:
+    """Stage 2: Dimension Population (Workers)."""
 
-    sample_chunks: int
+    model: str
     chunk_size: int
+
+
+@dataclass(frozen=True)
+class Stage4Config:
+    """Stage 4: Prior Elicitation."""
+
+    model: str
 
 
 @dataclass(frozen=True)
 class PipelineConfig:
     """Full pipeline configuration."""
 
-    structure_proposal: ModelConfig
-    workers: ModelConfig
-    prior_elicitation: ModelConfig
-    data: DataConfig
+    stage1_structure_proposal: Stage1Config
+    stage2_workers: Stage2Config
+    stage4_prior_elicitation: Stage4Config
 
 
 def _find_config_path() -> Path:
@@ -54,10 +61,9 @@ def load_config() -> PipelineConfig:
         raw = yaml.safe_load(f)
 
     return PipelineConfig(
-        structure_proposal=ModelConfig(**raw["structure_proposal"]),
-        workers=ModelConfig(**raw["workers"]),
-        prior_elicitation=ModelConfig(**raw["prior_elicitation"]),
-        data=DataConfig(**raw["data"]),
+        stage1_structure_proposal=Stage1Config(**raw["stage1_structure_proposal"]),
+        stage2_workers=Stage2Config(**raw["stage2_workers"]),
+        stage4_prior_elicitation=Stage4Config(**raw["stage4_prior_elicitation"]),
     )
 
 
