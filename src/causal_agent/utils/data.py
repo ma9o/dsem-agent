@@ -70,6 +70,7 @@ def sample_chunks(
     input_file: Path,
     n: int,
     seed: int | None = None,
+    chunk_size: int | None = None,
 ) -> list[str]:
     """Sample n chunks evenly spaced across the input file with jitter.
 
@@ -77,13 +78,14 @@ def sample_chunks(
         input_file: Path to preprocessed file
         n: Number of chunks to sample
         seed: Random seed for reproducibility
+        chunk_size: Lines per chunk (default: from config)
 
     Returns:
         List of sampled chunks
     """
     import random
 
-    chunks = load_text_chunks(input_file)
+    chunks = load_text_chunks(input_file, chunk_size=chunk_size)
 
     if seed is not None:
         random.seed(seed)

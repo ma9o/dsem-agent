@@ -27,7 +27,7 @@ from causal_agent.orchestrator.scoring import _count_rule_points_detailed
 from causal_agent.orchestrator.schemas import DSEMStructure
 from causal_agent.utils.data import PROCESSED_DIR
 
-from .common import extract_json_from_response, format_chunks, get_sample_chunks
+from .common import extract_json_from_response, format_chunks, get_sample_chunks_orchestrator
 
 # Top-tier models for orchestrator eval (via OpenRouter)
 # Model ID -> short alias for CLI convenience
@@ -88,7 +88,7 @@ def create_eval_dataset(
     questions = load_eval_questions()
 
     # Sample chunks (same for all questions for fair comparison)
-    chunks = get_sample_chunks(n_chunks, seed, input_file)
+    chunks = get_sample_chunks_orchestrator(n_chunks, seed, input_file)
     formatted_chunks = format_chunks(chunks)
 
     samples = []

@@ -7,6 +7,8 @@ from causal_agent.utils.data import (
     PROCESSED_DIR,
     get_latest_preprocessed_file,
     sample_chunks,
+    get_orchestrator_chunk_size,
+    get_worker_chunk_size,
 )
 
 # Files to exclude when finding the latest data file (script outputs)
@@ -35,10 +37,18 @@ def get_data_file(input_file: str | None = None):
     return data_file
 
 
-def get_sample_chunks(n_chunks: int, seed: int, input_file: str | None = None) -> list[str]:
-    """Get sampled chunks from data file."""
+def get_sample_chunks_orchestrator(n_chunks: int, seed: int, input_file: str | None = None) -> list[str]:
+    """Get sampled chunks using orchestrator chunk size from config."""
     data_file = get_data_file(input_file)
-    return sample_chunks(data_file, n_chunks, seed)
+    chunk_size = get_orchestrator_chunk_size()
+    return sample_chunks(data_file, n_chunks, seed, chunk_size=chunk_size)
+
+
+def get_sample_chunks_worker(n_chunks: int, seed: int, input_file: str | None = None) -> list[str]:
+    """Get sampled chunks using worker chunk size from config."""
+    data_file = get_data_file(input_file)
+    chunk_size = get_worker_chunk_size()
+    return sample_chunks(data_file, n_chunks, seed, chunk_size=chunk_size)
 
 
 def extract_json_from_response(text: str) -> str | None:

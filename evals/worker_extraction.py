@@ -19,7 +19,7 @@ from causal_agent.workers.prompts import WORKER_SYSTEM, WORKER_USER
 from causal_agent.workers.schemas import WorkerOutput
 from causal_agent.workers.agents import _format_dimensions, _get_outcome_description
 
-from .common import extract_json_from_response, get_sample_chunks, load_example_dag
+from .common import extract_json_from_response, get_sample_chunks_worker, load_example_dag
 
 # Smaller models for worker eval (parallel execution)
 MODELS = {
@@ -55,8 +55,8 @@ def create_eval_dataset(
     dimensions_text = _format_dimensions(schema)
     outcome_description = _get_outcome_description(schema)
 
-    # Get chunks
-    chunks = get_sample_chunks(n_chunks, seed, input_file)
+    # Get chunks (using worker chunk size from config)
+    chunks = get_sample_chunks_worker(n_chunks, seed, input_file)
 
     samples = []
     for i, chunk in enumerate(chunks):
