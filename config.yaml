@@ -5,6 +5,7 @@
 stage1_structure_proposal:
   model: openrouter/anthropic/claude-opus-4.5
   sample_chunks: 10  # Number of chunks to show orchestrator
+  chunk_size: 100    # Lines per chunk for orchestrator
 
 # Stage 2: Dimension Population (Workers)
 # Workers process chunks in parallel to populate dimensions and suggest graph edits

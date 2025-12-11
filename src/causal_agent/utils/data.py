@@ -16,19 +16,23 @@ TRAINING_DIR = DATA_DIR / "training"
 PREPROCESSED_DIR = PROCESSED_DIR
 
 
-def get_chunk_size() -> int:
-    """Get chunk size from config (stage 2: workers)."""
+def get_orchestrator_chunk_size() -> int:
+    """Get chunk size for stage 1 orchestrator."""
+    return get_config().stage1_structure_proposal.chunk_size
+
+
+def get_worker_chunk_size() -> int:
+    """Get chunk size for stage 2 workers."""
     return get_config().stage2_workers.chunk_size
 
 
 def get_sample_chunks() -> int:
-    """Get sample chunks from config (stage 1: structure proposal)."""
+    """Get number of sample chunks for stage 1 structure proposal."""
     return get_config().stage1_structure_proposal.sample_chunks
 
 
 # Backwards compatibility - evaluated at import time
-# Use get_chunk_size() / get_sample_chunks() for dynamic access
-CHUNK_SIZE = get_chunk_size()
+CHUNK_SIZE = get_worker_chunk_size()  # Default to worker chunk size
 SAMPLE_CHUNKS = get_sample_chunks()
 
 

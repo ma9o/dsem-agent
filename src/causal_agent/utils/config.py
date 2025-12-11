@@ -13,6 +13,7 @@ class Stage1Config:
 
     model: str
     sample_chunks: int
+    chunk_size: int
 
 
 @dataclass(frozen=True)
