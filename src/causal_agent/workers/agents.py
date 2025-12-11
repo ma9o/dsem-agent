@@ -45,7 +45,7 @@ def _format_dimensions(schema: dict) -> str:
             continue
         name = dim.get("name", "unknown")
         how_to_measure = dim.get("how_to_measure", "")
-        dtype = dim.get("base_dtype", "")
+        dtype = dim.get("measurement_dtype", "")
         role = dim.get("role", "")
         temporal = dim.get("temporal_status", "")
         granularity = dim.get("causal_granularity", "")
@@ -64,7 +64,7 @@ def _get_observed_dimension_dtypes(schema: dict) -> dict[str, str]:
     """Get mapping of observed dimension names to their expected dtypes."""
     dimensions = schema.get("dimensions", [])
     return {
-        dim.get("name"): dim.get("base_dtype")
+        dim.get("name"): dim.get("measurement_dtype")
         for dim in dimensions
         if dim.get("observability") == "observed"
     }

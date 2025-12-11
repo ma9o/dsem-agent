@@ -38,7 +38,7 @@ Set `is_outcome: true` for the primary outcome variable Y implied by the questio
 
 **causal_granularity**: The timescale at which causal relationships make sense (hourly/daily/weekly/monthly/yearly). Required only for time-varying variables.
 
-## Data Types (base_dtype)
+## Data Types (measurement_dtype)
 
 | Type | Description | Example |
 |------|-------------|---------|
@@ -86,7 +86,7 @@ Choose based on meaning: mean (average level), sum (cumulative), max/min (extrem
       "how_to_measure": "instructions for extracting this from data" | null,
       "temporal_status": "time_varying" | "time_invariant",
       "causal_granularity": "hourly" | "daily" | "weekly" | "monthly" | "yearly" | null,
-      "base_dtype": "continuous" | "binary" | "count" | "ordinal" | "categorical",
+      "measurement_dtype": "continuous" | "binary" | "count" | "ordinal" | "categorical",
       "aggregation": "<aggregation_name>" | null
     }
   ],

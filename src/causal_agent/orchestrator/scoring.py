@@ -116,10 +116,10 @@ def _count_rule_points_detailed(structure: DSEMStructure) -> dict:
                 pts += 1
                 details.append("+1 correctly omits aggregation (time_invariant)")
 
-        # Valid base_dtype
-        if dim.base_dtype in ("continuous", "binary", "count", "ordinal", "categorical"):
+        # Valid measurement_dtype
+        if dim.measurement_dtype in ("continuous", "binary", "count", "ordinal", "categorical"):
             pts += 1
-            details.append(f"+1 valid base_dtype ({dim.base_dtype})")
+            details.append(f"+1 valid measurement_dtype ({dim.measurement_dtype})")
 
         # Bonus for latent variables
         if dim.observability == Observability.LATENT:
@@ -196,7 +196,7 @@ def _count_rule_points(structure: DSEMStructure) -> float:
     - +1 valid temporal_status
     - +1 correct causal_granularity constraint (required for time_varying, forbidden for time_invariant)
     - +1 correct aggregation constraint (required for time_varying, forbidden for time_invariant)
-    - +1 valid base_dtype
+    - +1 valid measurement_dtype
     - +1 valid aggregation name (if specified)
     - +1 valid causal_granularity value (if specified)
 
@@ -248,8 +248,8 @@ def _count_rule_points(structure: DSEMStructure) -> float:
             if dim.aggregation is None:
                 points += 1
 
-        # Valid base_dtype
-        if dim.base_dtype in ("continuous", "binary", "count", "ordinal", "categorical"):
+        # Valid measurement_dtype
+        if dim.measurement_dtype in ("continuous", "binary", "count", "ordinal", "categorical"):
             points += 1
 
         # Bonus for latent variables (modeling unobserved heterogeneity)

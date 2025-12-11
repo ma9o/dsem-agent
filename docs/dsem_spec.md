@@ -172,7 +172,7 @@ class Dimension(BaseModel):
     causal_granularity: str | None = Field(
         description="'hourly', 'daily', 'weekly', 'monthly', 'yearly', or None for time-invariant"
     )
-    base_dtype: str = Field(description="'continuous', 'binary', 'count', 'ordinal', 'categorical'")
+    measurement_dtype: str = Field(description="'continuous', 'binary', 'count', 'ordinal', 'categorical'")
     role: str = Field(description="'endogenous' or 'exogenous'")
     is_latent: bool = Field(
         default=False,

@@ -64,7 +64,7 @@ class Dimension(BaseModel):
             "The granularity at which causal relationships make sense."
         ),
     )
-    base_dtype: str = Field(
+    measurement_dtype: str = Field(
         description="'continuous', 'binary', 'count', 'ordinal', 'categorical'"
     )
     aggregation: str | None = Field(
