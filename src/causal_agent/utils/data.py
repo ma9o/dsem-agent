@@ -17,13 +17,13 @@ PREPROCESSED_DIR = PROCESSED_DIR
 
 
 def get_chunk_size() -> int:
-    """Get chunk size from config."""
-    return get_config().data.chunk_size
+    """Get chunk size from config (stage 2: workers)."""
+    return get_config().stage2_workers.chunk_size
 
 
 def get_sample_chunks() -> int:
-    """Get sample chunks from config."""
-    return get_config().data.sample_chunks
+    """Get sample chunks from config (stage 1: structure proposal)."""
+    return get_config().stage1_structure_proposal.sample_chunks
 
 
 # Backwards compatibility - evaluated at import time

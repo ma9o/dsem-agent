@@ -39,7 +39,7 @@ async def propose_structure_async(
     Returns:
         DSEMStructure as a dictionary
     """
-    model_name = get_config().structure_proposal.model
+    model_name = get_config().stage1_structure_proposal.model
     model = get_model(model_name)
 
     # Format the chunks for the prompt - show them as they appear in the data
