@@ -52,38 +52,37 @@ def _parse_json_response(content: str) -> dict:
         raise ValueError(f"Failed to parse model response as JSON: {e}") from e
 
 
-async def run_two_stage_proposal(
+async def multi_turn_generate(
     messages: list["ChatMessage"],
+    follow_ups: list[str],
     model: Model,
     config: GenerateConfig | None = None,
 ) -> str:
     """
-    Core two-stage proposal logic. Used by both production pipeline and evals.
-
-    Stage 1: Generate initial structure from messages
-    Stage 2: Self-review focusing on measurement coherence
+    Run a multi-turn conversation: generate, then continue with follow-up prompts.
 
     Args:
-        messages: Initial messages (system + user prompt)
+        messages: Initial messages (typically system + user prompt)
+        follow_ups: List of follow-up user prompts to send after each response
         model: The model to use for generation
         config: Optional generation config
 
     Returns:
-        The final completion string (JSON structure)
+        The final completion string
     """
-    # Stage 1: Initial proposal
-    proposal_response = await model.generate(messages, config=config)
-
-    # Append assistant response to conversation history
     messages = list(messages)  # Don't mutate original
-    messages.append(ChatMessageAssistant(content=proposal_response.completion))
 
-    # Stage 2: Self-review (continues the conversation)
-    messages.append(ChatMessageUser(content=STRUCTURE_REVIEW_REQUEST))
+    # Initial generation
+    response = await model.generate(messages, config=config)
+    messages.append(ChatMessageAssistant(content=response.completion))
 
-    review_response = await model.generate(messages, config=config)
+    # Follow-up turns
+    for prompt in follow_ups:
+        messages.append(ChatMessageUser(content=prompt))
+        response = await model.generate(messages, config=config)
+        messages.append(ChatMessageAssistant(content=response.completion))
 
-    return review_response.completion
+    return response.completion
 
 
 async def propose_structure_async(
@@ -124,8 +123,12 @@ async def propose_structure_async(
         ),
     ]
 
-    # Run two-stage proposal
-    completion = await run_two_stage_proposal(messages, model)
+    # Run multi-turn: initial proposal + self-review
+    completion = await multi_turn_generate(
+        messages=messages,
+        follow_ups=[STRUCTURE_REVIEW_REQUEST],
+        model=model,
+    )
 
     # Parse and validate final result
     reviewed_data = _parse_json_response(completion)

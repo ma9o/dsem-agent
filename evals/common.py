@@ -6,7 +6,8 @@ import re
 from inspect_ai.model import GenerateConfig, get_model
 from inspect_ai.solver import Generate, TaskState, generate, solver
 
-from causal_agent.orchestrator.agents import run_two_stage_proposal
+from causal_agent.orchestrator.agents import multi_turn_generate
+from causal_agent.orchestrator.prompts import STRUCTURE_REVIEW_REQUEST
 from causal_agent.utils.data import (
     PROCESSED_DIR,
     get_latest_preprocessed_file,
@@ -26,34 +27,24 @@ def reasoning_generate():
 
 @solver
 def two_stage_proposal_solver():
-    """Solver that runs the production two-stage proposal pipeline.
+    """Solver that runs multi-turn proposal with self-review.
 
-    Uses run_two_stage_proposal from agents.py directly, ensuring
+    Uses multi_turn_generate from agents.py, ensuring
     evals test the exact same logic as production.
     """
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
-        # Get the model being evaluated
         model = get_model()
+        config = GenerateConfig(max_tokens=65536, reasoning_effort="high")
 
-        # Config for reasoning models
-        config = GenerateConfig(
-            max_tokens=65536,
-            reasoning_effort="high",
-        )
-
-        # Run the production two-stage pipeline
-        # state.messages already has system + user from the task setup
-        completion = await run_two_stage_proposal(
+        completion = await multi_turn_generate(
             messages=list(state.messages),
+            follow_ups=[STRUCTURE_REVIEW_REQUEST],
             model=model,
             config=config,
         )
 
-        # Update state with final completion
-        # Note: state.messages won't reflect the multi-turn, but state.output will have the final result
         state.output.completion = completion
-
         return state
 
     return solve
