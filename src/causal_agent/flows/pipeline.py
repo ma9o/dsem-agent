@@ -8,14 +8,22 @@ from causal_agent.utils.data import (
     load_text_chunks as load_text_chunks_util,
     resolve_input_path,
     load_query,
+    get_orchestrator_chunk_size,
+    get_worker_chunk_size,
     SAMPLE_CHUNKS,
 )
 
 
 @task(cache_policy=INPUTS)
-def load_text_chunks(input_path: Path) -> list[str]:
-    """Stage 0: Load preprocessed text chunks from file."""
-    return load_text_chunks_util(input_path)
+def load_orchestrator_chunks(input_path: Path) -> list[str]:
+    """Load chunks sized for orchestrator (stage 1)."""
+    return load_text_chunks_util(input_path, chunk_size=get_orchestrator_chunk_size())
+
+
+@task(cache_policy=INPUTS)
+def load_worker_chunks(input_path: Path) -> list[str]:
+    """Load chunks sized for workers (stage 2)."""
+    return load_text_chunks_util(input_path, chunk_size=get_worker_chunk_size())
 
 
 @task(retries=2, retry_delay_seconds=30, cache_policy=INPUTS)
@@ -100,16 +108,17 @@ def causal_inference_pipeline(
     input_path = resolve_input_path(input_file)
     print(f"Using input file: {input_path.name}")
 
-    chunks = load_text_chunks(input_path)
-    print(f"Loaded {len(chunks)} chunks")
+    # Stage 1: Propose structure from sample (orchestrator chunk size)
+    orchestrator_chunks = load_orchestrator_chunks(input_path)
+    print(f"Loaded {len(orchestrator_chunks)} orchestrator chunks")
+    schema = propose_structure(question, orchestrator_chunks[:SAMPLE_CHUNKS])
 
-    # Stage 1: Propose structure from sample
-    schema = propose_structure(question, chunks[:SAMPLE_CHUNKS])
-
-    # Stage 2: Parallel dimension population
+    # Stage 2: Parallel dimension population (worker chunk size)
+    worker_chunks = load_worker_chunks(input_path)
+    print(f"Loaded {len(worker_chunks)} worker chunks")
     worker_results = populate_dimensions.map(
-        chunks,
-        chunk_id=list(range(len(chunks))),
+        worker_chunks,
+        chunk_id=list(range(len(worker_chunks))),
         schema=schema,
     )
     schema = merge_suggestions(schema, worker_results)
@@ -123,7 +132,7 @@ def causal_inference_pipeline(
     priors = elicit_priors(model_spec)
 
     # Stage 5: Fit and intervene
-    fitted = fit_model(model_spec, priors, chunks)
+    fitted = fit_model(model_spec, priors, worker_chunks)
     results = run_interventions(fitted, target_effects)
 
     return results
