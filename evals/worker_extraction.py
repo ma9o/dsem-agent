@@ -82,13 +82,17 @@ def create_eval_dataset(
     return MemoryDataset(samples)
 
 
+# Base points for valid schema (even with no extractions)
+VALID_SCHEMA_POINTS = 10
+
+
 @scorer(metrics=[mean(), stderr()])
 def worker_extraction_scorer():
-    """Score worker extractions by dataframe row count.
+    """Score worker extractions.
 
     Returns:
         - 0 if output is invalid (JSON parse error, schema validation error)
-        - Number of valid extraction rows if valid
+        - 10 + number of extraction rows if valid
     """
 
     async def score(state: TaskState, target: Target) -> Score:
@@ -140,14 +144,16 @@ def worker_extraction_scorer():
         # Build explanation
         n_proposed = len(output.proposed_dimensions) if output.proposed_dimensions else 0
         unique_dims = df["dimension"].n_unique() if n_rows > 0 else 0
+        total_score = VALID_SCHEMA_POINTS + n_rows
 
         explanation = (
+            f"Valid schema (+{VALID_SCHEMA_POINTS}). "
             f"Extracted {n_rows} observations across {unique_dims} dimensions. "
             f"Proposed {n_proposed} new dimension(s)."
         )
 
         return Score(
-            value=n_rows,
+            value=total_score,
             answer=json_str[:500] + "..." if len(json_str) > 500 else json_str,
             explanation=explanation,
             metadata={
