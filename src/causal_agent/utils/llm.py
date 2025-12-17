@@ -112,6 +112,34 @@ def make_validate_worker_output_tool(schema: dict) -> Tool:
 
 
 @tool
+def calculate():
+    """Tool for evaluating simple arithmetic calculations."""
+
+    async def execute(expression: str) -> str:
+        """
+        Evaluate a simple arithmetic expression.
+
+        Args:
+            expression: A Python arithmetic expression (e.g., "2 + 3 * 4", "100 / 5", "(10 + 5) * 2", "10 % 3", "2 ** 8")
+
+        Returns:
+            The result of the calculation, or an error message if evaluation fails.
+        """
+        # Whitelist of allowed characters for safe evaluation
+        allowed_chars = set("0123456789+-*/%()._ ")
+        if not all(c in allowed_chars for c in expression):
+            return f"Error: Expression contains invalid characters. Only numbers and +-*/%()._ are allowed."
+
+        try:
+            result = eval(expression)  # noqa: S307 - safe due to character whitelist
+            return str(result)
+        except (SyntaxError, ZeroDivisionError, TypeError, NameError) as e:
+            return f"Error evaluating expression: {e}"
+
+    return execute
+
+
+@tool
 def parse_date():
     """Tool for parsing dates into a human-readable spelled out format."""
 

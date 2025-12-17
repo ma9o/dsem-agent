@@ -11,7 +11,7 @@ stage1_structure_proposal:
 # Workers process chunks in parallel to populate dimensions and suggest graph edits
 stage2_workers:
   model: openrouter/google/gemini-2.0-flash-001
-  chunk_size: 50  # Lines per chunk for each worker
+  chunk_size: 20  # Lines per chunk for each worker
 
 # Stage 3: Identifiability & Sensitivity Analysis
 # Uses DoWhy - no LLM needed

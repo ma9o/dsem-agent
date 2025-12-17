@@ -13,7 +13,7 @@ from inspect_ai.model import (
 )
 
 from causal_agent.utils.config import get_config
-from causal_agent.utils.llm import make_validate_worker_output_tool, multi_turn_generate, parse_date, parse_json_response
+from causal_agent.utils.llm import calculate, make_validate_worker_output_tool, multi_turn_generate, parse_date, parse_json_response
 from .prompts import WORKER_SYSTEM, WORKER_USER
 from .schemas import WorkerOutput, validate_worker_output
 
@@ -121,7 +121,7 @@ async def process_chunk_async(
     completion = await multi_turn_generate(
         messages=messages,
         model=model,
-        tools=[validation_tool, parse_date()],
+        tools=[validation_tool, parse_date(), calculate()],
     )
     data = parse_json_response(completion)
 
