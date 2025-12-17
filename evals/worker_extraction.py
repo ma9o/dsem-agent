@@ -40,13 +40,13 @@ from evals.common import (
 # Worker models for parallel execution (via OpenRouter)
 # Using reasoning-capable models with thinking budget
 MODELS = {
-    "openrouter/moonshotai/kimi-k2-thinking": "kimi-k2",
+    "openrouter/moonshotai/kimi-k2-thinking": "kimi",
     "openrouter/deepseek/deepseek-v3.2-exp": "deepseek",
-    "openrouter/google/gemini-2.5-flash": "gemini-flash",
-    "openrouter/x-ai/grok-4.1-fast": "grok-fast",
-    "openrouter/anthropic/claude-4.5-haiku-20251001": "haiku",
-    "openrouter/minimax/minimax-m2": "minimax-m2",
-    "openrouter/openai/gpt-4.1-mini": "gpt-oss",
+    "openrouter/google/gemini-2.5-flash": "gemini",
+    "openrouter/x-ai/grok-4.1-fast": "grok",
+    "openrouter/anthropic/claude-haiku-4.5": "haiku",
+    "openrouter/minimax/minimax-m2": "minimax",
+    "openrouter/openai/gpt-oss-120b": "gpt-oss",
 }
 
 # Default question for worker eval (has to match example_dag.json)
