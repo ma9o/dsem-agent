@@ -150,4 +150,8 @@ IMPORTANT: **Per-unit enumeration** (e.g., "For each minute, record 1 if...") �
 
 Return the corrected structure as JSON. For each dimension you modified, add:
 `"_changed": "measurement_dtype: X→Y, aggregation: A→B, how_to_measure: clarified"` (or "unchanged")
+
+## Validation Tool
+
+You have access to the `simulate_worker_measurements` tool. Keep validating and refining the measurment model until you get a dataframe that makes sense.
 """
