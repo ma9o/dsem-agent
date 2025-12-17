@@ -28,7 +28,7 @@ from causal_agent.workers.agents import (
     _get_observed_dimension_dtypes,
     _get_outcome_description,
 )
-from causal_agent.utils.llm import make_validate_worker_output_tool, parse_date
+from causal_agent.utils.llm import make_worker_tools
 
 from evals.common import (
     extract_json_from_response,
@@ -263,9 +263,8 @@ def worker_eval(
         input_file: Specific preprocessed file name, or None for latest
         question: The causal question to use
     """
-    # Load schema for validation tool (same schema for all samples)
+    # Load schema for tools (same schema for all samples)
     schema = load_example_dag()
-    validation_tool = make_validate_worker_output_tool(schema)
 
     return Task(
         dataset=create_eval_dataset(
@@ -276,7 +275,7 @@ def worker_eval(
         ),
         solver=[
             system_message(WORKER_SYSTEM),
-            tool_assisted_generate(tools=[validation_tool, parse_date()]),
+            tool_assisted_generate(tools=make_worker_tools(schema)),
         ],
         scorer=worker_extraction_scorer(),
     )

@@ -66,6 +66,25 @@ def validate_dsem_structure():
     return execute
 
 
+def make_worker_tools(schema: dict) -> list[Tool]:
+    """Create the standard toolset for worker agents.
+
+    This is the single source of truth for worker tools.
+    Used by both production workers and evals.
+
+    Args:
+        schema: The DSEM schema dict to validate extractions against
+
+    Returns:
+        List of tools: [validate_extractions, parse_date, calculate]
+    """
+    return [
+        make_validate_worker_output_tool(schema),
+        parse_date(),
+        calculate(),
+    ]
+
+
 def make_validate_worker_output_tool(schema: dict) -> Tool:
     """Create a validation tool for worker output, bound to a specific schema.
 
