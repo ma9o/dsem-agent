@@ -38,6 +38,8 @@ Set `is_outcome: true` for the primary outcome variable Y implied by the questio
 
 **causal_granularity**: The timescale at which causal relationships make sense (hourly/daily/weekly/monthly/yearly). Required only for time-varying variables.
 
+**measurement_granularity**: The resolution at which workers extract raw measurements ('finest' for one datapoint per raw entry, or hourly/daily/weekly/monthly/yearly). Required only for observed time-varying variables. This is typically finer than or equal to causal_granularity—raw measurements are later aggregated up to the causal timescale.
+
 ## Data Types (measurement_dtype)
 
 | Type | Description | Example |
@@ -84,6 +86,7 @@ Choose based on meaning: mean (average level), sum (cumulative), max/min (extrem
       "how_to_measure": "instructions for extracting this from data" | null,
       "temporal_status": "time_varying" | "time_invariant",
       "causal_granularity": "hourly" | "daily" | "weekly" | "monthly" | "yearly" | null,
+      "measurement_granularity": "finest" | "hourly" | "daily" | "weekly" | "monthly" | "yearly" | null,
       "measurement_dtype": "continuous" | "binary" | "count" | "ordinal" | "categorical",
       "aggregation": "<aggregation_name>" | null
     }
@@ -102,11 +105,12 @@ Choose based on meaning: mean (average level), sum (cumulative), max/min (extrem
 ## Rules
 
 1. **time_varying** requires causal_granularity and aggregation; **time_invariant** must have both null
-2. Only **endogenous** variables can appear as edge effects (exogenous cannot be effects)
-3. **lagged=false** only valid when cause and effect have same causal_granularity
-4. Exactly one variable must have **is_outcome=true** (the Y implied by the question)
-5. Only **endogenous** variables can be outcomes
-6. **observed** variables require how_to_measure; **latent** variables must have how_to_measure=null
+2. **observed time_varying** also requires measurement_granularity; **latent** or **time_invariant** must have it null
+3. Only **endogenous** variables can appear as edge effects (exogenous cannot be effects)
+4. **lagged=false** only valid when cause and effect have same causal_granularity
+5. Exactly one variable must have **is_outcome=true** (the Y implied by the question)
+6. Only **endogenous** variables can be outcomes
+7. **observed** variables require how_to_measure; **latent** variables must have how_to_measure=null
 
 ## Validation Tool
 

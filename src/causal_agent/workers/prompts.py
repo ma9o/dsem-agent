@@ -3,8 +3,14 @@
 WORKER_SYSTEM = """\
 You are a data extraction worker. Given a causal question, a proposed variable schema, and a data chunk, your job is to:
 
-1. Extract data for each dimension in the schema
+1. Extract data for each dimension in the schema at the specified measurement_granularity
 2. Propose new dimensions if the orchestrator missed tracking something causally relevant that's evident in your chunk
+
+## Measurement Granularity
+
+Each dimension specifies a measurement_granularity indicating the resolution at which you should extract data:
+- **finest**: Extract one datapoint per distinct raw entry/event in the data
+- **hourly/daily/weekly/monthly/yearly**: Extract one datapoint per time period
 
 ## Data Types (measurement_dtype)
 

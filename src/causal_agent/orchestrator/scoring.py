@@ -116,6 +116,21 @@ def _count_rule_points_detailed(structure: DSEMStructure) -> dict:
                 pts += 1
                 details.append("+1 correctly omits aggregation (time_invariant)")
 
+        # Correct measurement_granularity constraint
+        is_observed = dim.observability == Observability.OBSERVED
+        valid_measurement_granularities = {"finest"} | set(GRANULARITY_HOURS.keys())
+        if is_time_varying and is_observed:
+            if dim.measurement_granularity is not None:
+                pts += 1
+                details.append(f"+1 has measurement_granularity ({dim.measurement_granularity})")
+                if dim.measurement_granularity in valid_measurement_granularities:
+                    pts += 1
+                    details.append("+1 valid measurement_granularity value")
+        else:
+            if dim.measurement_granularity is None:
+                pts += 1
+                details.append("+1 correctly omits measurement_granularity")
+
         # Valid measurement_dtype
         if dim.measurement_dtype in ("continuous", "binary", "count", "ordinal", "categorical"):
             pts += 1
@@ -196,9 +211,11 @@ def _count_rule_points(structure: DSEMStructure) -> float:
     - +1 valid temporal_status
     - +1 correct causal_granularity constraint (required for time_varying, forbidden for time_invariant)
     - +1 correct aggregation constraint (required for time_varying, forbidden for time_invariant)
+    - +1 correct measurement_granularity constraint (required for observed time_varying, forbidden otherwise)
     - +1 valid measurement_dtype
     - +1 valid aggregation name (if specified)
     - +1 valid causal_granularity value (if specified)
+    - +1 valid measurement_granularity value (if specified)
 
     Points per edge:
     - +1 cause exists in dimensions
@@ -246,6 +263,18 @@ def _count_rule_points(structure: DSEMStructure) -> float:
                     points += 1
         else:  # time_invariant
             if dim.aggregation is None:
+                points += 1
+
+        # Correct measurement_granularity constraint
+        is_observed = dim.observability == Observability.OBSERVED
+        valid_measurement_granularities = {"finest"} | set(GRANULARITY_HOURS.keys())
+        if is_time_varying and is_observed:
+            if dim.measurement_granularity is not None:
+                points += 1
+                if dim.measurement_granularity in valid_measurement_granularities:
+                    points += 1
+        else:
+            if dim.measurement_granularity is None:
                 points += 1
 
         # Valid measurement_dtype
@@ -306,9 +335,9 @@ def score_structure_proposal_normalized(example, pred, trace=None) -> float:
     except (json.JSONDecodeError, AttributeError):
         return 0.0
 
-    # Theoretical max per dimension: ~8-9 points (3 classification + 2 granularity + 2 aggregation + 1 dtype + 1 latent bonus)
+    # Theoretical max per dimension: ~10-11 points (3 classification + 2 causal_granularity + 2 aggregation + 2 measurement_granularity + 1 dtype + 1 latent bonus)
     # Theoretical max per edge: ~4 points (cause + effect + endogenous + timescale/cross-timescale bonus)
-    max_dim_points = n_dims * 9
+    max_dim_points = n_dims * 11
     max_edge_points = n_edges * 4
     max_points = max_dim_points + max_edge_points
 

@@ -66,6 +66,14 @@ class Dimension(BaseModel):
             "The granularity at which causal relationships make sense."
         ),
     )
+    measurement_granularity: str | None = Field(
+        default=None,
+        description=(
+            "'finest' (one datapoint per raw entry) or 'hourly', 'daily', 'weekly', 'monthly', 'yearly'. "
+            "Required for observed time-varying variables. "
+            "The resolution at which workers should extract measurements from data."
+        ),
+    )
     measurement_dtype: str = Field(
         description="'continuous', 'binary', 'count', 'ordinal', 'categorical'"
     )
@@ -90,8 +98,9 @@ class Dimension(BaseModel):
 
     @model_validator(mode="after")
     def validate_field_consistency(self):
-        """Validate that causal_granularity and aggregation are consistent with temporal_status."""
+        """Validate that causal_granularity, measurement_granularity, and aggregation are consistent."""
         is_time_varying = self.temporal_status == TemporalStatus.TIME_VARYING
+        is_observed = self.observability == Observability.OBSERVED
 
         if is_time_varying:
             if self.causal_granularity is None:
@@ -101,6 +110,11 @@ class Dimension(BaseModel):
             if self.aggregation is None:
                 raise ValueError(
                     f"Time-varying variable '{self.name}' requires aggregation (how to collapse raw data)"
+                )
+            # measurement_granularity required for observed time-varying variables
+            if is_observed and self.measurement_granularity is None:
+                raise ValueError(
+                    f"Observed time-varying variable '{self.name}' requires measurement_granularity"
                 )
         else:
             if self.causal_granularity is not None:
@@ -112,6 +126,24 @@ class Dimension(BaseModel):
                     f"Time-invariant variable '{self.name}' must not have aggregation"
                 )
 
+        # measurement_granularity only for observed time-varying
+        if self.measurement_granularity is not None:
+            if not is_observed:
+                raise ValueError(
+                    f"Latent variable '{self.name}' must not have measurement_granularity"
+                )
+            if not is_time_varying:
+                raise ValueError(
+                    f"Time-invariant variable '{self.name}' must not have measurement_granularity"
+                )
+            # Validate measurement_granularity value
+            valid_measurement_granularities = {"finest"} | set(GRANULARITY_HOURS.keys())
+            if self.measurement_granularity not in valid_measurement_granularities:
+                raise ValueError(
+                    f"Invalid measurement_granularity '{self.measurement_granularity}' for '{self.name}'. "
+                    f"Must be 'finest' or one of: {', '.join(sorted(GRANULARITY_HOURS.keys()))}"
+                )
+
         # Outcomes must be endogenous
         if self.is_outcome and self.role != Role.ENDOGENOUS:
             raise ValueError(
@@ -119,7 +151,6 @@ class Dimension(BaseModel):
             )
 
         # how_to_measure required for observed, must be null for latent
-        is_observed = self.observability == Observability.OBSERVED
         if is_observed and not self.how_to_measure:
             raise ValueError(
                 f"Observed variable '{self.name}' requires how_to_measure instructions"

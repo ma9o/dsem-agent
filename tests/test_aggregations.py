@@ -145,6 +145,7 @@ class TestSchemaAggregationValidation:
             how_to_measure="Extract test from data",
             temporal_status=TemporalStatus.TIME_VARYING,
             causal_granularity="daily",
+            measurement_granularity="finest",
             measurement_dtype="continuous",
             aggregation="mean",
         )
@@ -163,6 +164,7 @@ class TestSchemaAggregationValidation:
                 how_to_measure="Extract test from data",
                 temporal_status=TemporalStatus.TIME_VARYING,
                 causal_granularity="daily",
+                measurement_granularity="finest",
                 measurement_dtype="continuous",
                 aggregation="invalid",
             )

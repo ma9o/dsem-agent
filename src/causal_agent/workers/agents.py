@@ -35,7 +35,7 @@ def _format_dimensions(schema: dict) -> str:
     Only includes observed dimensions - latent variables are excluded
     since workers shouldn't try to measure them directly.
 
-    Shows: name, how_to_measure, dtype
+    Shows: name, dtype, measurement_granularity, how_to_measure
     """
     dimensions = schema.get("dimensions", [])
     lines = []
@@ -46,8 +46,15 @@ def _format_dimensions(schema: dict) -> str:
         name = dim.get("name", "unknown")
         how_to_measure = dim.get("how_to_measure", "")
         dtype = dim.get("measurement_dtype", "")
+        measurement_granularity = dim.get("measurement_granularity", "")
 
-        lines.append(f"- {name} ({dtype}): {how_to_measure}")
+        # Build info string with dtype and measurement_granularity
+        info_parts = [dtype]
+        if measurement_granularity:
+            info_parts.append(f"@{measurement_granularity}")
+        info = ", ".join(info_parts)
+
+        lines.append(f"- {name} ({info}): {how_to_measure}")
     return "\n".join(lines)
 
 

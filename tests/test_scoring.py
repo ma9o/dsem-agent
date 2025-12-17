@@ -81,6 +81,7 @@ class TestScoreStructureProposal:
                     "how_to_measure": "Extract mood from data",
                     "temporal_status": "time_varying",
                     "causal_granularity": "daily",
+                    "measurement_granularity": "finest",
                     "measurement_dtype": "continuous",
                     "aggregation": "mean",
                 }
@@ -102,6 +103,7 @@ class TestScoreStructureProposal:
                     "how_to_measure": "Extract stress from data",
                     "temporal_status": "time_varying",
                     "causal_granularity": "daily",
+                    "measurement_granularity": "finest",
                     "measurement_dtype": "continuous",
                     "aggregation": "mean",
                 },
@@ -114,6 +116,7 @@ class TestScoreStructureProposal:
                     "how_to_measure": "Extract mood from data",
                     "temporal_status": "time_varying",
                     "causal_granularity": "daily",
+                    "measurement_granularity": "finest",
                     "measurement_dtype": "continuous",
                     "aggregation": "mean",
                 },
@@ -136,6 +139,7 @@ class TestScoreStructureProposal:
                     "how_to_measure": "Extract X from data",
                     "temporal_status": "time_varying",
                     "causal_granularity": "daily",
+                    "measurement_granularity": "finest",
                     "measurement_dtype": "continuous",
                     "aggregation": "mean",
                 },
@@ -148,6 +152,7 @@ class TestScoreStructureProposal:
                     "how_to_measure": "Extract Y from data",
                     "temporal_status": "time_varying",
                     "causal_granularity": "daily",
+                    "measurement_granularity": "finest",
                     "measurement_dtype": "continuous",
                     "aggregation": "mean",
                 },
@@ -165,6 +170,7 @@ class TestScoreStructureProposal:
                     "how_to_measure": "Extract stress from data",
                     "temporal_status": "time_varying",
                     "causal_granularity": "hourly",
+                    "measurement_granularity": "finest",
                     "measurement_dtype": "continuous",
                     "aggregation": "mean",
                 },
@@ -176,6 +182,7 @@ class TestScoreStructureProposal:
                     "how_to_measure": "Extract sleep from data",
                     "temporal_status": "time_varying",
                     "causal_granularity": "daily",
+                    "measurement_granularity": "finest",
                     "measurement_dtype": "continuous",
                     "aggregation": "mean",
                 },
@@ -188,6 +195,7 @@ class TestScoreStructureProposal:
                     "how_to_measure": "Extract mood from data",
                     "temporal_status": "time_varying",
                     "causal_granularity": "daily",
+                    "measurement_granularity": "finest",
                     "measurement_dtype": "continuous",
                     "aggregation": "mean",
                 },
@@ -242,6 +250,7 @@ class TestCountRulePoints:
                     how_to_measure="Extract mood from data",
                     temporal_status=TemporalStatus.TIME_VARYING,
                     causal_granularity="daily",
+                    measurement_granularity="finest",
                     measurement_dtype="continuous",
                     aggregation="mean",
                 )
@@ -249,9 +258,10 @@ class TestCountRulePoints:
             edges=[],
         )
         points = _count_rule_points(structure)
-        # +1 role, +1 observability, +1 temporal_status, +1 granularity present,
-        # +1 valid granularity, +1 aggregation present, +1 valid aggregation, +1 valid dtype
-        assert points >= 8
+        # +1 role, +1 observability, +1 temporal_status, +1 causal_granularity present,
+        # +1 valid causal_granularity, +1 aggregation present, +1 valid aggregation,
+        # +1 measurement_granularity present, +1 valid measurement_granularity, +1 valid dtype
+        assert points >= 10
 
     def test_time_invariant_dimension_points(self):
         """Time-invariant dimension scores points for correct constraints."""
@@ -275,6 +285,7 @@ class TestCountRulePoints:
                     how_to_measure="Extract mood from data",
                     temporal_status=TemporalStatus.TIME_VARYING,
                     causal_granularity="daily",
+                    measurement_granularity="finest",
                     measurement_dtype="continuous",
                     aggregation="mean",
                 ),
@@ -282,8 +293,8 @@ class TestCountRulePoints:
             edges=[],
         )
         points = _count_rule_points(structure)
-        # +1 role, +1 observability, +1 temporal_status, +1 no granularity, +1 no aggregation, +1 valid dtype
-        assert points >= 6
+        # +1 role, +1 observability, +1 temporal_status, +1 no granularity, +1 no aggregation, +1 no measurement_granularity, +1 valid dtype
+        assert points >= 7
 
     def test_latent_variable_bonus(self):
         """Latent variable gets bonus point for modeling heterogeneity."""
@@ -306,6 +317,7 @@ class TestCountRulePoints:
                     how_to_measure="Extract mood from data",
                     temporal_status=TemporalStatus.TIME_VARYING,
                     causal_granularity="daily",
+                    measurement_granularity="finest",
                     measurement_dtype="continuous",
                     aggregation="mean",
                 ),
@@ -313,8 +325,8 @@ class TestCountRulePoints:
             edges=[],
         )
         points = _count_rule_points(structure)
-        # +1 role, +1 observability, +1 temporal_status, +1 no granularity, +1 no aggregation, +1 valid dtype, +1 latent bonus
-        assert points >= 7
+        # +1 role, +1 observability, +1 temporal_status, +1 no granularity, +1 no aggregation, +1 no measurement_granularity, +1 valid dtype, +1 latent bonus
+        assert points >= 8
 
     def test_edge_points(self):
         """Edge between valid dimensions scores points."""
@@ -328,6 +340,7 @@ class TestCountRulePoints:
                     how_to_measure="Extract X from data",
                     temporal_status=TemporalStatus.TIME_VARYING,
                     causal_granularity="daily",
+                    measurement_granularity="finest",
                     measurement_dtype="continuous",
                     aggregation="mean",
                 ),
@@ -340,6 +353,7 @@ class TestCountRulePoints:
                     how_to_measure="Extract Y from data",
                     temporal_status=TemporalStatus.TIME_VARYING,
                     causal_granularity="daily",
+                    measurement_granularity="finest",
                     measurement_dtype="continuous",
                     aggregation="mean",
                 ),
@@ -348,7 +362,7 @@ class TestCountRulePoints:
         )
         points = _count_rule_points(structure)
         # Dimension points + edge points (cause exists, effect exists, effect endogenous, same timescale)
-        assert points >= 16 + 4
+        assert points >= 20 + 4
 
     def test_cross_timescale_edge_bonus(self):
         """Cross-timescale edge gets bonus points."""
@@ -362,6 +376,7 @@ class TestCountRulePoints:
                     how_to_measure="Extract stress from data",
                     temporal_status=TemporalStatus.TIME_VARYING,
                     causal_granularity="hourly",
+                    measurement_granularity="finest",
                     measurement_dtype="continuous",
                     aggregation="mean",
                 ),
@@ -374,6 +389,7 @@ class TestCountRulePoints:
                     how_to_measure="Extract mood from data",
                     temporal_status=TemporalStatus.TIME_VARYING,
                     causal_granularity="daily",
+                    measurement_granularity="finest",
                     measurement_dtype="continuous",
                     aggregation="mean",
                 ),
@@ -382,7 +398,7 @@ class TestCountRulePoints:
         )
         points = _count_rule_points(structure)
         # Cross-timescale gives +2 instead of +1
-        assert points >= 16 + 5  # dims + edge with bonus
+        assert points >= 20 + 5  # dims + edge with bonus
 
 
 class TestNormalizedScoring:
@@ -405,6 +421,7 @@ class TestNormalizedScoring:
                     "how_to_measure": "Extract X from data",
                     "temporal_status": "time_varying",
                     "causal_granularity": "daily",
+                    "measurement_granularity": "finest",
                     "measurement_dtype": "continuous",
                     "aggregation": "mean",
                 },
@@ -417,6 +434,7 @@ class TestNormalizedScoring:
                     "how_to_measure": "Extract Y from data",
                     "temporal_status": "time_varying",
                     "causal_granularity": "daily",
+                    "measurement_granularity": "finest",
                     "measurement_dtype": "continuous",
                     "aggregation": "mean",
                 },
@@ -444,6 +462,7 @@ class TestExogenousEffectViolation:
                     "how_to_measure": "Extract mood from data",
                     "temporal_status": "time_varying",
                     "causal_granularity": "daily",
+                    "measurement_granularity": "finest",
                     "measurement_dtype": "continuous",
                     "aggregation": "mean",
                 },
@@ -455,6 +474,7 @@ class TestExogenousEffectViolation:
                     "how_to_measure": "Extract weather from data",
                     "temporal_status": "time_varying",
                     "causal_granularity": "daily",
+                    "measurement_granularity": "finest",
                     "measurement_dtype": "continuous",
                     "aggregation": "mean",
                 },
@@ -480,6 +500,7 @@ class TestCrossScaleEdges:
                     "how_to_measure": "Extract stress from data",
                     "temporal_status": "time_varying",
                     "causal_granularity": "hourly",
+                    "measurement_granularity": "finest",
                     "measurement_dtype": "continuous",
                     "aggregation": "mean",
                 },
@@ -492,6 +513,7 @@ class TestCrossScaleEdges:
                     "how_to_measure": "Extract mood from data",
                     "temporal_status": "time_varying",
                     "causal_granularity": "daily",
+                    "measurement_granularity": "finest",
                     "measurement_dtype": "continuous",
                     "aggregation": "mean",
                 },
@@ -515,6 +537,7 @@ class TestCrossScaleEdges:
                     "how_to_measure": "Extract stress from data",
                     "temporal_status": "time_varying",
                     "causal_granularity": "weekly",
+                    "measurement_granularity": "finest",
                     "measurement_dtype": "continuous",
                     "aggregation": "mean",
                 },
@@ -527,6 +550,7 @@ class TestCrossScaleEdges:
                     "how_to_measure": "Extract mood from data",
                     "temporal_status": "time_varying",
                     "causal_granularity": "daily",
+                    "measurement_granularity": "finest",
                     "measurement_dtype": "continuous",
                     "aggregation": "mean",
                 },

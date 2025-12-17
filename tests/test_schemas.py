@@ -27,12 +27,14 @@ class TestDimension:
             how_to_measure="Extract mood ratings from survey responses",
             temporal_status=TemporalStatus.TIME_VARYING,
             causal_granularity="daily",
+            measurement_granularity="finest",
             measurement_dtype="continuous",
             aggregation="mean",
         )
         assert dim.role == Role.ENDOGENOUS
         assert dim.observability == Observability.OBSERVED
         assert dim.temporal_status == TemporalStatus.TIME_VARYING
+        assert dim.measurement_granularity == "finest"
 
     def test_exogenous_observed_time_varying(self):
         """Exogenous, observed, time-varying variable (classic input)."""
@@ -44,12 +46,14 @@ class TestDimension:
             how_to_measure="Get temperature from weather API",
             temporal_status=TemporalStatus.TIME_VARYING,
             causal_granularity="daily",
+            measurement_granularity="hourly",
             measurement_dtype="continuous",
             aggregation="mean",
         )
         assert dim.role == Role.EXOGENOUS
         assert dim.observability == Observability.OBSERVED
         assert dim.temporal_status == TemporalStatus.TIME_VARYING
+        assert dim.measurement_granularity == "hourly"
 
     def test_exogenous_observed_time_invariant(self):
         """Exogenous, observed, time-invariant variable (classic covariate)."""
@@ -105,7 +109,65 @@ class TestDimension:
                 observability=Observability.OBSERVED,
                 temporal_status=TemporalStatus.TIME_VARYING,
                 causal_granularity="daily",
+                measurement_granularity="finest",
                 measurement_dtype="continuous",
+            )
+
+    def test_observed_time_varying_requires_measurement_granularity(self):
+        """Observed time-varying variable requires measurement_granularity."""
+        with pytest.raises(ValueError, match="Observed time-varying .* requires measurement_granularity"):
+            Dimension(
+                name="mood",
+                description="Invalid",
+                role=Role.ENDOGENOUS,
+                observability=Observability.OBSERVED,
+                temporal_status=TemporalStatus.TIME_VARYING,
+                causal_granularity="daily",
+                measurement_dtype="continuous",
+                aggregation="mean",
+            )
+
+    def test_latent_forbids_measurement_granularity(self):
+        """Latent variable must not have measurement_granularity."""
+        with pytest.raises(ValueError, match="Latent variable .* must not have measurement_granularity"):
+            Dimension(
+                name="person_intercept",
+                description="Invalid",
+                role=Role.EXOGENOUS,
+                observability=Observability.LATENT,
+                temporal_status=TemporalStatus.TIME_INVARIANT,
+                measurement_granularity="daily",
+                measurement_dtype="continuous",
+            )
+
+    def test_time_invariant_forbids_measurement_granularity(self):
+        """Time-invariant variable must not have measurement_granularity."""
+        with pytest.raises(ValueError, match="Time-invariant variable .* must not have measurement_granularity"):
+            Dimension(
+                name="age",
+                description="Invalid",
+                role=Role.EXOGENOUS,
+                observability=Observability.OBSERVED,
+                how_to_measure="Get age from intake form",
+                temporal_status=TemporalStatus.TIME_INVARIANT,
+                measurement_granularity="daily",
+                measurement_dtype="continuous",
+            )
+
+    def test_invalid_measurement_granularity_value(self):
+        """Invalid measurement_granularity value is rejected."""
+        with pytest.raises(ValueError, match="Invalid measurement_granularity"):
+            Dimension(
+                name="mood",
+                description="Invalid",
+                role=Role.ENDOGENOUS,
+                observability=Observability.OBSERVED,
+                how_to_measure="Extract mood from data",
+                temporal_status=TemporalStatus.TIME_VARYING,
+                causal_granularity="daily",
+                measurement_granularity="invalid_value",
+                measurement_dtype="continuous",
+                aggregation="mean",
             )
 
     def test_time_invariant_forbids_aggregation(self):
@@ -163,6 +225,10 @@ class TestDSEMStructure:
         agg = "mean" if temporal_status == TemporalStatus.TIME_VARYING else None
         # Only observed variables need how_to_measure
         how_to_measure = f"Extract {name} from data" if observability == Observability.OBSERVED else None
+        # measurement_granularity required for observed time-varying
+        is_observed = observability == Observability.OBSERVED
+        is_time_varying = temporal_status == TemporalStatus.TIME_VARYING
+        measurement_granularity = "finest" if (is_observed and is_time_varying) else None
         return Dimension(
             name=name,
             description=f"{name} description",
@@ -172,6 +238,7 @@ class TestDSEMStructure:
             how_to_measure=how_to_measure,
             temporal_status=temporal_status,
             causal_granularity=granularity,
+            measurement_granularity=measurement_granularity,
             measurement_dtype="continuous",
             aggregation=agg,
         )
@@ -312,6 +379,7 @@ class TestDSEMStructure:
                 how_to_measure="Get weather from API",
                 temporal_status=TemporalStatus.TIME_VARYING,
                 causal_granularity="daily",
+                measurement_granularity="hourly",
                 measurement_dtype="continuous",
                 aggregation="mean",
             )
