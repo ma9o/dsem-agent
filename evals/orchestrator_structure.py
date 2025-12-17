@@ -28,16 +28,18 @@ from inspect_ai.solver import TaskState, system_message
 from causal_agent.orchestrator.prompts import (
     STRUCTURE_PROPOSER_SYSTEM,
     STRUCTURE_PROPOSER_USER,
+    STRUCTURE_REVIEW_REQUEST,
 )
 from causal_agent.orchestrator.scoring import _count_rule_points_detailed
 from causal_agent.orchestrator.schemas import DSEMStructure
 from causal_agent.utils.data import PROCESSED_DIR
+from causal_agent.utils.llm import validate_dsem_structure
 
 from evals.common import (
     extract_json_from_response,
     format_chunks,
     get_sample_chunks_orchestrator,
-    two_stage_proposal_solver,
+    tool_assisted_generate,
 )
 
 # Top-tier models for orchestrator eval (via OpenRouter)
@@ -212,7 +214,10 @@ def orchestrator_eval(
         dataset=create_eval_dataset(n_chunks=n_chunks, seed=seed, input_file=input_file),
         solver=[
             system_message(STRUCTURE_PROPOSER_SYSTEM),
-            two_stage_proposal_solver(),
+            tool_assisted_generate(
+                tools=[validate_dsem_structure()],
+                follow_ups=[STRUCTURE_REVIEW_REQUEST],
+            ),
         ],
         scorer=dsem_structure_scorer(),
     )

@@ -14,6 +14,10 @@ For each dimension, extract individual observations with timestamps when availab
 
 Be conservative—the orchestrator saw a sample and proposed the schema for good reasons. But if you strongly feel something important to the causal question is present in your chunk and missing from the schema, propose it. This could be observed or latent.
 
+## Validation Tool
+
+You have access to `validate_extractions` tool. Use it to validate your JSON before returning the final answer. Keep validating until you get "VALID".
+
 ## Output
 ```json
 {
@@ -35,10 +39,6 @@ Be conservative—the orchestrator saw a sample and proposed the schema for good
   ] | null
 }
 ```
-
-## Validation Tool
-
-You have access to `validate_extractions` tool. Use it to validate your JSON before returning the final answer. Keep validating until you get "VALID".
 """
 
 WORKER_USER = """\

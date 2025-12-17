@@ -5,9 +5,9 @@ import re
 
 from inspect_ai.model import GenerateConfig, get_model
 from inspect_ai.solver import Generate, TaskState, generate, solver
+from inspect_ai.tool import Tool
 
-from causal_agent.orchestrator.prompts import STRUCTURE_REVIEW_REQUEST
-from causal_agent.utils.llm import multi_turn_generate, validate_dsem_structure
+from causal_agent.utils.llm import multi_turn_generate
 from causal_agent.utils.data import (
     PROCESSED_DIR,
     get_latest_preprocessed_file,
@@ -25,30 +25,40 @@ def reasoning_generate():
     )
 
 
-@solver
-def two_stage_proposal_solver():
-    """Solver that runs multi-turn proposal with self-review and validation tool.
+def tool_assisted_generate(
+    tools: list[Tool],
+    follow_ups: list[str] | None = None,
+):
+    """Solver that runs multi-turn generation with tools.
 
-    Uses multi_turn_generate with validation tool, ensuring
-    evals test the exact same logic as production.
+    Uses multi_turn_generate with tools, ensuring evals test
+    the exact same logic as production.
+
+    Args:
+        tools: List of tools available to the model
+        follow_ups: Optional follow-up prompts after initial response
     """
 
-    async def solve(state: TaskState, generate: Generate) -> TaskState:
-        model = get_model()
-        config = GenerateConfig(max_tokens=65536, reasoning_effort="high")
+    @solver
+    def _solver():
+        async def solve(state: TaskState, generate: Generate) -> TaskState:
+            model = get_model()
+            config = GenerateConfig(max_tokens=65536, reasoning_effort="high")
 
-        completion = await multi_turn_generate(
-            messages=list(state.messages),
-            model=model,
-            follow_ups=[STRUCTURE_REVIEW_REQUEST],
-            tools=[validate_dsem_structure()],
-            config=config,
-        )
+            completion = await multi_turn_generate(
+                messages=list(state.messages),
+                model=model,
+                follow_ups=follow_ups,
+                tools=tools,
+                config=config,
+            )
 
-        state.output.completion = completion
-        return state
+            state.output.completion = completion
+            return state
 
-    return solve
+        return solve
+
+    return _solver()
 
 # Files to exclude when finding the latest data file (script outputs)
 EXCLUDE_FILES = {"orchestrator-samples-manual.txt"}

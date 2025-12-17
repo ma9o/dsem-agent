@@ -28,12 +28,13 @@ from causal_agent.workers.agents import (
     _get_observed_dimension_dtypes,
     _get_outcome_description,
 )
+from causal_agent.utils.llm import make_validate_worker_output_tool
 
 from evals.common import (
     extract_json_from_response,
     get_sample_chunks_worker,
     load_example_dag,
-    reasoning_generate,
+    tool_assisted_generate,
 )
 
 # Worker models for parallel execution (via OpenRouter)
@@ -260,6 +261,10 @@ def worker_eval(
         input_file: Specific preprocessed file name, or None for latest
         question: The causal question to use
     """
+    # Load schema for validation tool (same schema for all samples)
+    schema = load_example_dag()
+    validation_tool = make_validate_worker_output_tool(schema)
+
     return Task(
         dataset=create_eval_dataset(
             n_chunks=n_chunks,
@@ -269,7 +274,7 @@ def worker_eval(
         ),
         solver=[
             system_message(WORKER_SYSTEM),
-            reasoning_generate(),
+            tool_assisted_generate(tools=[validation_tool]),
         ],
         scorer=worker_extraction_scorer(),
     )
