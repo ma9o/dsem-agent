@@ -1,18 +1,29 @@
 # Evaluation Configuration
 # Shared settings for all evals
 
-# Evaluation questions (used by orchestrator_structure and worker_measurement_adherence)
+# Evaluation questions and their corresponding DAGs
+# IMPORTANT: Each question ID maps to a DAG file with the same ID:
+#   - Question 1 uses data/eval/example_dag1.json
+#   - Question 2 uses data/eval/example_dag2.json
+#   - etc.
+# The DAGs were designed specifically for their matching questions.
+# When adding new questions, create a corresponding DAG file.
 questions:
   - id: 1
     question: "I want to resolve errors faster"
+    dag: eval/example_dag1.json
   - id: 2
     question: "I want to stop working weekends"
+    dag: eval/example_dag2.json
   - id: 3
     question: "I want to stop context-switching compulsively"
+    dag: eval/example_dag3.json
   - id: 4
     question: "I want to sleep better"
+    dag: eval/example_dag4.json
   - id: 5
     question: "I want to feel like a competent engineer"
+    dag: eval/example_dag5.json
 
 # Models for orchestrator structure eval (top-tier with max reasoning)
 orchestrator_models:
@@ -56,5 +67,7 @@ data_sampling:
   worker_chunks: 10
   seed: 42
 
-# Example DAG for worker evals (relative to data/ directory)
-example_dag: eval/example_dag.json
+# Default example DAG for worker evals (relative to data/ directory)
+# This is used when evals need a single DAG without specifying which question.
+# Points to DAG 4 ("I want to sleep better") for backwards compatibility.
+example_dag: eval/example_dag4.json
