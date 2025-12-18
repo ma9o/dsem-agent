@@ -98,7 +98,7 @@ uv run python evals/scripts/run_parallel_evals.py -n 10 --seed 123
 
 **Run individual models:**
 ```bash
-uv run inspect eval evals/orchestrator_structure.py \
+uv run inspect eval evals/eval1_orchestrator_structure.py \
     --model openrouter/anthropic/claude-opus-4.5
 
 # View detailed results
@@ -158,12 +158,12 @@ causal-agent/
 │   ├── queries/            # Test queries for pipeline (committed)
 │   └── eval/               # Evaluation questions (committed)
 ├── evals/
-│   ├── config.yaml                       # Shared eval configuration (models, questions)
-│   ├── common.py                         # Shared utilities for evals
-│   ├── aggregation_robustness.py         # Inspect AI eval for aggregation function robustness
-│   ├── orchestrator_structure.py         # Inspect AI eval for structure proposals
-│   ├── worker_extraction.py              # Inspect AI eval for worker data extraction
-│   ├── worker_measurement_adherence.py   # Judge-based eval for measurement adherence
+│   ├── config.yaml                           # Shared eval configuration (models, questions)
+│   ├── common.py                             # Shared utilities for evals
+│   ├── eval1_orchestrator_structure.py       # Inspect AI eval for structure proposals
+│   ├── eval2_worker_extraction.py            # Inspect AI eval for worker data extraction
+│   ├── eval3_worker_measurement_adherence.py # Judge-based eval for measurement adherence
+│   ├── eval4_aggregation_robustness.py       # Inspect AI eval for aggregation function robustness
 │   └── scripts/
 │       ├── preprocess_google_takeout.py  # Convert raw data to text chunks
 │       ├── run_parallel_evals.py         # Run all models in parallel

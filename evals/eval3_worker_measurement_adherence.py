@@ -5,7 +5,7 @@ the measurement instructions from the example DAG schema. The judge
 ranks outputs without knowing model names and returns the winner.
 
 Usage:
-    inspect eval evals/worker_measurement_adherence.py --model openrouter/anthropic/claude-sonnet-4
+    inspect eval evals/eval3_worker_measurement_adherence.py --model openrouter/anthropic/claude-sonnet-4
 """
 
 import sys

@@ -8,8 +8,8 @@ This eval verifies that the aggregation pipeline can handle the diverse outputs
 produced by worker LLMs without breaking.
 
 Usage:
-    inspect eval evals/aggregation_robustness.py --model google/vertex/gemini-3-flash-preview
-    inspect eval evals/aggregation_robustness.py -T n_sets=10 -T chunks_per_set=5
+    inspect eval evals/eval4_aggregation_robustness.py --model google/vertex/gemini-3-flash-preview
+    inspect eval evals/eval4_aggregation_robustness.py -T n_sets=10 -T chunks_per_set=5
 """
 
 import sys

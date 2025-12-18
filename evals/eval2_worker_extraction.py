@@ -4,8 +4,8 @@ Evaluates smaller LLMs on their ability to extract dimension values from
 data chunks given a schema from the orchestrator.
 
 Usage:
-    inspect eval evals/worker_extraction.py --model google/vertex/gemini-3-flash-preview
-    inspect eval evals/worker_extraction.py --model openrouter/anthropic/claude-haiku-4.5
+    inspect eval evals/eval2_worker_extraction.py --model google/vertex/gemini-3-flash-preview
+    inspect eval evals/eval2_worker_extraction.py --model openrouter/anthropic/claude-haiku-4.5
 """
 
 import sys
