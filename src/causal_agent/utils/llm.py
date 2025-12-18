@@ -15,6 +15,19 @@ if TYPE_CHECKING:
     from inspect_ai.model import ChatMessage
 
 
+def get_generate_config() -> GenerateConfig:
+    """Get standard GenerateConfig for all model calls.
+
+    Uses high reasoning effort to maximize model thinking.
+    """
+    return GenerateConfig(
+        max_tokens=65536,
+        reasoning_effort="high",
+        reasoning_tokens=32768,
+        reasoning_history="all",  # Preserve reasoning across tool calls (required by Gemini)
+    )
+
+
 def parse_json_response(content: str) -> dict:
     """Parse JSON from model response, handling markdown code blocks."""
     if "```json" in content:
