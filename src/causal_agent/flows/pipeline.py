@@ -4,6 +4,7 @@ Orchestrates all stages from structure proposal to intervention analysis.
 """
 
 from prefect import flow
+from prefect.utilities.annotations import unmapped
 
 from causal_agent.utils.data import (
     resolve_input_path,
@@ -17,6 +18,7 @@ from .stages import (
     # Stage 2
     load_worker_chunks,
     populate_dimensions,
+    aggregate_measurements,
     # Stage 3
     check_identifiability,
     # Stage 4
@@ -61,11 +63,20 @@ def causal_inference_pipeline(
     print(f"Loaded {len(worker_chunks)} worker chunks")
     worker_results = populate_dimensions.map(
         worker_chunks,
-        question=question,
-        schema=schema,
+        question=unmapped(question),
+        schema=unmapped(schema),
     )
 
-    # TODO: Stage 2b - Merge worker results and proposed dimensions
+    # Stage 2b: Aggregate measurements into time-series by causal_granularity
+    measurements = aggregate_measurements(worker_results, schema)
+    for granularity, df in measurements.items():
+        n_dims = len([c for c in df.columns if c != "time_bucket"])
+        if granularity == "time_invariant":
+            print(f"  {granularity}: {n_dims} dimensions")
+        else:
+            print(f"  {granularity}: {df.height} time points × {n_dims} dimensions")
+
+    # TODO: Stage 2c - Merge proposed dimensions from workers
 
     # Stage 3: Identifiability
     identifiable = check_identifiability(schema["dag"], target_effects)
