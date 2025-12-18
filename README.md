@@ -158,7 +158,11 @@ causal-agent/
 │   ├── queries/            # Test queries for pipeline (committed)
 │   └── eval/               # Evaluation questions (committed)
 ├── evals/
-│   ├── orchestrator_structure.py  # Inspect AI eval for structure proposals
+│   ├── config.yaml                       # Shared eval configuration (models, questions)
+│   ├── common.py                         # Shared utilities for evals
+│   ├── orchestrator_structure.py         # Inspect AI eval for structure proposals
+│   ├── worker_extraction.py              # Inspect AI eval for worker data extraction
+│   ├── worker_measurement_adherence.py   # Judge-based eval for measurement adherence
 │   └── scripts/
 │       ├── preprocess_google_takeout.py  # Convert raw data to text chunks
 │       ├── run_parallel_evals.py         # Run all models in parallel
