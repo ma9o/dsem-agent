@@ -39,9 +39,23 @@ Docs: https://docs.prefect.io/v3/get-started
 - Set `timeout_seconds` on long-running flows
 - Use `log_prints=True` on flows too
 
-### Concurrency
+### Concurrency & Mapping
 - Use `task.map(items)` for parallel execution over iterables
+- Use `unmapped()` for static parameters that shouldn't be iterated: `task.map(items, config=unmapped(config))`
+- `.map()` returns `PrefectFutureList` - pass directly to downstream tasks, Prefect auto-resolves
+- Get results explicitly with `futures.result()` (syntactic sugar for `[f.result() for f in futures]`)
 - Native Python async/await supported for concurrent I/O
+
+```python
+from prefect.utilities.annotations import unmapped
+
+@flow
+def pipeline():
+    # Static params wrapped with unmapped()
+    results = process_chunk.map(chunks, config=unmapped(config))
+    # Pass futures directly - Prefect waits and resolves to list[Result]
+    aggregated = aggregate_results(results)
+```
 
 ### Deployments
 - Use `flow.serve()` to create deployment and start listener process
