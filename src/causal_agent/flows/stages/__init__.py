@@ -7,6 +7,7 @@ from .stage1_structure import (
 from .stage2_workers import (
     load_worker_chunks,
     populate_dimensions,
+    aggregate_measurements,
 )
 from .stage3_identifiability import (
     check_identifiability,
@@ -28,6 +29,7 @@ __all__ = [
     # Stage 2
     "load_worker_chunks",
     "populate_dimensions",
+    "aggregate_measurements",
     # Stage 3
     "check_identifiability",
     "run_sensitivity_analysis",
