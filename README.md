@@ -166,6 +166,7 @@ causal-agent/
 │   ├── eval2_worker_extraction.py            # Inspect AI eval for worker data extraction
 │   ├── eval3_worker_measurement_adherence.py # Judge-based eval for measurement adherence
 │   ├── eval4_aggregation_robustness.py       # Inspect AI eval for aggregation function robustness
+│   ├── eval5_worker_dimension_proposals.py   # Judge-based eval for worker dimension proposals
 │   └── scripts/
 │       ├── preprocess_google_takeout.py  # Convert raw data to text chunks
 │       ├── run_parallel_evals.py         # Run all models in parallel
