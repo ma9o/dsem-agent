@@ -23,7 +23,7 @@ from inspect_ai.model import ChatMessageSystem, ChatMessageUser, get_model
 from inspect_ai.scorer import Score, Target, mean, scorer, stderr
 from inspect_ai.solver import Generate, TaskState, solver
 
-from causal_agent.workers.prompts import WORKER_SYSTEM, WORKER_USER
+from causal_agent.workers.prompts import WORKER_W_PROPOSALS_SYSTEM, WORKER_USER
 from causal_agent.workers.agents import (
     _format_dimensions,
     _get_outcome_description,
@@ -140,7 +140,7 @@ async def generate_worker_output(
     outcome_description = _get_outcome_description(schema)
 
     messages = [
-        ChatMessageSystem(content=WORKER_SYSTEM),
+        ChatMessageSystem(content=WORKER_W_PROPOSALS_SYSTEM),
         ChatMessageUser(
             content=WORKER_USER.format(
                 question=question,

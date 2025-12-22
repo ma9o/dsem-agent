@@ -31,7 +31,7 @@ from inspect_ai.solver import Generate, TaskState, solver
 
 from causal_agent.utils.aggregations import aggregate_worker_measurements
 from causal_agent.utils.llm import get_generate_config, make_worker_tools, multi_turn_generate, parse_json_response
-from causal_agent.workers.prompts import WORKER_SYSTEM, WORKER_USER
+from causal_agent.workers.prompts import WORKER_WO_PROPOSALS_SYSTEM, WORKER_USER
 from causal_agent.workers.agents import (
     _format_dimensions,
     _get_outcome_description,
@@ -136,7 +136,7 @@ async def generate_worker_output(
     outcome_description = _get_outcome_description(schema)
 
     messages = [
-        ChatMessageSystem(content=WORKER_SYSTEM),
+        ChatMessageSystem(content=WORKER_WO_PROPOSALS_SYSTEM),
         ChatMessageUser(
             content=WORKER_USER.format(
                 question=question,

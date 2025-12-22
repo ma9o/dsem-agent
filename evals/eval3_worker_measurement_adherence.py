@@ -24,7 +24,7 @@ from inspect_ai.model import ChatMessageSystem, ChatMessageUser, get_model
 from inspect_ai.scorer import Score, Target, mean, scorer, stderr
 from inspect_ai.solver import Generate, TaskState, solver
 
-from causal_agent.workers.prompts import WORKER_SYSTEM, WORKER_USER
+from causal_agent.workers.prompts import WORKER_WO_PROPOSALS_SYSTEM, WORKER_USER
 from causal_agent.workers.agents import (
     _format_dimensions,
     _get_outcome_description,
@@ -112,7 +112,7 @@ async def generate_worker_output(
     outcome_description = _get_outcome_description(schema)
 
     messages = [
-        ChatMessageSystem(content=WORKER_SYSTEM),
+        ChatMessageSystem(content=WORKER_WO_PROPOSALS_SYSTEM),
         ChatMessageUser(
             content=WORKER_USER.format(
                 question=question,
@@ -217,7 +217,7 @@ def create_eval_dataset(
                         "question": q["question"],
                         "chunk": chunk,
                         "chunk_index": i,
-                        "worker_system_prompt": WORKER_SYSTEM,
+                        "worker_system_prompt": WORKER_WO_PROPOSALS_SYSTEM,
                         "worker_user_prompt": worker_user_prompt,
                     },
                 )

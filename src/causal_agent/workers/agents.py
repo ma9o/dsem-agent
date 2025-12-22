@@ -14,7 +14,7 @@ from inspect_ai.model import (
 
 from causal_agent.utils.config import get_config
 from causal_agent.utils.llm import make_worker_tools, multi_turn_generate, parse_json_response
-from .prompts import WORKER_SYSTEM, WORKER_USER
+from .prompts import WORKER_WO_PROPOSALS_SYSTEM, WORKER_USER
 from .schemas import WorkerOutput, validate_worker_output
 
 # Load environment variables from .env file (for API keys)
@@ -101,7 +101,7 @@ async def process_chunk_async(
     outcome_description = _get_outcome_description(schema)
 
     messages = [
-        ChatMessageSystem(content=WORKER_SYSTEM),
+        ChatMessageSystem(content=WORKER_WO_PROPOSALS_SYSTEM),
         ChatMessageUser(
             content=WORKER_USER.format(
                 question=question,

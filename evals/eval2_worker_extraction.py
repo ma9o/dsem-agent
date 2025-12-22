@@ -21,7 +21,7 @@ from inspect_ai.dataset import MemoryDataset, Sample
 from inspect_ai.scorer import Score, Target, mean, scorer, stderr
 from inspect_ai.solver import TaskState, system_message
 
-from causal_agent.workers.prompts import WORKER_SYSTEM, WORKER_USER
+from causal_agent.workers.prompts import WORKER_WO_PROPOSALS_SYSTEM, WORKER_USER
 from causal_agent.workers.schemas import WorkerOutput
 from causal_agent.workers.agents import (
     _format_dimensions,
@@ -275,7 +275,7 @@ def worker_eval(
             question=question,
         ),
         solver=[
-            system_message(WORKER_SYSTEM),
+            system_message(WORKER_WO_PROPOSALS_SYSTEM),
             tool_assisted_generate(tools=make_worker_tools(schema)),
         ],
         scorer=worker_extraction_scorer(),
