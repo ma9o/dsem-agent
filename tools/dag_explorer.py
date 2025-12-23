@@ -1,15 +1,12 @@
 """
-DSEM DAG Explorer - Unified Streamlit UI for DAG visualization and structural analysis.
+DSEM DAG Explorer - Streamlit UI for DAG visualization.
 
 Run with: uv run streamlit run tools/dag_explorer.py
 """
 
 import json
 
-import networkx as nx
-import pandas as pd
 import streamlit as st
-from dowhy import CausalModel
 from streamlit_agraph import Config, Edge, Node, agraph
 
 st.set_page_config(page_title="DSEM DAG Explorer", layout="wide")
@@ -80,11 +77,6 @@ COLORS = {
 }
 
 
-# =============================================================================
-# Parsing
-# =============================================================================
-
-
 def parse_dag_json(json_str: str) -> tuple[dict | None, str | None]:
     """Parse the DAG JSON format."""
     try:
@@ -103,21 +95,6 @@ def parse_dag_json(json_str: str) -> tuple[dict | None, str | None]:
             return None, f"Edge references unknown effect: '{edge['effect']}'"
 
     return data, None
-
-
-def data_to_networkx(data: dict) -> nx.DiGraph:
-    """Convert parsed DAG data to NetworkX DiGraph."""
-    edge_list = [(e["cause"], e["effect"]) for e in data["edges"]]
-    graph = nx.DiGraph(edge_list)
-    for dim in data["dimensions"]:
-        if dim["name"] not in graph:
-            graph.add_node(dim["name"])
-    return graph
-
-
-# =============================================================================
-# Visualization
-# =============================================================================
 
 
 def create_agraph_elements(data: dict) -> tuple[list[Node], list[Edge]]:
@@ -253,96 +230,6 @@ def render_edge_info(edge: dict):
 
 
 # =============================================================================
-# Structural Analysis (DoWhy)
-# =============================================================================
-
-
-def check_dag_validity(graph: nx.DiGraph) -> tuple[bool, str]:
-    """Check if the graph is a valid DAG (no cycles)."""
-    if nx.is_directed_acyclic_graph(graph):
-        return True, "Valid DAG (no cycles)"
-    else:
-        cycles = list(nx.simple_cycles(graph))
-        return False, f"Graph has cycles: {cycles[:3]}..."
-
-
-def find_backdoor_paths(
-    graph: nx.DiGraph, treatment: str, outcome: str
-) -> list[list[str]]:
-    """Find all backdoor paths from treatment to outcome."""
-    backdoor_paths = []
-    undirected = graph.to_undirected()
-
-    for path in nx.all_simple_paths(undirected, treatment, outcome):
-        if len(path) >= 2:
-            second_node = path[1]
-            if graph.has_edge(second_node, treatment):
-                backdoor_paths.append(path)
-
-    return backdoor_paths
-
-
-def identify_node_types(
-    graph: nx.DiGraph, treatment: str, outcome: str
-) -> dict[str, list[str]]:
-    """Identify confounders, mediators, colliders, and instruments."""
-    result = {"confounders": [], "mediators": [], "colliders": [], "instruments": []}
-
-    for node in graph.nodes():
-        if node in (treatment, outcome):
-            continue
-
-        parents = list(graph.predecessors(node))
-        children = list(graph.successors(node))
-
-        if len(parents) >= 2:
-            result["colliders"].append(node)
-
-        if treatment in children and outcome in children:
-            result["confounders"].append(node)
-
-        treatment_ancestors = nx.ancestors(graph, treatment)
-        outcome_ancestors = nx.ancestors(graph, outcome)
-        if node in treatment_ancestors and node in outcome_ancestors:
-            if node not in result["confounders"]:
-                result["confounders"].append(node)
-
-        if nx.has_path(graph, treatment, node) and nx.has_path(graph, node, outcome):
-            result["mediators"].append(node)
-
-        if node in treatment_ancestors or graph.has_edge(node, treatment):
-            graph_without_treatment = graph.copy()
-            graph_without_treatment.remove_node(treatment)
-            if not nx.has_path(graph_without_treatment, node, outcome):
-                if node not in result["confounders"]:
-                    result["instruments"].append(node)
-
-    return result
-
-
-def get_adjustment_sets(graph: nx.DiGraph, treatment: str, outcome: str) -> list[set]:
-    """Get valid adjustment sets using DoWhy."""
-    nodes = list(graph.nodes())
-    df = pd.DataFrame({node: [0, 1] for node in nodes})
-
-    try:
-        model = CausalModel(
-            data=df,
-            treatment=treatment,
-            outcome=outcome,
-            graph=graph,
-        )
-        identified = model.identify_effect(proceed_when_unidentifiable=True)
-
-        if identified.backdoor_variables:
-            return [set(identified.backdoor_variables)]
-        return []
-    except Exception as e:
-        st.warning(f"DoWhy identification failed: {e}")
-        return []
-
-
-# =============================================================================
 # Main UI
 # =============================================================================
 
@@ -415,87 +302,22 @@ with col_graph:
         st.info("Paste DAG JSON to visualize")
 
 with col_info:
+    st.subheader("Inspector")
     if data:
-        tab_inspector, tab_analysis = st.tabs(["Inspector", "Analysis"])
+        selected_node = st.session_state.get("selected_node")
 
-        with tab_inspector:
-            selected_node = st.session_state.get("selected_node")
-
-            if selected_node:
-                dim = next(
-                    (d for d in data["dimensions"] if d["name"] == selected_node), None
-                )
-                if dim:
-                    render_dimension_info(dim)
-
-                    st.markdown("**Connected Edges**")
-                    for edge in data["edges"]:
-                        if edge["cause"] == selected_node or edge["effect"] == selected_node:
-                            render_edge_info(edge)
-            else:
-                st.info("Click a node to inspect")
-
-        with tab_analysis:
-            graph = data_to_networkx(data)
-            node_names = [d["name"] for d in data["dimensions"]]
-
-            # Find default outcome
-            default_outcome_idx = next(
-                (i for i, d in enumerate(data["dimensions"]) if d.get("is_outcome")),
-                len(node_names) - 1,
+        if selected_node:
+            dim = next(
+                (d for d in data["dimensions"] if d["name"] == selected_node), None
             )
+            if dim:
+                render_dimension_info(dim)
 
-            treatment = st.selectbox("Treatment", node_names, index=0)
-            outcome = st.selectbox("Outcome", node_names, index=default_outcome_idx)
-
-            if st.button("Run Structural Checks", type="primary"):
-                # DAG validity
-                is_valid, validity_msg = check_dag_validity(graph)
-                if is_valid:
-                    st.success(f"✓ {validity_msg}")
-                else:
-                    st.error(f"✗ {validity_msg}")
-
-                st.markdown("---")
-
-                # Node classification
-                st.markdown("**Node Classification**")
-                node_types = identify_node_types(graph, treatment, outcome)
-                st.markdown(
-                    f"- **Confounders:** {', '.join(node_types['confounders']) or 'None'}"
-                )
-                st.markdown(
-                    f"- **Mediators:** {', '.join(node_types['mediators']) or 'None'}"
-                )
-                st.markdown(
-                    f"- **Colliders:** {', '.join(node_types['colliders']) or 'None'}"
-                )
-                st.markdown(
-                    f"- **Instruments:** {', '.join(node_types['instruments']) or 'None'}"
-                )
-
-                st.markdown("---")
-
-                # Backdoor paths
-                st.markdown("**Backdoor Paths**")
-                backdoor_paths = find_backdoor_paths(graph, treatment, outcome)
-                if backdoor_paths:
-                    st.warning(f"Found {len(backdoor_paths)} backdoor path(s):")
-                    for path in backdoor_paths[:5]:
-                        st.markdown(f"- {' → '.join(path)}")
-                else:
-                    st.success("No backdoor paths")
-
-                st.markdown("---")
-
-                # Adjustment sets
-                st.markdown("**Adjustment Sets (DoWhy)**")
-                adj_sets = get_adjustment_sets(graph, treatment, outcome)
-                if adj_sets:
-                    for adj_set in adj_sets:
-                        st.info(f"Adjust for: {adj_set}")
-                else:
-                    st.markdown("No adjustment set identified")
+                st.markdown("**Connected Edges**")
+                for edge in data["edges"]:
+                    if edge["cause"] == selected_node or edge["effect"] == selected_node:
+                        render_edge_info(edge)
+        else:
+            st.info("Click a node to inspect")
     else:
-        st.subheader("Inspector")
         st.info("Load a DAG to explore")

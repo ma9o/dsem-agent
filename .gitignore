@@ -36,3 +36,6 @@ logs/
 scratchpad/**
 
 repomix-output.xml
+
+# Streamlit component artifacts
+lib/

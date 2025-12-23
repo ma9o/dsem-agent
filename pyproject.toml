@@ -8,7 +8,6 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "dowhy>=0.14",
     "dspy>=3.0.4",
     "google-genai>=1.56.0",
     "inspect-ai>=0.3.153",
