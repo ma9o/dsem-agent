@@ -295,18 +295,34 @@ with col_graph:
         st.subheader("Causal Identifiability (DoWhy)")
 
         node_names = [d["name"] for d in data["dimensions"]]
+        # Find the marked outcome node (if any)
+        default_outcome = next(
+            (d["name"] for d in data["dimensions"] if d.get("is_outcome")), None
+        )
+
         col_treat, col_out = st.columns(2)
 
         with col_treat:
             treatment = st.selectbox("Treatment", options=node_names, index=0)
         with col_out:
             outcome_options = [n for n in node_names if n != treatment]
-            outcome = st.selectbox("Outcome", options=outcome_options, index=0)
+            outcome_idx = (
+                outcome_options.index(default_outcome)
+                if default_outcome and default_outcome in outcome_options
+                else 0
+            )
+            outcome = st.selectbox("Outcome", options=outcome_options, index=outcome_idx)
 
         if st.button("Run Identifiability Analysis", type="primary"):
             with st.spinner("Analyzing..."):
                 graph = dag_to_networkx(data)
-                result = run_identify_effect(graph, treatment, outcome)
+                # Extract observed nodes (non-latent dimensions)
+                observed_nodes = [
+                    d["name"]
+                    for d in data["dimensions"]
+                    if d.get("observability", "observed") != "latent"
+                ]
+                result = run_identify_effect(graph, treatment, outcome, observed_nodes)
 
                 st.markdown("**Identification Result**")
                 if result.error:
