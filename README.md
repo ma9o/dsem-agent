@@ -1,4 +1,4 @@
-# causal-agent
+# dsem-agent
 
 This project explores an end-to-end, LLM-orchestrated framework for causal inference over long-context, multi-source data (e.g. large document collections or aggregated web search). An "orchestrator" LLM proposes candidate variables, time granularities, and a causal DAG; "worker" LLMs then populate those dimensions at scale, after which we use DoWhy for identifiability checks and sensitivity analysis, and PyMC for full Bayesian GLM estimation with LLM-elicited priors. The goal is to build a system that not only estimates causal effects and counterfactuals from messy, high-dimensional evidence, but also knows when to trust those numeric estimates and when to fall back to purely structural, qualitative reasoning.
 
@@ -35,7 +35,7 @@ See [`docs/index.md`](docs/index.md) for the full documentation structure.
 ## Structure
 
 ```
-causal-agent/
+dsem-agent/
 ├── data/
 │   ├── raw/           # Raw input data (gitignored)
 │   ├── processed/     # Converted text chunks (gitignored)
@@ -47,7 +47,7 @@ causal-agent/
 │   └── guides/        # Practical usage (quickstart, data, evals)
 ├── evals/             # Inspect AI evals (eval{N}_{name}.py) + scripts/
 │   └── deprecated/    # Deprecated evals
-├── src/causal_agent/
+├── src/dsem_agent/
 │   ├── orchestrator/  # Two-stage model specification (latent + measurement)
 │   │   ├── agents.py  # Stage 1a: latent model, Stage 1b: measurement model
 │   │   ├── prompts.py # LLM prompts for both stages

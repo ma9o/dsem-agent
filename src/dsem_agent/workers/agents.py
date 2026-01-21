@@ -12,8 +12,8 @@ from inspect_ai.model import (
     get_model,
 )
 
-from causal_agent.utils.config import get_config
-from causal_agent.utils.llm import make_worker_tools, multi_turn_generate, parse_json_response
+from dsem_agent.utils.config import get_config
+from dsem_agent.utils.llm import make_worker_tools, multi_turn_generate, parse_json_response
 from .prompts import WORKER_WO_PROPOSALS_SYSTEM, WORKER_USER
 from .schemas import WorkerOutput, validate_worker_output
 

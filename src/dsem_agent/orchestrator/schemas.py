@@ -9,7 +9,7 @@ from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from causal_agent.utils.aggregations import AGGREGATION_REGISTRY
+from dsem_agent.utils.aggregations import AGGREGATION_REGISTRY
 
 
 class Role(str, Enum):

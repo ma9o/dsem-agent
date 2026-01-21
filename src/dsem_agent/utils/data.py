@@ -2,7 +2,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from causal_agent.utils.config import get_config
+from dsem_agent.utils.config import get_config
 
 load_dotenv(Path(__file__).parent.parent.parent.parent / ".env")
 

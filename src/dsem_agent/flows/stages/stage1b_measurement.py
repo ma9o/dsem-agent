@@ -12,11 +12,11 @@ from pathlib import Path
 from prefect import task
 from prefect.cache_policies import INPUTS
 
-from causal_agent.orchestrator.agents import (
+from dsem_agent.orchestrator.agents import (
     build_dsem_model as build_dsem_model_agent,
     propose_measurement_model as propose_measurement_model_agent,
 )
-from causal_agent.utils.data import (
+from dsem_agent.utils.data import (
     get_orchestrator_chunk_size,
     load_text_chunks as load_text_chunks_util,
 )

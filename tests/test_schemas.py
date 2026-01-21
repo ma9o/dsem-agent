@@ -8,7 +8,7 @@ Two-stage schema:
 
 import pytest
 
-from causal_agent.orchestrator.schemas import (
+from dsem_agent.orchestrator.schemas import (
     CausalEdge,
     Construct,
     DSEMModel,

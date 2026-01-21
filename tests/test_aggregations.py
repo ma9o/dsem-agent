@@ -3,7 +3,7 @@
 import pytest
 import polars as pl
 
-from causal_agent.utils.aggregations import (
+from dsem_agent.utils.aggregations import (
     AGGREGATION_REGISTRY,
     aggregate_worker_measurements,
     apply_aggregation,
@@ -136,7 +136,7 @@ class TestSchemaAggregationValidation:
 
     def test_indicator_valid_aggregation(self):
         """Indicator accepts valid aggregation name."""
-        from causal_agent.orchestrator.schemas import Indicator
+        from dsem_agent.orchestrator.schemas import Indicator
 
         ind = Indicator(
             name="test_indicator",
@@ -150,7 +150,7 @@ class TestSchemaAggregationValidation:
 
     def test_indicator_invalid_aggregation(self):
         """Indicator rejects invalid aggregation name."""
-        from causal_agent.orchestrator.schemas import Indicator
+        from dsem_agent.orchestrator.schemas import Indicator
 
         with pytest.raises(ValueError, match="Unknown aggregation 'invalid'"):
             Indicator(

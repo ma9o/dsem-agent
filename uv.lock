@@ -449,55 +449,6 @@ wheels = [
 ]
 
 [[package]]
-name = "causal-agent"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "dowhy" },
-    { name = "google-genai" },
-    { name = "inspect-ai" },
-    { name = "networkx" },
-    { name = "openai" },
-    { name = "polars" },
-    { name = "prefect" },
-    { name = "pymc" },
-    { name = "python-dotenv" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "dspy" },
-    { name = "ipykernel" },
-    { name = "pytest" },
-    { name = "streamlit" },
-    { name = "streamlit-agraph" },
-    { name = "watchdog" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "dowhy", specifier = ">=0.14" },
-    { name = "google-genai", specifier = ">=1.56.0" },
-    { name = "inspect-ai", specifier = ">=0.3.162" },
-    { name = "networkx", specifier = ">=3.6" },
-    { name = "openai", specifier = ">=2.9.0" },
-    { name = "polars", specifier = ">=1.35.2" },
-    { name = "prefect", specifier = ">=3.6.5" },
-    { name = "pymc", specifier = ">=5.27.0" },
-    { name = "python-dotenv", specifier = ">=1.2.1" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "dspy", specifier = ">=3.0.4" },
-    { name = "ipykernel", specifier = ">=7.1.0" },
-    { name = "pytest", specifier = ">=9.0.2" },
-    { name = "streamlit", specifier = ">=1.52.2" },
-    { name = "streamlit-agraph", specifier = ">=0.0.45" },
-    { name = "watchdog", specifier = ">=6.0.0" },
-]
-
-[[package]]
 name = "causal-learn"
 version = "0.1.4.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1030,6 +981,55 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/25/1f/85ab41e0deb64c01590b05c15c9f302040d25340ae82e5117cb93cd89e2b/dowhy-0.14.tar.gz", hash = "sha256:18f48882bc2cd3452ed3536ae3529a196acfa3b1e21b8978b71934e65cabb665", size = 13225280, upload-time = "2025-11-08T05:05:10.581Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/31/e9/f07767b26916e5b6548e9892f87d7d77767b3a86d22e934f7c745ac4e270/dowhy-0.14-py3-none-any.whl", hash = "sha256:9c5855d80601e0feb2d0d232c19e7b660db4cd0ea04ace2ebaefcdb3599ab9db", size = 403110, upload-time = "2025-11-08T05:05:08.14Z" },
+]
+
+[[package]]
+name = "dsem-agent"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "dowhy" },
+    { name = "google-genai" },
+    { name = "inspect-ai" },
+    { name = "networkx" },
+    { name = "openai" },
+    { name = "polars" },
+    { name = "prefect" },
+    { name = "pymc" },
+    { name = "python-dotenv" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "dspy" },
+    { name = "ipykernel" },
+    { name = "pytest" },
+    { name = "streamlit" },
+    { name = "streamlit-agraph" },
+    { name = "watchdog" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "dowhy", specifier = ">=0.14" },
+    { name = "google-genai", specifier = ">=1.56.0" },
+    { name = "inspect-ai", specifier = ">=0.3.162" },
+    { name = "networkx", specifier = ">=3.6" },
+    { name = "openai", specifier = ">=2.9.0" },
+    { name = "polars", specifier = ">=1.35.2" },
+    { name = "prefect", specifier = ">=3.6.5" },
+    { name = "pymc", specifier = ">=5.27.0" },
+    { name = "python-dotenv", specifier = ">=1.2.1" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "dspy", specifier = ">=3.0.4" },
+    { name = "ipykernel", specifier = ">=7.1.0" },
+    { name = "pytest", specifier = ">=9.0.2" },
+    { name = "streamlit", specifier = ">=1.52.2" },
+    { name = "streamlit-agraph", specifier = ">=0.0.45" },
+    { name = "watchdog", specifier = ">=6.0.0" },
 ]
 
 [[package]]

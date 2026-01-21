@@ -24,14 +24,14 @@ from inspect_ai.dataset import MemoryDataset, Sample
 from inspect_ai.scorer import Score, Target, mean, scorer, stderr
 from inspect_ai.solver import TaskState, system_message
 
-from causal_agent.orchestrator.prompts import (
+from dsem_agent.orchestrator.prompts import (
     LATENT_MODEL_SYSTEM,
     LATENT_MODEL_USER,
     LATENT_MODEL_REVIEW,
 )
-from causal_agent.orchestrator.scoring import _count_rule_points_detailed
-from causal_agent.orchestrator.schemas import LatentModel
-from causal_agent.utils.llm import validate_latent_model_tool
+from dsem_agent.orchestrator.scoring import _count_rule_points_detailed
+from dsem_agent.orchestrator.schemas import LatentModel
+from dsem_agent.utils.llm import validate_latent_model_tool
 
 from evals.common import (
     extract_json_from_response,

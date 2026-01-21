@@ -10,12 +10,12 @@ import polars as pl
 from prefect import task
 from prefect.cache_policies import INPUTS
 
-from causal_agent.utils.aggregations import aggregate_worker_measurements
-from causal_agent.utils.data import (
+from dsem_agent.utils.aggregations import aggregate_worker_measurements
+from dsem_agent.utils.data import (
     load_text_chunks as load_text_chunks_util,
     get_worker_chunk_size,
 )
-from causal_agent.workers.agents import process_chunk, WorkerResult
+from dsem_agent.workers.agents import process_chunk, WorkerResult
 
 
 @task(cache_policy=INPUTS)

@@ -10,7 +10,7 @@ latent model is specified first from theory.
 from prefect import task
 from prefect.cache_policies import INPUTS
 
-from causal_agent.orchestrator.agents import propose_latent_model as propose_latent_model_agent
+from dsem_agent.orchestrator.agents import propose_latent_model as propose_latent_model_agent
 
 
 @task(retries=2, retry_delay_seconds=30, cache_policy=INPUTS)

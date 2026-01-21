@@ -1,4 +1,4 @@
-from causal_agent.utils.aggregations import (
+from dsem_agent.utils.aggregations import (
     AGGREGATION_REGISTRY,
     Aggregator,
     aggregate_worker_measurements,

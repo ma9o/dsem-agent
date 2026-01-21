@@ -1,5 +1,5 @@
 [project]
-name = "causal-agent"
+name = "dsem-agent"
 version = "0.1.0"
 description = "LLM-orchestrated causal inference over long-context, multi-source data"
 readme = "README.md"

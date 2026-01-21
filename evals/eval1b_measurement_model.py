@@ -26,15 +26,15 @@ from inspect_ai.scorer import Score, Target, mean, scorer, stderr
 from inspect_ai.model import get_model
 from inspect_ai.solver import Generate, TaskState, solver, system_message
 
-from causal_agent.orchestrator.prompts import (
+from dsem_agent.orchestrator.prompts import (
     MEASUREMENT_MODEL_SYSTEM,
     MEASUREMENT_MODEL_USER,
     MEASUREMENT_MODEL_REVIEW,
 )
-from causal_agent.orchestrator.schemas import MeasurementModel, LatentModel
-from causal_agent.utils.llm import make_validate_measurement_model_tool
+from dsem_agent.orchestrator.schemas import MeasurementModel, LatentModel
+from dsem_agent.utils.llm import make_validate_measurement_model_tool
 
-from causal_agent.utils.llm import get_generate_config, multi_turn_generate
+from dsem_agent.utils.llm import get_generate_config, multi_turn_generate
 
 from evals.common import (
     extract_json_from_response,

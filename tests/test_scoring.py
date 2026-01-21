@@ -5,12 +5,12 @@ from dataclasses import dataclass
 
 import pytest
 
-from causal_agent.orchestrator.scoring import (
+from dsem_agent.orchestrator.scoring import (
     _count_rule_points,
     score_latent_model,
     score_latent_model_normalized,
 )
-from causal_agent.orchestrator.schemas import (
+from dsem_agent.orchestrator.schemas import (
     CausalEdge,
     Construct,
     Role,

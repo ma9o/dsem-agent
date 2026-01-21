@@ -15,8 +15,8 @@ from inspect_ai.model import (
     get_model,
 )
 
-from causal_agent.utils.config import get_config
-from causal_agent.utils.llm import (
+from dsem_agent.utils.config import get_config
+from dsem_agent.utils.llm import (
     make_validate_measurement_model_tool,
     multi_turn_generate,
     parse_json_response,

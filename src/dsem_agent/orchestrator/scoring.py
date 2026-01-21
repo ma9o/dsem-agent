@@ -12,7 +12,7 @@ import json
 
 from pydantic import ValidationError
 
-from causal_agent.orchestrator.schemas import (
+from dsem_agent.orchestrator.schemas import (
     GRANULARITY_HOURS,
     LatentModel,
     TemporalStatus,
@@ -116,7 +116,7 @@ def _count_rule_points_detailed(structure: LatentModel) -> dict:
         effect_construct = construct_map.get(edge.effect)
 
         if cause_construct and effect_construct:
-            from causal_agent.orchestrator.schemas import Role
+            from dsem_agent.orchestrator.schemas import Role
 
             if effect_construct.role == Role.ENDOGENOUS:
                 pts += 1
@@ -177,7 +177,7 @@ def _count_rule_points(structure: LatentModel) -> float:
     Bonus points:
     - +2 per cross-timescale edge (more complex modeling)
     """
-    from causal_agent.orchestrator.schemas import Role
+    from dsem_agent.orchestrator.schemas import Role
 
     points = 0.0
     construct_map = {c.name: c for c in structure.constructs}

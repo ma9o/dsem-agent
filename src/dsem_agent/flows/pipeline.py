@@ -10,7 +10,7 @@ Two-stage specification following Anderson & Gerbing (1988):
 from prefect import flow
 from prefect.utilities.annotations import unmapped
 
-from causal_agent.utils.data import (
+from dsem_agent.utils.data import (
     SAMPLE_CHUNKS,
     load_query,
     resolve_input_path,

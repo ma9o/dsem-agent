@@ -1,6 +1,6 @@
 # Modeling Assumptions
 
-This document enumerates the core modeling assumptions underlying the causal-agent framework. Each assumption constrains what can be modeled and has implications for interpretation.
+This document enumerates the core modeling assumptions underlying the dsem-agent framework. Each assumption constrains what can be modeled and has implications for interpretation.
 
 ---
 

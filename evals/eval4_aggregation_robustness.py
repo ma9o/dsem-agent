@@ -29,14 +29,14 @@ from inspect_ai.model import ChatMessageSystem, ChatMessageUser, get_model
 from inspect_ai.scorer import Score, Target, accuracy, scorer, stderr
 from inspect_ai.solver import Generate, TaskState, solver
 
-from causal_agent.utils.aggregations import aggregate_worker_measurements
-from causal_agent.utils.llm import get_generate_config, make_worker_tools, multi_turn_generate, parse_json_response
-from causal_agent.workers.prompts import WORKER_WO_PROPOSALS_SYSTEM, WORKER_USER
-from causal_agent.workers.agents import (
+from dsem_agent.utils.aggregations import aggregate_worker_measurements
+from dsem_agent.utils.llm import get_generate_config, make_worker_tools, multi_turn_generate, parse_json_response
+from dsem_agent.workers.prompts import WORKER_WO_PROPOSALS_SYSTEM, WORKER_USER
+from dsem_agent.workers.agents import (
     _format_indicators,
     _get_outcome_description,
 )
-from causal_agent.workers.schemas import WorkerOutput
+from dsem_agent.workers.schemas import WorkerOutput
 
 from evals.common import (
     get_eval_questions,

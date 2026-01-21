@@ -18,7 +18,7 @@
 
 ## Stage Files
 
-Stages are in `src/causal_agent/flows/stages/` with naming convention `stage{N}_{name}.py`.
+Stages are in `src/dsem_agent/flows/stages/` with naming convention `stage{N}_{name}.py`.
 
 ---
 

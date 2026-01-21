@@ -10,14 +10,14 @@ Usage:
 
 import argparse
 
-from causal_agent.utils.data import (
+from dsem_agent.utils.data import (
     CHUNK_SIZE,
     SAMPLE_CHUNKS,
     PROCESSED_DIR,
     get_latest_preprocessed_file,
     sample_chunks,
 )
-from causal_agent.orchestrator.prompts import STRUCTURE_PROPOSER_SYSTEM
+from dsem_agent.orchestrator.prompts import STRUCTURE_PROPOSER_SYSTEM
 
 OUTPUT_FILE = PROCESSED_DIR / "orchestrator-samples-manual.txt"
 EXCLUDE_FILES = {OUTPUT_FILE.name}

@@ -21,10 +21,10 @@ from inspect_ai.dataset import MemoryDataset, Sample
 from inspect_ai.scorer import Score, Target, mean, scorer, stderr
 from inspect_ai.solver import TaskState, system_message
 
-from causal_agent.workers.prompts import WORKER_WO_PROPOSALS_SYSTEM, WORKER_USER
-from causal_agent.workers.schemas import WorkerOutput, _get_indicator_info
-from causal_agent.workers.agents import _format_indicators, _get_outcome_description
-from causal_agent.utils.llm import make_worker_tools
+from dsem_agent.workers.prompts import WORKER_WO_PROPOSALS_SYSTEM, WORKER_USER
+from dsem_agent.workers.schemas import WorkerOutput, _get_indicator_info
+from dsem_agent.workers.agents import _format_indicators, _get_outcome_description
+from dsem_agent.utils.llm import make_worker_tools
 
 from evals.common import (
     extract_json_from_response,

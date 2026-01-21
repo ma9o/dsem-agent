@@ -13,7 +13,7 @@ from inspect_ai.tool import Tool, tool
 
 if TYPE_CHECKING:
     from inspect_ai.model import ChatMessage
-    from causal_agent.orchestrator.schemas import LatentModel
+    from dsem_agent.orchestrator.schemas import LatentModel
 
 
 def get_generate_config() -> GenerateConfig:
@@ -61,7 +61,7 @@ def validate_latent_model_tool():
         Returns:
             "VALID" if the structure passes validation, otherwise a list of all errors found.
         """
-        from causal_agent.orchestrator.schemas import validate_latent_model
+        from dsem_agent.orchestrator.schemas import validate_latent_model
 
         try:
             data = json.loads(structure_json)
@@ -102,7 +102,7 @@ def make_validate_measurement_model_tool(latent_model: "LatentModel") -> Tool:
             Returns:
                 "VALID" if the model passes validation, otherwise a list of all errors found.
             """
-            from causal_agent.orchestrator.schemas import validate_measurement_model
+            from dsem_agent.orchestrator.schemas import validate_measurement_model
 
             try:
                 data = json.loads(measurement_json)
@@ -164,7 +164,7 @@ def make_validate_worker_output_tool(schema: dict) -> Tool:
             Returns:
                 "VALID" if the output passes validation, otherwise a list of all errors found.
             """
-            from causal_agent.workers.schemas import validate_worker_output
+            from dsem_agent.workers.schemas import validate_worker_output
 
             # Parse JSON first
             try:
