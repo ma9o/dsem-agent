@@ -69,6 +69,34 @@ st.markdown(
     .tag-exogenous { background: #da3633aa; color: #ff7b72; }
     .tag-observed { background: #238636aa; color: #3fb950; }
     .tag-latent { background: #6e768133; color: #8b949e; }
+    .indicator-box {
+        background: #21262d;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        padding: 12px;
+        margin-bottom: 8px;
+    }
+    .indicator-name {
+        color: #7ee787;
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 6px;
+    }
+    .indicator-detail {
+        color: #8b949e;
+        font-size: 11px;
+        margin-bottom: 4px;
+    }
+    .indicator-detail strong {
+        color: #c9d1d9;
+    }
+    .empty-state {
+        color: #8b949e;
+        font-style: italic;
+        font-size: 12px;
+        padding: 12px;
+        text-align: center;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -210,6 +238,36 @@ def render_edge_info(edge: dict):
     )
 
 
+def render_indicator_info(indicator: dict):
+    """Render indicator info as formatted HTML."""
+    construct = indicator.get("construct") or indicator.get("construct_name", "—")
+    dtype = indicator.get("measurement_dtype", "—")
+    granularity = indicator.get("measurement_granularity", "—")
+    aggregation = indicator.get("aggregation", "—")
+    how_to_measure = indicator.get("how_to_measure", "—")
+
+    st.markdown(
+        f"""
+        <div class="indicator-box">
+            <div class="indicator-name">{indicator.get('name', 'unnamed')}</div>
+            <div class="indicator-detail"><strong>Construct:</strong> {construct}</div>
+            <div class="indicator-detail"><strong>Type:</strong> {dtype} @ {granularity}</div>
+            <div class="indicator-detail"><strong>Aggregation:</strong> {aggregation}</div>
+            <div class="indicator-detail"><strong>How to measure:</strong> {how_to_measure}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def get_indicators_for_construct(indicators: list[dict], construct_name: str) -> list[dict]:
+    """Get all indicators that measure a given construct."""
+    return [
+        ind for ind in indicators
+        if (ind.get("construct") or ind.get("construct_name")) == construct_name
+    ]
+
+
 # =============================================================================
 # Main UI
 # =============================================================================
@@ -223,7 +281,7 @@ with col_input:
     json_input = st.text_area(
         "Paste DAG JSON",
         height=350,
-        placeholder='{\n  "structural": {\n    "constructs": [...],\n    "edges": [...]\n  }\n}',
+        placeholder='{\n  "structural": {\n    "constructs": [...],\n    "edges": [...]\n  },\n  "measurement": {\n    "indicators": [...]\n  }\n}',
     )
 
     st.markdown("---")
@@ -277,7 +335,7 @@ with col_graph:
             st.session_state["selected_node"] = selected
 
         st.caption(
-            f"**Constructs:** {len(data['constructs'])} | **Edges:** {len(data['edges'])} — Click a node to inspect"
+            f"**Constructs:** {len(data['constructs'])} | **Edges:** {len(data['edges'])} | **Indicators:** {len(data['indicators'])} — Click a node to inspect"
         )
 
         # Copy button
@@ -363,11 +421,55 @@ with col_info:
             if construct:
                 render_construct_info(construct)
 
+                # Show indicators for this construct
+                st.markdown("**Indicators**")
+                construct_indicators = get_indicators_for_construct(
+                    data["indicators"], selected_node
+                )
+                if construct_indicators:
+                    for indicator in construct_indicators:
+                        render_indicator_info(indicator)
+                else:
+                    st.markdown(
+                        '<div class="empty-state">No indicators defined</div>',
+                        unsafe_allow_html=True,
+                    )
+
                 st.markdown("**Connected Edges**")
-                for edge in data["edges"]:
-                    if edge["cause"] == selected_node or edge["effect"] == selected_node:
+                connected_edges = [
+                    edge for edge in data["edges"]
+                    if edge["cause"] == selected_node or edge["effect"] == selected_node
+                ]
+                if connected_edges:
+                    for edge in connected_edges:
                         render_edge_info(edge)
+                else:
+                    st.markdown(
+                        '<div class="empty-state">No connected edges</div>',
+                        unsafe_allow_html=True,
+                    )
         else:
             st.info("Click a node to inspect")
+
+        # Show measurement model summary
+        st.markdown("---")
+        st.markdown("**Measurement Model**")
+        if data["indicators"]:
+            # Group by construct
+            by_construct: dict[str, list[dict]] = {}
+            for ind in data["indicators"]:
+                c_name = ind.get("construct") or ind.get("construct_name", "unknown")
+                by_construct.setdefault(c_name, []).append(ind)
+
+            for c_name, inds in sorted(by_construct.items()):
+                st.markdown(f"**{c_name}** ({len(inds)} indicator{'s' if len(inds) > 1 else ''})")
+                for ind in inds:
+                    dtype = ind.get("measurement_dtype", "?")
+                    st.markdown(f"  - `{ind.get('name')}` ({dtype})")
+        else:
+            st.markdown(
+                '<div class="empty-state">No measurement model defined</div>',
+                unsafe_allow_html=True,
+            )
     else:
         st.info("Load a DAG to explore")
