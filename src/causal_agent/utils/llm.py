@@ -13,6 +13,7 @@ from inspect_ai.tool import Tool, tool
 
 if TYPE_CHECKING:
     from inspect_ai.model import ChatMessage
+    from causal_agent.orchestrator.schemas import StructuralModel
 
 
 def get_generate_config() -> GenerateConfig:
@@ -47,29 +48,27 @@ def parse_json_response(content: str) -> dict:
 
 
 @tool
-def validate_dsem_structure():
-    """Tool for validating DSEM structure JSON."""
+def validate_structural_model_tool():
+    """Tool for validating structural model JSON (Stage 1a)."""
 
     async def execute(structure_json: str) -> str:
         """
-        Validate a DSEM structure and return all validation errors.
+        Validate a structural model and return all validation errors.
 
         Args:
-            structure_json: The JSON string containing the DSEM structure to validate.
+            structure_json: The JSON string containing the structural model to validate.
 
         Returns:
             "VALID" if the structure passes validation, otherwise a list of all errors found.
         """
-        from causal_agent.orchestrator.schemas import validate_structure
+        from causal_agent.orchestrator.schemas import validate_structural_model
 
-        # Parse JSON first
         try:
             data = json.loads(structure_json)
         except json.JSONDecodeError as e:
             return f"JSON parse error: {e}"
 
-        # Validate and collect all errors
-        structure, errors = validate_structure(data)
+        structure, errors = validate_structural_model(data)
 
         if not errors:
             return "VALID"
@@ -77,6 +76,49 @@ def validate_dsem_structure():
         return "VALIDATION ERRORS:\n" + "\n".join(f"- {e}" for e in errors)
 
     return execute
+
+
+def make_validate_measurement_model_tool(structural_model: "StructuralModel") -> Tool:
+    """Create a validation tool for measurement model, bound to a structural model.
+
+    Args:
+        structural_model: The structural model to validate against
+
+    Returns:
+        A tool function that validates measurement model JSON
+    """
+
+    @tool
+    def validate_measurement_model_tool():
+        """Tool for validating measurement model JSON (Stage 1b)."""
+
+        async def execute(measurement_json: str) -> str:
+            """
+            Validate a measurement model and return all validation errors.
+
+            Args:
+                measurement_json: The JSON string containing the measurement model to validate.
+
+            Returns:
+                "VALID" if the model passes validation, otherwise a list of all errors found.
+            """
+            from causal_agent.orchestrator.schemas import validate_measurement_model
+
+            try:
+                data = json.loads(measurement_json)
+            except json.JSONDecodeError as e:
+                return f"JSON parse error: {e}"
+
+            model, errors = validate_measurement_model(data, structural_model)
+
+            if not errors:
+                return "VALID"
+
+            return "VALIDATION ERRORS:\n" + "\n".join(f"- {e}" for e in errors)
+
+        return execute
+
+    return validate_measurement_model_tool()
 
 
 def make_worker_tools(schema: dict) -> list[Tool]:

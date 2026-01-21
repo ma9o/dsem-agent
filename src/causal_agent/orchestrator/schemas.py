@@ -1,3 +1,10 @@
+"""DSEM domain schemas following Anderson & Gerbing two-step approach.
+
+Separates:
+1. StructuralModel - theoretical constructs + causal edges (theory-driven)
+2. MeasurementModel - observed indicators that reflect constructs (data-driven)
+"""
+
 from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -10,13 +17,6 @@ class Role(str, Enum):
 
     ENDOGENOUS = "endogenous"  # Has inbound edges, is modeled
     EXOGENOUS = "exogenous"  # No inbound edges, given/external
-
-
-class Observability(str, Enum):
-    """Whether a variable is directly measurable."""
-
-    OBSERVED = "observed"  # Directly measured in data
-    LATENT = "latent"  # Not directly measured, inferred
 
 
 class TemporalStatus(str, Enum):
@@ -36,25 +36,24 @@ GRANULARITY_HOURS = {
 }
 
 
-class Dimension(BaseModel):
-    """A variable in the causal model."""
+# ══════════════════════════════════════════════════════════════════════════════
+# STRUCTURAL MODEL (theoretical - what exists and how it relates)
+# ══════════════════════════════════════════════════════════════════════════════
 
-    model_config = {"populate_by_name": True}
 
-    name: str = Field(description="Variable name (e.g., 'sleep_quality')")
-    description: str = Field(description="What this variable represents")
+class Construct(BaseModel):
+    """A theoretical entity in the causal model.
+
+    Constructs are conceptually 'latent' - they represent theoretical entities
+    that may be measured by one or more observed indicators.
+    """
+
+    name: str = Field(description="Construct name (e.g., 'stress', 'sleep_quality')")
+    description: str = Field(description="What this theoretical construct represents")
     role: Role = Field(description="'endogenous' (modeled) or 'exogenous' (given)")
     is_outcome: bool = Field(
         default=False,
         description="True if this is the primary outcome variable Y implied by the question",
-    )
-    observability: Observability = Field(description="'observed' (measured) or 'latent' (inferred)")
-    how_to_measure: str | None = Field(
-        default=None,
-        description=(
-            "Instructions for workers on how to extract this variable from data. "
-            "Required for observed variables, must be null for latent variables."
-        ),
     )
     temporal_status: TemporalStatus = Field(
         description="'time_varying' (changes over time) or 'time_invariant' (fixed)"
@@ -62,123 +61,47 @@ class Dimension(BaseModel):
     causal_granularity: str | None = Field(
         default=None,
         description=(
-            "'hourly', 'daily', 'weekly', 'monthly', 'yearly'. Required for time-varying variables. "
-            "The granularity at which causal relationships make sense."
+            "'hourly', 'daily', 'weekly', 'monthly', 'yearly'. Required for time-varying constructs. "
+            "The timescale at which causal dynamics operate."
         ),
     )
-    measurement_granularity: str | None = Field(
-        default=None,
-        description=(
-            "'finest' (one datapoint per raw entry) or 'hourly', 'daily', 'weekly', 'monthly', 'yearly'. "
-            "Required for observed time-varying variables. "
-            "The resolution at which workers should extract measurements from data."
-        ),
-    )
-    measurement_dtype: str = Field(
-        description="'continuous', 'binary', 'count', 'ordinal', 'categorical'"
-    )
-    aggregation: str | None = Field(
-        default=None,
-        description=f"Aggregation function from registry. Available: {', '.join(sorted(AGGREGATION_REGISTRY.keys()))}",
-    )
-    # Review metadata - tracks what changed during self-review stage
-    changed: str | None = Field(
-        default=None,
-        alias="_changed",
-        description="Review notes on what was modified (e.g., 'measurement_dtype: continuous→count')",
-    )
-
-    @field_validator("aggregation")
-    @classmethod
-    def validate_aggregation(cls, v: str | None) -> str | None:
-        if v is not None and v not in AGGREGATION_REGISTRY:
-            available = ", ".join(sorted(AGGREGATION_REGISTRY.keys()))
-            raise ValueError(f"Unknown aggregation '{v}'. Available: {available}")
-        return v
 
     @model_validator(mode="after")
-    def validate_field_consistency(self):
-        """Validate that causal_granularity, measurement_granularity, and aggregation are consistent."""
+    def validate_construct(self):
+        """Validate construct field consistency."""
         is_time_varying = self.temporal_status == TemporalStatus.TIME_VARYING
-        is_observed = self.observability == Observability.OBSERVED
 
         if is_time_varying:
             if self.causal_granularity is None:
                 raise ValueError(
-                    f"Time-varying variable '{self.name}' requires causal_granularity"
+                    f"Time-varying construct '{self.name}' requires causal_granularity"
                 )
-            if self.aggregation is None:
+            if self.causal_granularity not in GRANULARITY_HOURS:
                 raise ValueError(
-                    f"Time-varying variable '{self.name}' requires aggregation (how to collapse raw data)"
-                )
-            # measurement_granularity required for observed time-varying variables
-            if is_observed and self.measurement_granularity is None:
-                raise ValueError(
-                    f"Observed time-varying variable '{self.name}' requires measurement_granularity"
+                    f"Invalid causal_granularity '{self.causal_granularity}' for '{self.name}'. "
+                    f"Must be one of: {', '.join(sorted(GRANULARITY_HOURS.keys()))}"
                 )
         else:
             if self.causal_granularity is not None:
                 raise ValueError(
-                    f"Time-invariant variable '{self.name}' must not have causal_granularity"
+                    f"Time-invariant construct '{self.name}' must not have causal_granularity"
                 )
-            if self.aggregation is not None:
-                raise ValueError(
-                    f"Time-invariant variable '{self.name}' must not have aggregation"
-                )
-
-        # measurement_granularity only for observed time-varying
-        if self.measurement_granularity is not None:
-            if not is_observed:
-                raise ValueError(
-                    f"Latent variable '{self.name}' must not have measurement_granularity"
-                )
-            if not is_time_varying:
-                raise ValueError(
-                    f"Time-invariant variable '{self.name}' must not have measurement_granularity"
-                )
-            # Validate measurement_granularity value
-            valid_measurement_granularities = {"finest"} | set(GRANULARITY_HOURS.keys())
-            if self.measurement_granularity not in valid_measurement_granularities:
-                raise ValueError(
-                    f"Invalid measurement_granularity '{self.measurement_granularity}' for '{self.name}'. "
-                    f"Must be 'finest' or one of: {', '.join(sorted(GRANULARITY_HOURS.keys()))}"
-                )
-            # measurement_granularity must be finer than or equal to causal_granularity
-            # 'finest' is always valid (finer than any time-based granularity)
-            if self.measurement_granularity != "finest" and self.causal_granularity is not None:
-                measurement_hours = GRANULARITY_HOURS.get(self.measurement_granularity, 0)
-                causal_hours = GRANULARITY_HOURS.get(self.causal_granularity, 0)
-                if measurement_hours > causal_hours:
-                    raise ValueError(
-                        f"measurement_granularity '{self.measurement_granularity}' for '{self.name}' "
-                        f"must be finer than or equal to causal_granularity '{self.causal_granularity}'"
-                    )
 
         # Outcomes must be endogenous
         if self.is_outcome and self.role != Role.ENDOGENOUS:
             raise ValueError(
-                f"Outcome variable '{self.name}' must be endogenous, got {self.role.value}"
-            )
-
-        # how_to_measure required for observed, must be null for latent
-        if is_observed and not self.how_to_measure:
-            raise ValueError(
-                f"Observed variable '{self.name}' requires how_to_measure instructions"
-            )
-        if not is_observed and self.how_to_measure:
-            raise ValueError(
-                f"Latent variable '{self.name}' must not have how_to_measure (it's not directly measurable)"
+                f"Outcome construct '{self.name}' must be endogenous, got {self.role.value}"
             )
 
         return self
 
 
 class CausalEdge(BaseModel):
-    """A directed causal edge between variables."""
+    """A directed causal relationship between constructs."""
 
-    cause: str = Field(description="Name of cause variable")
-    effect: str = Field(description="Name of effect variable")
-    description: str = Field(description="Why this causal relationship exists")
+    cause: str = Field(description="Name of cause construct")
+    effect: str = Field(description="Name of effect construct")
+    description: str = Field(description="Theoretical justification for this causal link")
     lagged: bool = Field(
         default=True,
         description=(
@@ -187,11 +110,173 @@ class CausalEdge(BaseModel):
             "Cross-timescale edges are always lagged."
         ),
     )
-    # Computed field - set by DSEMStructure validator
-    lag_hours: int | None = Field(
-        default=None,
-        description="Lag in hours. Computed from granularities - do not set manually.",
+
+
+class StructuralModel(BaseModel):
+    """Theoretical causal structure over constructs.
+
+    This is the output of Stage 1a - proposed based on domain knowledge alone,
+    without seeing data.
+    """
+
+    constructs: list[Construct] = Field(description="Theoretical constructs in the model")
+    edges: list[CausalEdge] = Field(description="Causal edges between constructs")
+
+    @model_validator(mode="after")
+    def validate_structural_model(self):
+        """Validate structural model constraints."""
+        # Exactly one outcome required
+        outcomes = [c for c in self.constructs if c.is_outcome]
+        if len(outcomes) == 0:
+            raise ValueError("Exactly one construct must have is_outcome=true")
+        if len(outcomes) > 1:
+            names = [c.name for c in outcomes]
+            raise ValueError(f"Only one outcome allowed, got {len(outcomes)}: {names}")
+
+        construct_map = {c.name: c for c in self.constructs}
+
+        for edge in self.edges:
+            # Check constructs exist
+            if edge.cause not in construct_map:
+                raise ValueError(f"Edge cause '{edge.cause}' not in constructs")
+            if edge.effect not in construct_map:
+                raise ValueError(f"Edge effect '{edge.effect}' not in constructs")
+
+            cause_construct = construct_map[edge.cause]
+            effect_construct = construct_map[edge.effect]
+
+            # No inbound edges to exogenous
+            if effect_construct.role == Role.EXOGENOUS:
+                raise ValueError(f"Exogenous construct '{edge.effect}' cannot be an effect")
+
+            cause_gran = cause_construct.causal_granularity
+            effect_gran = effect_construct.causal_granularity
+
+            # Contemporaneous (lagged=False) requires same timescale
+            # Exception: time-invariant causes (granularity=None) can affect any timescale
+            both_time_varying = cause_gran is not None and effect_gran is not None
+            if not edge.lagged and both_time_varying and cause_gran != effect_gran:
+                raise ValueError(
+                    f"Contemporaneous edge (lagged=false) requires same timescale: "
+                    f"{edge.cause} ({cause_gran}) -> {edge.effect} ({effect_gran})"
+                )
+
+        # Check acyclicity within time slice (contemporaneous edges only)
+        contemporaneous_edges = [(e.cause, e.effect) for e in self.edges if not e.lagged]
+        if contemporaneous_edges:
+            import networkx as nx
+
+            G = nx.DiGraph(contemporaneous_edges)
+            if not nx.is_directed_acyclic_graph(G):
+                cycles = list(nx.simple_cycles(G))
+                raise ValueError(
+                    f"Contemporaneous edges form cycle(s) within time slice: {cycles}. "
+                    "Use lagged=true for feedback loops across time."
+                )
+
+        return self
+
+    def to_networkx(self):
+        """Convert to NetworkX DiGraph."""
+        import networkx as nx
+
+        G = nx.DiGraph()
+        for construct in self.constructs:
+            G.add_node(construct.name, **construct.model_dump())
+        for edge in self.edges:
+            G.add_edge(
+                edge.cause,
+                edge.effect,
+                description=edge.description,
+                lagged=edge.lagged,
+            )
+        return G
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MEASUREMENT MODEL (operational - how constructs are observed)
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class Indicator(BaseModel):
+    """An observed variable that reflects a construct.
+
+    Following the reflective measurement model (A1), causality flows from
+    construct to indicator: the latent construct causes the observed values.
+    """
+
+    model_config = {"populate_by_name": True}
+
+    name: str = Field(description="Indicator name (e.g., 'hrv', 'self_reported_stress')")
+    construct_name: str = Field(
+        description="Which construct this indicator measures",
+        alias="construct",
     )
+    how_to_measure: str = Field(
+        description="Instructions for workers on how to extract this from data"
+    )
+    measurement_granularity: str = Field(
+        description=(
+            "'finest' (one datapoint per raw entry) or 'hourly', 'daily', 'weekly', 'monthly', 'yearly'. "
+            "The resolution at which workers extract measurements."
+        ),
+    )
+    measurement_dtype: str = Field(
+        description="'continuous', 'binary', 'count', 'ordinal', 'categorical'"
+    )
+    aggregation: str = Field(
+        description=f"Aggregation function to collapse to causal_granularity. Available: {', '.join(sorted(AGGREGATION_REGISTRY.keys()))}",
+    )
+
+    @field_validator("aggregation")
+    @classmethod
+    def validate_aggregation(cls, v: str) -> str:
+        if v not in AGGREGATION_REGISTRY:
+            available = ", ".join(sorted(AGGREGATION_REGISTRY.keys()))
+            raise ValueError(f"Unknown aggregation '{v}'. Available: {available}")
+        return v
+
+    @field_validator("measurement_granularity")
+    @classmethod
+    def validate_measurement_granularity(cls, v: str) -> str:
+        valid = {"finest"} | set(GRANULARITY_HOURS.keys())
+        if v not in valid:
+            raise ValueError(
+                f"Invalid measurement_granularity '{v}'. "
+                f"Must be 'finest' or one of: {', '.join(sorted(GRANULARITY_HOURS.keys()))}"
+            )
+        return v
+
+    @field_validator("measurement_dtype")
+    @classmethod
+    def validate_measurement_dtype(cls, v: str) -> str:
+        valid = {"continuous", "binary", "count", "ordinal", "categorical"}
+        if v not in valid:
+            raise ValueError(f"Invalid measurement_dtype '{v}'. Must be one of: {', '.join(sorted(valid))}")
+        return v
+
+
+class MeasurementModel(BaseModel):
+    """Operationalization of constructs into observed indicators.
+
+    This is the output of Stage 1b - proposed after seeing data sample,
+    given the structural model from Stage 1a.
+
+    Each construct from the structural model must have at least one indicator.
+    """
+
+    indicators: list[Indicator] = Field(
+        description="Observed indicators, each measuring a construct"
+    )
+
+    def get_indicators_for_construct(self, construct_name: str) -> list[Indicator]:
+        """Get all indicators that measure a given construct."""
+        return [i for i in self.indicators if i.construct_name == construct_name]
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FULL DSEM MODEL (composition of structural + measurement)
+# ══════════════════════════════════════════════════════════════════════════════
 
 
 def compute_lag_hours(
@@ -219,150 +304,154 @@ def compute_lag_hours(
     return 0  # contemporaneous
 
 
-class DSEMStructure(BaseModel):
-    """Complete DSEM specification."""
+class DSEMModel(BaseModel):
+    """Complete DSEM specification combining structural and measurement models.
 
-    dimensions: list[Dimension] = Field(description="Variables in the model")
-    edges: list[CausalEdge] = Field(description="Causal edges including cross-lags")
+    This is the full model after both Stage 1a (structural) and Stage 1b (measurement).
+    """
+
+    structural: StructuralModel = Field(description="Theoretical causal structure")
+    measurement: MeasurementModel = Field(description="Operationalization into indicators")
 
     @model_validator(mode="after")
-    def validate_and_compute_lags(self):
-        """Validate structure and compute lag_hours for each edge."""
-        # Exactly one outcome required
-        outcomes = [d for d in self.dimensions if d.is_outcome]
-        if len(outcomes) == 0:
-            raise ValueError("Exactly one dimension must have is_outcome=true")
-        if len(outcomes) > 1:
-            names = [d.name for d in outcomes]
-            raise ValueError(f"Only one outcome allowed, got {len(outcomes)}: {names}")
+    def validate_dsem_model(self):
+        """Validate that measurement model covers all constructs."""
+        construct_names = {c.name for c in self.structural.constructs}
+        measured_constructs = {i.construct_name for i in self.measurement.indicators}
 
-        dim_map = {d.name: d for d in self.dimensions}
-
-        for edge in self.edges:
-            # Check variables exist
-            if edge.cause not in dim_map:
-                raise ValueError(f"Edge cause '{edge.cause}' not in dimensions")
-            if edge.effect not in dim_map:
-                raise ValueError(f"Edge effect '{edge.effect}' not in dimensions")
-
-            cause_dim = dim_map[edge.cause]
-            effect_dim = dim_map[edge.effect]
-
-            # No inbound edges to exogenous
-            if effect_dim.role == Role.EXOGENOUS:
-                raise ValueError(f"Exogenous variable '{edge.effect}' cannot be an effect")
-
-            cause_gran = cause_dim.causal_granularity
-            effect_gran = effect_dim.causal_granularity
-
-            # Contemporaneous (lagged=False) requires same timescale
-            # Exception: time-invariant causes (granularity=None) can affect any timescale
-            both_time_varying = cause_gran is not None and effect_gran is not None
-            if not edge.lagged and both_time_varying and cause_gran != effect_gran:
+        # Check all indicator references are valid
+        for indicator in self.measurement.indicators:
+            if indicator.construct_name not in construct_names:
                 raise ValueError(
-                    f"Contemporaneous edge (lagged=false) requires same timescale: "
-                    f"{edge.cause} ({cause_gran}) -> {edge.effect} ({effect_gran})"
+                    f"Indicator '{indicator.name}' references unknown construct '{indicator.construct_name}'"
                 )
 
-            # Compute and set lag_hours
-            edge.lag_hours = compute_lag_hours(cause_gran, effect_gran, edge.lagged)
+            # Validate measurement_granularity vs causal_granularity
+            construct = next(c for c in self.structural.constructs if c.name == indicator.construct_name)
+            if construct.temporal_status == TemporalStatus.TIME_VARYING:
+                causal_gran = construct.causal_granularity
+                meas_gran = indicator.measurement_granularity
+                # measurement_granularity must be finer than or equal to causal_granularity
+                if meas_gran != "finest" and causal_gran is not None:
+                    meas_hours = GRANULARITY_HOURS.get(meas_gran, 0)
+                    causal_hours = GRANULARITY_HOURS.get(causal_gran, 0)
+                    if meas_hours > causal_hours:
+                        raise ValueError(
+                            f"Indicator '{indicator.name}' has measurement_granularity '{meas_gran}' "
+                            f"coarser than construct '{construct.name}' causal_granularity '{causal_gran}'"
+                        )
 
-        # Check acyclicity within time slice (contemporaneous edges only)
-        # Lagged edges can form cycles across time - that's the point of DSEMs
-        contemporaneous_edges = [(e.cause, e.effect) for e in self.edges if not e.lagged]
-        if contemporaneous_edges:
-            import networkx as nx
-
-            G = nx.DiGraph(contemporaneous_edges)
-            if not nx.is_directed_acyclic_graph(G):
-                cycles = list(nx.simple_cycles(G))
-                raise ValueError(
-                    f"Contemporaneous edges form cycle(s) within time slice: {cycles}. "
-                    "DSEMs must be acyclic within time slice. Use lagged=true for feedback loops."
-                )
+        # Check all time-varying constructs have at least one indicator (A2)
+        for construct in self.structural.constructs:
+            if construct.temporal_status == TemporalStatus.TIME_VARYING:
+                if construct.name not in measured_constructs:
+                    raise ValueError(
+                        f"Time-varying construct '{construct.name}' has no indicators. "
+                        "Per A2, latent time-varying constructs require at least one indicator."
+                    )
 
         return self
 
+    def get_edge_lag_hours(self, edge: CausalEdge) -> int:
+        """Compute lag in hours for a causal edge."""
+        construct_map = {c.name: c for c in self.structural.constructs}
+        cause = construct_map[edge.cause]
+        effect = construct_map[edge.effect]
+        return compute_lag_hours(
+            cause.causal_granularity,
+            effect.causal_granularity,
+            edge.lagged,
+        )
+
     def to_networkx(self):
-        """Convert to NetworkX DiGraph (compatible with DoWhy)."""
+        """Convert to NetworkX DiGraph with computed lag_hours."""
         import networkx as nx
 
         G = nx.DiGraph()
-        for dim in self.dimensions:
-            G.add_node(dim.name, **dim.model_dump())
-        for edge in self.edges:
+
+        # Add construct nodes
+        for construct in self.structural.constructs:
+            G.add_node(construct.name, node_type="construct", **construct.model_dump())
+
+        # Add indicator nodes
+        for indicator in self.measurement.indicators:
+            G.add_node(indicator.name, node_type="indicator", **indicator.model_dump())
+            # Add loading edge: construct → indicator (reflective model)
+            G.add_edge(indicator.construct_name, indicator.name, edge_type="loading")
+
+        # Add causal edges with computed lag_hours
+        for edge in self.structural.edges:
             G.add_edge(
                 edge.cause,
                 edge.effect,
+                edge_type="causal",
                 description=edge.description,
-                lag_hours=edge.lag_hours,
                 lagged=edge.lagged,
+                lag_hours=self.get_edge_lag_hours(edge),
             )
+
         return G
 
-    def to_edge_list(self) -> list[tuple[str, str]]:
-        """Convert to edge list format."""
-        return [(e.cause, e.effect) for e in self.edges]
+
+# ══════════════════════════════════════════════════════════════════════════════
+# VALIDATION FUNCTIONS (for LLM tool use)
+# ══════════════════════════════════════════════════════════════════════════════
 
 
-def validate_structure(data: dict) -> tuple[DSEMStructure | None, list[str]]:
-    """Validate a structure dict, collecting ALL errors instead of failing on first.
+def validate_structural_model(data: dict) -> tuple[StructuralModel | None, list[str]]:
+    """Validate a structural model dict, collecting ALL errors.
 
     Args:
-        data: Dictionary to validate as DSEMStructure
+        data: Dictionary to validate as StructuralModel
 
     Returns:
-        Tuple of (validated structure or None, list of error messages)
+        Tuple of (validated model or None, list of error messages)
     """
     errors = []
 
-    # First check basic structure
     if not isinstance(data, dict):
         return None, ["Input must be a dictionary"]
 
-    dimensions = data.get("dimensions", [])
+    constructs = data.get("constructs", [])
     edges = data.get("edges", [])
 
-    if not isinstance(dimensions, list):
-        errors.append("'dimensions' must be a list")
-        dimensions = []
+    if not isinstance(constructs, list):
+        errors.append("'constructs' must be a list")
+        constructs = []
     if not isinstance(edges, list):
         errors.append("'edges' must be a list")
         edges = []
 
-    # Validate each dimension individually to collect all errors
-    valid_dimensions = []
-    dim_names = set()
+    # Validate each construct individually
+    valid_constructs = []
+    construct_names = set()
 
-    for i, dim_data in enumerate(dimensions):
-        if not isinstance(dim_data, dict):
-            errors.append(f"dimensions[{i}]: must be a dictionary")
+    for i, construct_data in enumerate(constructs):
+        if not isinstance(construct_data, dict):
+            errors.append(f"constructs[{i}]: must be a dictionary")
             continue
 
-        name = dim_data.get("name", f"<unnamed_{i}>")
+        name = construct_data.get("name", f"<unnamed_{i}>")
 
-        # Check for duplicate names
-        if name in dim_names:
-            errors.append(f"Duplicate dimension name: '{name}'")
-        dim_names.add(name)
+        if name in construct_names:
+            errors.append(f"Duplicate construct name: '{name}'")
+        construct_names.add(name)
 
         try:
-            dim = Dimension.model_validate(dim_data)
-            valid_dimensions.append(dim)
+            construct = Construct.model_validate(construct_data)
+            valid_constructs.append(construct)
         except Exception as e:
-            # Extract error messages from Pydantic validation
             error_msg = str(e)
-            # Clean up Pydantic error formatting
             if "validation error" in error_msg.lower():
                 for line in error_msg.split("\n")[1:]:
                     line = line.strip()
                     if line and not line.startswith("For further"):
-                        errors.append(f"dimensions[{i}] ({name}): {line}")
+                        errors.append(f"constructs[{i}] ({name}): {line}")
             else:
-                errors.append(f"dimensions[{i}] ({name}): {error_msg}")
+                errors.append(f"constructs[{i}] ({name}): {error_msg}")
 
-    # Build dim map for edge validation
-    dim_map = {d.name: d for d in valid_dimensions}
+    # Build construct map for edge validation
+    construct_map = {c.name: c for c in valid_constructs}
 
     # Validate each edge individually
     valid_edges = []
@@ -375,32 +464,28 @@ def validate_structure(data: dict) -> tuple[DSEMStructure | None, list[str]]:
         effect = edge_data.get("effect", "<missing>")
         edge_label = f"edges[{i}] ({cause} -> {effect})"
 
-        # Check basic edge structure
         try:
             edge = CausalEdge.model_validate(edge_data)
         except Exception as e:
             errors.append(f"{edge_label}: {e}")
             continue
 
-        # Check references
-        if edge.cause not in dim_map:
-            errors.append(f"{edge_label}: cause '{edge.cause}' not in dimensions")
+        if edge.cause not in construct_map:
+            errors.append(f"{edge_label}: cause '{edge.cause}' not in constructs")
             continue
-        if edge.effect not in dim_map:
-            errors.append(f"{edge_label}: effect '{edge.effect}' not in dimensions")
-            continue
-
-        cause_dim = dim_map[edge.cause]
-        effect_dim = dim_map[edge.effect]
-
-        # Check exogenous constraint
-        if effect_dim.role == Role.EXOGENOUS:
-            errors.append(f"{edge_label}: exogenous variable '{edge.effect}' cannot be an effect")
+        if edge.effect not in construct_map:
+            errors.append(f"{edge_label}: effect '{edge.effect}' not in constructs")
             continue
 
-        # Check contemporaneous timescale constraint
-        cause_gran = cause_dim.causal_granularity
-        effect_gran = effect_dim.causal_granularity
+        cause_construct = construct_map[edge.cause]
+        effect_construct = construct_map[edge.effect]
+
+        if effect_construct.role == Role.EXOGENOUS:
+            errors.append(f"{edge_label}: exogenous construct '{edge.effect}' cannot be an effect")
+            continue
+
+        cause_gran = cause_construct.causal_granularity
+        effect_gran = effect_construct.causal_granularity
         both_time_varying = cause_gran is not None and effect_gran is not None
         if not edge.lagged and both_time_varying and cause_gran != effect_gran:
             errors.append(
@@ -409,16 +494,14 @@ def validate_structure(data: dict) -> tuple[DSEMStructure | None, list[str]]:
             )
             continue
 
-        # Compute lag_hours
-        edge.lag_hours = compute_lag_hours(cause_gran, effect_gran, edge.lagged)
         valid_edges.append(edge)
 
     # Check outcome constraints
-    outcomes = [d for d in valid_dimensions if d.is_outcome]
+    outcomes = [c for c in valid_constructs if c.is_outcome]
     if len(outcomes) == 0:
-        errors.append("Exactly one dimension must have is_outcome=true (none found)")
+        errors.append("Exactly one construct must have is_outcome=true (none found)")
     elif len(outcomes) > 1:
-        names = [d.name for d in outcomes]
+        names = [c.name for c in outcomes]
         errors.append(f"Only one outcome allowed, got {len(outcomes)}: {names}")
 
     # Check acyclicity of contemporaneous edges
@@ -434,12 +517,138 @@ def validate_structure(data: dict) -> tuple[DSEMStructure | None, list[str]]:
                 "Use lagged=true for feedback loops."
             )
 
-    # If no errors, build and return the structure
     if not errors:
         try:
-            structure = DSEMStructure(dimensions=valid_dimensions, edges=valid_edges)
-            return structure, []
+            model = StructuralModel(constructs=valid_constructs, edges=valid_edges)
+            return model, []
         except Exception as e:
             errors.append(f"Final validation failed: {e}")
 
     return None, errors
+
+
+def validate_measurement_model(
+    data: dict,
+    structural: StructuralModel,
+) -> tuple[MeasurementModel | None, list[str]]:
+    """Validate a measurement model dict against a structural model.
+
+    Args:
+        data: Dictionary to validate as MeasurementModel
+        structural: The structural model this measurement model operationalizes
+
+    Returns:
+        Tuple of (validated model or None, list of error messages)
+    """
+    errors = []
+
+    if not isinstance(data, dict):
+        return None, ["Input must be a dictionary"]
+
+    indicators = data.get("indicators", [])
+
+    if not isinstance(indicators, list):
+        errors.append("'indicators' must be a list")
+        indicators = []
+
+    construct_names = {c.name for c in structural.constructs}
+    construct_map = {c.name: c for c in structural.constructs}
+
+    # Validate each indicator
+    valid_indicators = []
+    indicator_names = set()
+
+    for i, indicator_data in enumerate(indicators):
+        if not isinstance(indicator_data, dict):
+            errors.append(f"indicators[{i}]: must be a dictionary")
+            continue
+
+        name = indicator_data.get("name", f"<unnamed_{i}>")
+
+        if name in indicator_names:
+            errors.append(f"Duplicate indicator name: '{name}'")
+        indicator_names.add(name)
+
+        try:
+            indicator = Indicator.model_validate(indicator_data)
+        except Exception as e:
+            error_msg = str(e)
+            if "validation error" in error_msg.lower():
+                for line in error_msg.split("\n")[1:]:
+                    line = line.strip()
+                    if line and not line.startswith("For further"):
+                        errors.append(f"indicators[{i}] ({name}): {line}")
+            else:
+                errors.append(f"indicators[{i}] ({name}): {error_msg}")
+            continue
+
+        # Check construct reference
+        if indicator.construct_name not in construct_names:
+            errors.append(
+                f"indicators[{i}] ({name}): references unknown construct '{indicator.construct_name}'"
+            )
+            continue
+
+        # Check granularity compatibility
+        construct = construct_map[indicator.construct_name]
+        if construct.temporal_status == TemporalStatus.TIME_VARYING:
+            causal_gran = construct.causal_granularity
+            meas_gran = indicator.measurement_granularity
+            if meas_gran != "finest" and causal_gran is not None:
+                meas_hours = GRANULARITY_HOURS.get(meas_gran, 0)
+                causal_hours = GRANULARITY_HOURS.get(causal_gran, 0)
+                if meas_hours > causal_hours:
+                    errors.append(
+                        f"indicators[{i}] ({name}): measurement_granularity '{meas_gran}' "
+                        f"coarser than construct '{construct.name}' causal_granularity '{causal_gran}'"
+                    )
+                    continue
+
+        valid_indicators.append(indicator)
+
+    # Check all time-varying constructs have indicators (A2)
+    measured_constructs = {i.construct_name for i in valid_indicators}
+    for construct in structural.constructs:
+        if construct.temporal_status == TemporalStatus.TIME_VARYING:
+            if construct.name not in measured_constructs:
+                errors.append(
+                    f"Time-varying construct '{construct.name}' has no indicators. "
+                    "Per A2, time-varying constructs require at least one indicator."
+                )
+
+    if not errors:
+        try:
+            model = MeasurementModel(indicators=valid_indicators)
+            return model, []
+        except Exception as e:
+            errors.append(f"Final validation failed: {e}")
+
+    return None, errors
+
+
+def validate_dsem_model(
+    structural_data: dict,
+    measurement_data: dict,
+) -> tuple[DSEMModel | None, list[str]]:
+    """Validate both structural and measurement models together.
+
+    Args:
+        structural_data: Dictionary to validate as StructuralModel
+        measurement_data: Dictionary to validate as MeasurementModel
+
+    Returns:
+        Tuple of (validated DSEMModel or None, list of error messages)
+    """
+    structural, structural_errors = validate_structural_model(structural_data)
+    if structural is None:
+        return None, ["Structural model errors:"] + structural_errors
+
+    measurement, measurement_errors = validate_measurement_model(measurement_data, structural)
+    if measurement is None:
+        return None, ["Measurement model errors:"] + measurement_errors
+
+    try:
+        model = DSEMModel(structural=structural, measurement=measurement)
+        return model, []
+    except Exception as e:
+        return None, [f"DSEMModel validation failed: {e}"]

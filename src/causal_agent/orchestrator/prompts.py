@@ -1,19 +1,33 @@
-"""Prompts for the orchestrator LLM agents."""
+"""Prompts for the orchestrator LLM agents.
 
-STRUCTURE_PROPOSER_SYSTEM = """\
-You are a causal inference expert. Given a natural language question and sample data, propose a DSEM (Dynamic Structural Equation Model) structure.
+Two-stage approach following Anderson & Gerbing (1988):
+1. Structural Model (Stage 1a) - theoretical constructs + causal edges, NO DATA
+2. Measurement Model (Stage 1b) - operationalize constructs into indicators, WITH DATA
+"""
 
-You are proposing a STRUCTURAL HYPOTHESIS, the functional specification will happen at later stage of the piepline. 
+# ══════════════════════════════════════════════════════════════════════════════
+# STAGE 1a: STRUCTURAL MODEL (theory-driven, no data)
+# ══════════════════════════════════════════════════════════════════════════════
 
-Worker LLMs will validate this against the full dataset, critique it, and fill in the data. Your job is to be rich and deep, not parsimonious or correct.
+STRUCTURAL_MODEL_SYSTEM = """\
+You are a causal inference expert. Given a research question, propose a THEORETICAL causal structure.
 
-Walk backwards from the implied outcome: What causes Y? What causes those causes? Keep asking until reasonable given the data sample.
+IMPORTANT: You will NOT see any data. Reason purely from domain knowledge and first principles.
 
-Keep in mind that DSEMs have to be acyclic within time slice. Across time cycles are fine, that's the whole point.
+Your job is to propose WHAT constructs matter causally and HOW they relate. Later, a separate step will operationalize these constructs into measurable indicators using actual data.
 
-## Variable Classification
+## Task
 
-Each variable must be classified along three orthogonal dimensions:
+Walk backwards from the implied outcome Y:
+1. What directly causes Y?
+2. What causes those causes?
+3. Keep asking until you reach exogenous factors (things we take as given)
+
+Be RICH and DEEP, not parsimonious. This is hypothesis generation - worker LLMs will later validate against data.
+
+## Construct Classification
+
+Each construct has three properties:
 
 ### 1. Role (causal status)
 | Value | Description | Edge constraints |
@@ -21,49 +35,136 @@ Each variable must be classified along three orthogonal dimensions:
 | **endogenous** | What we're modeling - has causes | Can be an effect in edges |
 | **exogenous** | Given/external - no causes modeled | Cannot be an effect (only a cause) |
 
-### Outcome Variable
-Set `is_outcome: true` for the primary outcome variable Y implied by the question. Exactly one variable should be marked as the outcome. Only endogenous variables can be outcomes.
-
-### 2. Observability
-| Value | Description | Example |
-|-------|-------------|---------|
-| **observed** | Directly measured in data | mood_rating, steps, temperature |
-| **latent** | Not directly measured, inferred | person_intercept, true_mood |
+### 2. Outcome
+Set `is_outcome: true` for the primary outcome Y implied by the question. Exactly one construct must be the outcome. Only endogenous constructs can be outcomes.
 
 ### 3. Temporal Status
-| Value | Description | causal_granularity | aggregation |
-|-------|-------------|---------------------|-------------|
-| **time_varying** | Changes within person over time | Required | Required |
-| **time_invariant** | Fixed for each person | Must be null | Must be null |
+| Value | Description | causal_granularity |
+|-------|-------------|---------------------|
+| **time_varying** | Changes within person over time | Required (hourly/daily/weekly/monthly/yearly) |
+| **time_invariant** | Fixed for each person | Must be null |
 
-**causal_granularity**: The timescale at which causal relationships make sense (hourly/daily/weekly/monthly/yearly). Required only for time-varying variables.
+**causal_granularity**: The timescale at which causal dynamics operate. Ask: "At what resolution does this construct meaningfully change and influence outcomes?"
 
-**measurement_granularity**: The resolution at which workers extract raw measurements ('finest' for one datapoint per raw entry, or hourly/daily/weekly/monthly/yearly). Required only for observed time-varying variables. This is typically finer than or equal to causal_granularity—raw measurements are later aggregated up to the causal timescale.
+## Causal Edges
 
-## Data Types (measurement_dtype)
+Edges represent causal relationships between constructs.
 
-| Type | Description | Example |
-|------|-------------|---------|
-| **binary** | Exactly two categories (0/1, yes/no) | is_weekend, took_medication |
-| **ordinal** | Ordered categories (3+ levels) | stress_level (1-5), education_level |
-| **count** | Non-negative integers | num_emails, steps, cups_of_coffee |
-| **categorical** | Unordered categories | day_of_week, activity_type |
-| **continuous** | Real-valued measurements | temperature, mood_rating, hours_slept |
-
-## Autoregressive Structure
-
-All outcomes automatically receive AR(1) at their native timescale. Do NOT include explicit self-loops.
-
-## Edge Timing
-
+### Edge Timing
 - **lagged=true** (default): cause at t-1 → effect at t
 - **lagged=false**: cause at t → effect at t (contemporaneous, same timescale only)
 
 Cross-timescale edges are always lagged. The system computes lag in hours automatically.
 
-## Aggregations
+### Constraints
+- DSEMs must be acyclic WITHIN time slice (contemporaneous edges form a DAG)
+- Cycles ACROSS time are fine - that's the point of dynamic models (use lagged=true)
+- Exogenous constructs cannot be effects
+- All endogenous time-varying constructs automatically get AR(1) - do NOT add self-loops
 
-Each time-varying variable needs an aggregation function specifying how to collapse data to its causal granularity. This aggregation is also used automatically when the variable (as a cause) connects to a coarser-grained effect.
+## Output Schema
+
+```json
+{
+  "constructs": [
+    {
+      "name": "construct_name",
+      "description": "what this theoretical construct represents",
+      "role": "endogenous" | "exogenous",
+      "is_outcome": true | false,
+      "temporal_status": "time_varying" | "time_invariant",
+      "causal_granularity": "hourly" | "daily" | "weekly" | "monthly" | "yearly" | null
+    }
+  ],
+  "edges": [
+    {
+      "cause": "cause_construct_name",
+      "effect": "effect_construct_name",
+      "description": "theoretical justification for this causal link",
+      "lagged": true | false
+    }
+  ]
+}
+```
+
+## Validation Tool
+
+You have access to `validate_structural_model` tool. Use it to validate your JSON before returning the final answer. Keep validating until you get "VALID".
+"""
+
+STRUCTURAL_MODEL_USER = """\
+Question: {question}
+
+Propose a theoretical causal structure for answering this question. Remember:
+- You will NOT see data - reason from domain knowledge only
+- Focus on WHAT constructs matter and HOW they relate causally
+- Be rich and deep - later stages will operationalize and validate
+"""
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STAGE 1b: MEASUREMENT MODEL (data-driven operationalization)
+# ══════════════════════════════════════════════════════════════════════════════
+
+MEASUREMENT_MODEL_SYSTEM = """\
+You are a measurement specialist. Given a theoretical causal structure and sample data, propose how to OPERATIONALIZE each construct into observable indicators.
+
+## Context
+
+You are given:
+1. A structural model with theoretical constructs and causal edges (from Stage 1a)
+2. Sample data from the dataset
+
+Your job is to propose INDICATORS - observable variables that measure each construct.
+
+## Reflective Measurement Model (A1)
+
+We use a REFLECTIVE measurement model: the latent construct CAUSES its indicators.
+
+```
+Latent Construct → Indicator₁
+                 → Indicator₂
+                 → Indicator₃
+```
+
+This means:
+- Multiple indicators of the same construct should be correlated
+- You can propose multiple indicators per construct (recommended for reliability)
+- Indicators reflect the underlying construct, not form it
+
+## Indicator Specification
+
+Each indicator needs:
+
+| Field | Description |
+|-------|-------------|
+| **name** | Indicator name (e.g., 'hrv', 'self_reported_stress') |
+| **construct** | Which construct this measures (must match a construct name) |
+| **how_to_measure** | Instructions for workers to extract this from data |
+| **measurement_granularity** | 'finest' or 'hourly'/'daily'/'weekly'/'monthly'/'yearly' |
+| **measurement_dtype** | 'continuous', 'binary', 'count', 'ordinal', 'categorical' |
+| **aggregation** | How to collapse to causal_granularity |
+
+### measurement_granularity
+
+The resolution at which workers extract raw measurements:
+- **finest**: One datapoint per raw data entry (use sparingly - expensive)
+- **hourly/daily/etc.**: Aggregate at this resolution during extraction
+
+Must be finer than or equal to the construct's causal_granularity.
+
+### measurement_dtype
+
+| Type | Description | Example |
+|------|-------------|---------|
+| **binary** | Exactly two categories (0/1) | took_medication, is_weekend |
+| **ordinal** | Ordered categories (3+ levels) | stress_level (1-5) |
+| **count** | Non-negative integers | num_emails, steps |
+| **categorical** | Unordered categories | activity_type |
+| **continuous** | Real-valued | temperature, mood_rating |
+
+### aggregation
+
+How to collapse measurements to the construct's causal_granularity.
 
 **Standard:** mean, sum, min, max, std, var, first, last, count
 **Distributional:** median, p10, p25, p75, p90, p99, skew, kurtosis, iqr
@@ -72,86 +173,114 @@ Each time-varying variable needs an aggregation function specifying how to colla
 
 Choose based on meaning: mean (average level), sum (cumulative), max/min (extremes), last (recent state), instability (variability).
 
+## how_to_measure Guidelines
+
+The `how_to_measure` field tells workers what to extract. Be specific:
+
+### Good Examples
+- "Extract the numeric mood rating (1-10 scale) from entries mentioning mood or feelings"
+- "Count messages sent in this time period"
+- "Binary: 1 if any exercise activity mentioned, 0 otherwise"
+
+### Red Flags
+- **Computed metrics in how_to_measure**: "Calculate the ratio of..." → Put computation in aggregation
+- **Global dependencies**: "Compare to the user's average..." → Can't access other chunks
+- **Vague instructions**: "Measure stress level" → How? What scale? What counts as stress?
+
+## Constraints
+
+1. Every **time-varying** construct MUST have at least one indicator (A2)
+2. Indicators can only reference constructs from the structural model
+3. measurement_granularity must be ≤ construct's causal_granularity
+4. You CANNOT add new causal edges - only operationalize existing constructs
+
 ## Output Schema
 
 ```json
 {
-  "dimensions": [
+  "indicators": [
     {
-      "name": "variable_name",
-      "description": "what this variable represents",
-      "role": "endogenous" | "exogenous",
-      "is_outcome": true | false,
-      "observability": "observed" | "latent",
-      "how_to_measure": "instructions that will be passed to the worker to extract this from its assigned data chunk" | null,
-      "temporal_status": "time_varying" | "time_invariant",
-      "causal_granularity": "hourly" | "daily" | "weekly" | "monthly" | "yearly" | null,
-      "measurement_granularity": "finest" | "hourly" | "daily" | "weekly" | "monthly" | "yearly" | null,
+      "name": "indicator_name",
+      "construct": "which_construct_this_measures",
+      "how_to_measure": "worker instructions for extraction",
+      "measurement_granularity": "finest" | "hourly" | "daily" | "weekly" | "monthly" | "yearly",
       "measurement_dtype": "continuous" | "binary" | "count" | "ordinal" | "categorical",
-      "aggregation": "<aggregation_name>" | null
-    }
-  ],
-  "edges": [
-    {
-      "cause": "cause_variable_name",
-      "effect": "effect_variable_name",
-      "description": "why this causal relationship exists",
-      "lagged": true | false
+      "aggregation": "<aggregation_function>"
     }
   ]
 }
 ```
 
-## Rules
-
-1. **time_varying** requires causal_granularity and aggregation; **time_invariant** must have both null
-2. **observed time_varying** also requires measurement_granularity; **latent** or **time_invariant** must have it null
-3. Only **endogenous** variables can appear as edge effects (exogenous cannot be effects)
-4. **lagged=false** only valid when cause and effect have same causal_granularity
-5. Exactly one variable must have **is_outcome=true** (the Y implied by the question)
-6. Only **endogenous** variables can be outcomes
-7. **observed** variables require how_to_measure; **latent** variables must have how_to_measure=null
-
 ## Validation Tool
 
-You have access to `validate_dsem_structure` tool. Use it to validate your JSON before returning the final answer. Keep validating until you get "VALID".
+You have access to `validate_measurement_model` tool. Use it to validate your JSON before returning the final answer. Keep validating until you get "VALID".
 """
 
-STRUCTURE_PROPOSER_USER = """\
+MEASUREMENT_MODEL_USER = """\
 Question: {question}
 
-Dataset overview:
+## Structural Model (from Stage 1a)
+
+{structural_model_json}
+
+## Dataset Overview
+
 {dataset_summary}
 
-Sample data:
+## Sample Data
+
 {chunks}
+
+---
+
+Propose indicators to operationalize each construct. Remember:
+- Every time-varying construct needs at least one indicator
+- Multiple indicators per construct improve reliability
+- Be specific in how_to_measure instructions
+- Match measurement_granularity to data resolution
 """
 
-STRUCTURE_REVIEW_REQUEST = """\
-Review your proposed structure for measurement coherence.
+# ══════════════════════════════════════════════════════════════════════════════
+# REVIEW PROMPTS (self-review after initial proposal)
+# ══════════════════════════════════════════════════════════════════════════════
 
-For each **observed** dimension, verify that measurement_granularity, measurement_dtype, aggregation, and how_to_measure are mutually consistent:
+STRUCTURAL_MODEL_REVIEW = """\
+Review your proposed structural model for theoretical coherence.
 
-## Coherence Rules
+## Check for:
 
-| aggregation | requires measurement_dtype | how_to_measure must specify |
-|-------------|---------------------------|----------------------------|
-| entropy, n_unique | categorical | the category set |
-| sum, count | binary or count | what qualifies as 1 (binary) or what unit to count |
-| mean, median, p## | ordinal or continuous | the scale/levels (ordinal) or units (continuous) |
-| max, min | any | same as above for the dtype |
-
-## Red Flags
-
-- **how_to_measure describes a computed metric** (e.g., "inverse entropy of...", "ratio of...", "intensity measured by...") → The computation belongs in aggregation. Specify what raw values workers extract.
-- **how_to_measure requiring global dependencies** (e.g., mesurements that require the whole dataset beyond the current data chunk) → Dependencies across chunks can only be modeled via aggreagation AFTER extraction. As for cross-chunk time dependencies, they are tracked by autocorrelating dimensions via the markov property (all the time-varying ones will be already autocorrelated)
-- **measurement_dtype: continuous without units or scale** → Workers will invent numbers. Anchor it.
-- **measurement_dtype: ordinal without level definitions** → Define levels explicitly.
-- **measurement_dtype + aggregation mismatch** → Check the table above.
-- **measurement_granularity=finest** → Avoid encumbering the workers with too many dimensions that need to be measured at finest grain. Aggregate to hourly where possible.
+1. **Outcome clarity**: Is exactly one construct marked as is_outcome=true?
+2. **Causal completeness**: Are there important confounders missing?
+3. **Temporal coherence**: Do causal_granularity values make sense for each construct?
+4. **Edge validity**: Are all edges theoretically justified? Are contemporaneous edges truly instantaneous?
+5. **Exogenous appropriateness**: Should any exogenous construct actually be modeled (endogenous)?
 
 ## Output
 
-Return the corrected structure as JSON. For each dimension you modified, add:
-`"_changed": "..."` (or "unchanged")
+Return the corrected structure as JSON. If no changes needed, return the same structure.
+"""
+
+MEASUREMENT_MODEL_REVIEW = """\
+Review your proposed measurement model for operationalization coherence.
+
+## Check for:
+
+1. **Coverage**: Does every time-varying construct have at least one indicator?
+2. **how_to_measure clarity**: Are instructions specific enough for workers?
+3. **dtype/aggregation consistency**:
+   - entropy, n_unique → requires categorical
+   - sum, count → typically binary or count
+   - mean, median → typically ordinal or continuous
+4. **Granularity appropriateness**: Is measurement_granularity achievable from the data?
+5. **Redundancy**: Are there indicators that are essentially duplicates?
+
+## Red Flags
+
+- how_to_measure describes computed metrics → move to aggregation
+- how_to_measure requires cross-chunk data → not possible
+- Vague instructions that workers can't follow
+
+## Output
+
+Return the corrected measurement model as JSON. If no changes needed, return the same structure.
 """
