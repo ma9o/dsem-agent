@@ -1,7 +1,7 @@
 """Pipeline stages."""
 
-from .stage1a_structural import (
-    propose_structural_model,
+from .stage1a_latent import (
+    propose_latent_model,
 )
 from .stage1b_measurement import (
     build_dsem_model,
@@ -28,7 +28,7 @@ from .stage5_inference import (
 
 __all__ = [
     # Stage 1a
-    "propose_structural_model",
+    "propose_latent_model",
     # Stage 1b
     "load_orchestrator_chunks",
     "propose_measurement_model",

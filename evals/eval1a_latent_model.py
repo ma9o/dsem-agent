@@ -1,4 +1,4 @@
-"""Inspect AI evaluation for Stage 1a: Structural Model Proposal.
+"""Inspect AI evaluation for Stage 1a: Latent Model Proposal.
 
 Tests the orchestrator's ability to propose valid theoretical causal structures
 from a research question alone, WITHOUT seeing any data.
@@ -6,8 +6,8 @@ from a research question alone, WITHOUT seeing any data.
 This evaluates domain knowledge and causal reasoning, not data operationalization.
 
 Usage:
-    inspect eval evals/eval1a_structural_model.py --model openrouter/anthropic/claude-sonnet-4
-    inspect eval evals/eval1a_structural_model.py --model openrouter/google/gemini-2.5-pro-preview
+    inspect eval evals/eval1a_latent_model.py --model openrouter/anthropic/claude-sonnet-4
+    inspect eval evals/eval1a_latent_model.py --model openrouter/google/gemini-2.5-pro-preview
 """
 
 import sys
@@ -25,13 +25,13 @@ from inspect_ai.scorer import Score, Target, mean, scorer, stderr
 from inspect_ai.solver import TaskState, system_message
 
 from causal_agent.orchestrator.prompts import (
-    STRUCTURAL_MODEL_SYSTEM,
-    STRUCTURAL_MODEL_USER,
-    STRUCTURAL_MODEL_REVIEW,
+    LATENT_MODEL_SYSTEM,
+    LATENT_MODEL_USER,
+    LATENT_MODEL_REVIEW,
 )
 from causal_agent.orchestrator.scoring import _count_rule_points_detailed
-from causal_agent.orchestrator.schemas import StructuralModel
-from causal_agent.utils.llm import validate_structural_model_tool
+from causal_agent.orchestrator.schemas import LatentModel
+from causal_agent.utils.llm import validate_latent_model_tool
 
 from evals.common import (
     extract_json_from_response,
@@ -76,7 +76,7 @@ def create_eval_dataset() -> MemoryDataset:
     samples = []
     for q in questions:
         # Build the user prompt - question only, no data
-        user_prompt = STRUCTURAL_MODEL_USER.format(question=q.question)
+        user_prompt = LATENT_MODEL_USER.format(question=q.question)
 
         samples.append(
             Sample(
@@ -92,8 +92,8 @@ def create_eval_dataset() -> MemoryDataset:
 
 
 @scorer(metrics=[mean(), stderr()])
-def structural_model_scorer():
-    """Score structural model proposals using cumulative points.
+def latent_model_scorer():
+    """Score latent model proposals using cumulative points.
 
     Returns numeric score:
         - 0.0 if structure is invalid (with detailed error explanation)
@@ -130,7 +130,7 @@ def structural_model_scorer():
 
         # Validate against schema
         try:
-            structure = StructuralModel(**data)
+            structure = LatentModel(**data)
         except Exception as e:
             return Score(
                 value=0.0,
@@ -157,12 +157,12 @@ def structural_model_scorer():
 
 
 @task
-def structural_model_eval():
-    """Evaluate LLM ability to propose theoretical causal structures.
+def latent_model_eval():
+    """Evaluate LLM ability to propose theoretical causal structures (latent models).
 
     Stage 1a evaluation:
     - Input: Research question only (NO data)
-    - Output: StructuralModel (constructs + causal edges)
+    - Output: LatentModel (constructs + causal edges)
 
     Uses the production two-stage pipeline:
     1. Initial proposal from question
@@ -171,11 +171,11 @@ def structural_model_eval():
     return Task(
         dataset=create_eval_dataset(),
         solver=[
-            system_message(STRUCTURAL_MODEL_SYSTEM),
+            system_message(LATENT_MODEL_SYSTEM),
             tool_assisted_generate(
-                tools=[validate_structural_model_tool()],
-                follow_ups=[STRUCTURAL_MODEL_REVIEW],
+                tools=[validate_latent_model_tool()],
+                follow_ups=[LATENT_MODEL_REVIEW],
             ),
         ],
-        scorer=structural_model_scorer(),
+        scorer=latent_model_scorer(),
     )

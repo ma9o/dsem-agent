@@ -4,7 +4,7 @@ The orchestrator proposes indicators to operationalize the theoretical
 constructs from Stage 1a, using sample data to inform operationalization.
 
 This follows the Anderson & Gerbing (1988) two-step approach where the
-measurement model is specified after the structural model.
+measurement model is specified after the latent model.
 """
 
 from pathlib import Path
@@ -31,7 +31,7 @@ def load_orchestrator_chunks(input_path: Path) -> list[str]:
 @task(retries=2, retry_delay_seconds=30, cache_policy=INPUTS)
 def propose_measurement_model(
     question: str,
-    structural_model: dict,
+    latent_model: dict,
     data_sample: list[str],
     dataset_summary: str = "",
 ) -> dict:
@@ -41,25 +41,25 @@ def propose_measurement_model(
 
     Args:
         question: The causal research question
-        structural_model: The structural model dict from Stage 1a
+        latent_model: The latent model dict from Stage 1a
         data_sample: Sample chunks from the dataset
         dataset_summary: Brief overview of the full dataset
 
     Returns:
         MeasurementModel as a dictionary with 'indicators'
     """
-    return propose_measurement_model_agent(question, structural_model, data_sample, dataset_summary)
+    return propose_measurement_model_agent(question, latent_model, data_sample, dataset_summary)
 
 
 @task(cache_policy=INPUTS)
-def build_dsem_model(structural_model: dict, measurement_model: dict) -> dict:
-    """Combine structural and measurement models into full DSEMModel.
+def build_dsem_model(latent_model: dict, measurement_model: dict) -> dict:
+    """Combine latent and measurement models into full DSEMModel.
 
     Args:
-        structural_model: The structural model dict from Stage 1a
+        latent_model: The latent model dict from Stage 1a
         measurement_model: The measurement model dict from Stage 1b
 
     Returns:
-        DSEMModel as a dictionary with 'structural' and 'measurement'
+        DSEMModel as a dictionary with 'latent' and 'measurement'
     """
-    return build_dsem_model_agent(structural_model, measurement_model)
+    return build_dsem_model_agent(latent_model, measurement_model)

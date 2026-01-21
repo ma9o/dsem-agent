@@ -134,14 +134,14 @@ def extract_json_from_response(text: str) -> str | None:
     return None
 
 
-def load_structural_model_by_question_id(question_id: int) -> dict:
-    """Load a reference structural model by question ID.
+def load_latent_model_by_question_id(question_id: int) -> dict:
+    """Load a reference latent model by question ID.
 
     Args:
-        question_id: The question ID (1-5) matching the structural model
+        question_id: The question ID (1-5) matching the latent model
 
     Returns:
-        The structural model dict (constructs + edges)
+        The latent model dict (constructs + edges)
     """
     config = load_eval_config()
     questions = config["questions"]
@@ -149,19 +149,19 @@ def load_structural_model_by_question_id(question_id: int) -> dict:
     if question is None:
         raise ValueError(f"Question ID {question_id} not found in config")
 
-    structural_path = DATA_DIR / question.get("structural", f"eval/structural_model{question_id}.json")
-    with open(structural_path) as f:
+    latent_path = DATA_DIR / question.get("latent", f"eval/latent_model{question_id}.json")
+    with open(latent_path) as f:
         return json.load(f)
 
 
 def load_dsem_model_by_question_id(question_id: int) -> dict:
-    """Load a complete DSEMModel (structural + measurement) by question ID.
+    """Load a complete DSEMModel (latent + measurement) by question ID.
 
     Args:
         question_id: The question ID (1-5)
 
     Returns:
-        The DSEMModel dict with 'structural' and 'measurement' keys
+        The DSEMModel dict with 'latent' and 'measurement' keys
     """
     config = load_eval_config()
     questions = config["questions"]

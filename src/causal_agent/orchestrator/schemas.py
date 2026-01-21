@@ -1,7 +1,7 @@
 """DSEM domain schemas following Anderson & Gerbing two-step approach.
 
 Separates:
-1. StructuralModel - theoretical constructs + causal edges (theory-driven)
+1. LatentModel - theoretical constructs + causal edges (theory-driven)
 2. MeasurementModel - observed indicators that reflect constructs (data-driven)
 """
 
@@ -37,7 +37,7 @@ GRANULARITY_HOURS = {
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# STRUCTURAL MODEL (theoretical - what exists and how it relates)
+# LATENT MODEL (theoretical - what exists and how it relates)
 # ══════════════════════════════════════════════════════════════════════════════
 
 
@@ -112,19 +112,19 @@ class CausalEdge(BaseModel):
     )
 
 
-class StructuralModel(BaseModel):
-    """Theoretical causal structure over constructs.
+class LatentModel(BaseModel):
+    """Theoretical causal structure over constructs (the latent model).
 
     This is the output of Stage 1a - proposed based on domain knowledge alone,
-    without seeing data.
+    without seeing data. Defines the topological structure among latent constructs.
     """
 
     constructs: list[Construct] = Field(description="Theoretical constructs in the model")
     edges: list[CausalEdge] = Field(description="Causal edges between constructs")
 
     @model_validator(mode="after")
-    def validate_structural_model(self):
-        """Validate structural model constraints."""
+    def validate_latent_model(self):
+        """Validate latent model constraints."""
         # Exactly one outcome required
         outcomes = [c for c in self.constructs if c.is_outcome]
         if len(outcomes) == 0:
@@ -260,9 +260,9 @@ class MeasurementModel(BaseModel):
     """Operationalization of constructs into observed indicators.
 
     This is the output of Stage 1b - proposed after seeing data sample,
-    given the structural model from Stage 1a.
+    given the latent model from Stage 1a.
 
-    Each construct from the structural model must have at least one indicator.
+    Each construct from the latent model must have at least one indicator.
     """
 
     indicators: list[Indicator] = Field(
@@ -275,7 +275,7 @@ class MeasurementModel(BaseModel):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# FULL DSEM MODEL (composition of structural + measurement)
+# FULL DSEM MODEL (composition of latent + measurement)
 # ══════════════════════════════════════════════════════════════════════════════
 
 
@@ -305,18 +305,18 @@ def compute_lag_hours(
 
 
 class DSEMModel(BaseModel):
-    """Complete DSEM specification combining structural and measurement models.
+    """Complete DSEM specification combining latent and measurement models.
 
-    This is the full model after both Stage 1a (structural) and Stage 1b (measurement).
+    This is the full model after both Stage 1a (latent) and Stage 1b (measurement).
     """
 
-    structural: StructuralModel = Field(description="Theoretical causal structure")
+    latent: LatentModel = Field(description="Theoretical causal structure (topological)")
     measurement: MeasurementModel = Field(description="Operationalization into indicators")
 
     @model_validator(mode="after")
     def validate_dsem_model(self):
         """Validate that measurement model covers all constructs."""
-        construct_names = {c.name for c in self.structural.constructs}
+        construct_names = {c.name for c in self.latent.constructs}
         measured_constructs = {i.construct_name for i in self.measurement.indicators}
 
         # Check all indicator references are valid
@@ -327,7 +327,7 @@ class DSEMModel(BaseModel):
                 )
 
             # Validate measurement_granularity vs causal_granularity
-            construct = next(c for c in self.structural.constructs if c.name == indicator.construct_name)
+            construct = next(c for c in self.latent.constructs if c.name == indicator.construct_name)
             if construct.temporal_status == TemporalStatus.TIME_VARYING:
                 causal_gran = construct.causal_granularity
                 meas_gran = indicator.measurement_granularity
@@ -342,11 +342,12 @@ class DSEMModel(BaseModel):
                         )
 
         # TODO: A2 validation commented out. Whether a latent construct without indicators
-        # is problematic depends on DAG structure (e.g., is it a confounder on a backdoor path?).
+        # is problematic depends on the topological structure (e.g., is it a confounder on
+        # a backdoor path?).
         # This should be checked by DoWhy in Stage 3 using Pearl's identification rules,
         # not enforced here unconditionally.
         #
-        # for construct in self.structural.constructs:
+        # for construct in self.latent.constructs:
         #     if construct.temporal_status == TemporalStatus.TIME_VARYING:
         #         if construct.name not in measured_constructs:
         #             raise ValueError(
@@ -358,7 +359,7 @@ class DSEMModel(BaseModel):
 
     def get_edge_lag_hours(self, edge: CausalEdge) -> int:
         """Compute lag in hours for a causal edge."""
-        construct_map = {c.name: c for c in self.structural.constructs}
+        construct_map = {c.name: c for c in self.latent.constructs}
         cause = construct_map[edge.cause]
         effect = construct_map[edge.effect]
         return compute_lag_hours(
@@ -374,7 +375,7 @@ class DSEMModel(BaseModel):
         G = nx.DiGraph()
 
         # Add construct nodes
-        for construct in self.structural.constructs:
+        for construct in self.latent.constructs:
             G.add_node(construct.name, node_type="construct", **construct.model_dump())
 
         # Add indicator nodes
@@ -384,7 +385,7 @@ class DSEMModel(BaseModel):
             G.add_edge(indicator.construct_name, indicator.name, edge_type="loading")
 
         # Add causal edges with computed lag_hours
-        for edge in self.structural.edges:
+        for edge in self.latent.edges:
             G.add_edge(
                 edge.cause,
                 edge.effect,
@@ -402,11 +403,11 @@ class DSEMModel(BaseModel):
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def validate_structural_model(data: dict) -> tuple[StructuralModel | None, list[str]]:
-    """Validate a structural model dict, collecting ALL errors.
+def validate_latent_model(data: dict) -> tuple[LatentModel | None, list[str]]:
+    """Validate a latent model dict, collecting ALL errors.
 
     Args:
-        data: Dictionary to validate as StructuralModel
+        data: Dictionary to validate as LatentModel
 
     Returns:
         Tuple of (validated model or None, list of error messages)
@@ -523,7 +524,7 @@ def validate_structural_model(data: dict) -> tuple[StructuralModel | None, list[
 
     if not errors:
         try:
-            model = StructuralModel(constructs=valid_constructs, edges=valid_edges)
+            model = LatentModel(constructs=valid_constructs, edges=valid_edges)
             return model, []
         except Exception as e:
             errors.append(f"Final validation failed: {e}")
@@ -533,13 +534,13 @@ def validate_structural_model(data: dict) -> tuple[StructuralModel | None, list[
 
 def validate_measurement_model(
     data: dict,
-    structural: StructuralModel,
+    latent: LatentModel,
 ) -> tuple[MeasurementModel | None, list[str]]:
-    """Validate a measurement model dict against a structural model.
+    """Validate a measurement model dict against a latent model.
 
     Args:
         data: Dictionary to validate as MeasurementModel
-        structural: The structural model this measurement model operationalizes
+        latent: The latent model this measurement model operationalizes
 
     Returns:
         Tuple of (validated model or None, list of error messages)
@@ -555,8 +556,8 @@ def validate_measurement_model(
         errors.append("'indicators' must be a list")
         indicators = []
 
-    construct_names = {c.name for c in structural.constructs}
-    construct_map = {c.name: c for c in structural.constructs}
+    construct_names = {c.name for c in latent.constructs}
+    construct_map = {c.name: c for c in latent.constructs}
 
     # Validate each indicator
     valid_indicators = []
@@ -611,12 +612,12 @@ def validate_measurement_model(
         valid_indicators.append(indicator)
 
     # TODO: A2 validation commented out. Whether a latent construct without indicators
-    # is problematic depends on DAG structure (e.g., is it a confounder on a backdoor path?).
-    # This should be checked by DoWhy in Stage 3 using Pearl's identification rules,
-    # not enforced here unconditionally.
+    # is problematic depends on the topological structure (e.g., is it a confounder on
+    # a backdoor path?). This should be checked by DoWhy in Stage 3 using Pearl's
+    # identification rules, not enforced here unconditionally.
     #
     # measured_constructs = {i.construct_name for i in valid_indicators}
-    # for construct in structural.constructs:
+    # for construct in latent.constructs:
     #     if construct.temporal_status == TemporalStatus.TIME_VARYING:
     #         if construct.name not in measured_constructs:
     #             errors.append(
@@ -635,28 +636,28 @@ def validate_measurement_model(
 
 
 def validate_dsem_model(
-    structural_data: dict,
+    latent_data: dict,
     measurement_data: dict,
 ) -> tuple[DSEMModel | None, list[str]]:
-    """Validate both structural and measurement models together.
+    """Validate both latent and measurement models together.
 
     Args:
-        structural_data: Dictionary to validate as StructuralModel
+        latent_data: Dictionary to validate as LatentModel
         measurement_data: Dictionary to validate as MeasurementModel
 
     Returns:
         Tuple of (validated DSEMModel or None, list of error messages)
     """
-    structural, structural_errors = validate_structural_model(structural_data)
-    if structural is None:
-        return None, ["Structural model errors:"] + structural_errors
+    latent, latent_errors = validate_latent_model(latent_data)
+    if latent is None:
+        return None, ["Latent model errors:"] + latent_errors
 
-    measurement, measurement_errors = validate_measurement_model(measurement_data, structural)
+    measurement, measurement_errors = validate_measurement_model(measurement_data, latent)
     if measurement is None:
         return None, ["Measurement model errors:"] + measurement_errors
 
     try:
-        model = DSEMModel(structural=structural, measurement=measurement)
+        model = DSEMModel(latent=latent, measurement=measurement)
         return model, []
     except Exception as e:
         return None, [f"DSEMModel validation failed: {e}"]

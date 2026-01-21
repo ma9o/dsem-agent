@@ -1,5 +1,5 @@
 {
-  "structural": {
+  "latent": {
     "constructs": [
       {
         "name": "compulsive_context_switching",

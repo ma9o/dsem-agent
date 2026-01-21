@@ -4,7 +4,7 @@ Tests the orchestrator's ability to operationalize theoretical constructs
 into measurable indicators given sample data.
 
 This evaluates data understanding and operationalization skills.
-Requires reference structural models from Stage 1a.
+Requires reference latent models from Stage 1a.
 
 Usage:
     inspect eval evals/eval1b_measurement_model.py --model openrouter/anthropic/claude-sonnet-4
@@ -31,7 +31,7 @@ from causal_agent.orchestrator.prompts import (
     MEASUREMENT_MODEL_USER,
     MEASUREMENT_MODEL_REVIEW,
 )
-from causal_agent.orchestrator.schemas import MeasurementModel, StructuralModel
+from causal_agent.orchestrator.schemas import MeasurementModel, LatentModel
 from causal_agent.utils.llm import make_validate_measurement_model_tool
 
 from causal_agent.utils.llm import get_generate_config, multi_turn_generate
@@ -42,7 +42,7 @@ from evals.common import (
     get_eval_questions,
     get_sample_chunks_orchestrator,
     load_eval_config,
-    load_structural_model_by_question_id,
+    load_latent_model_by_question_id,
 )
 
 # Load config for models
@@ -73,7 +73,7 @@ def create_eval_dataset(
     seed: int = 42,
     input_file: str | None = None,
 ) -> MemoryDataset:
-    """Create evaluation dataset by combining questions with structural models and data.
+    """Create evaluation dataset by combining questions with latent models and data.
 
     Args:
         n_chunks: Number of chunks to sample per question
@@ -91,14 +91,14 @@ def create_eval_dataset(
 
     samples = []
     for q in questions:
-        # Load reference structural model for this question
-        structural_model = load_structural_model_by_question_id(q.id)
-        structural_json = json.dumps(structural_model, indent=2)
+        # Load reference latent model for this question
+        latent_model = load_latent_model_by_question_id(q.id)
+        latent_json = json.dumps(latent_model, indent=2)
 
         # Build the user prompt
         user_prompt = MEASUREMENT_MODEL_USER.format(
             question=q.question,
-            structural_model_json=structural_json,
+            latent_model_json=latent_json,
             dataset_summary="Personal activity data export",
             chunks=formatted_chunks,
         )
@@ -109,7 +109,7 @@ def create_eval_dataset(
                 id=f"q{q.id}",
                 metadata={
                     "question": q.question,
-                    "structural_model": structural_model,
+                    "latent_model": latent_model,
                     "n_chunks": n_chunks,
                     "seed": seed,
                 },
@@ -121,9 +121,9 @@ def create_eval_dataset(
 
 def _score_measurement_model(
     measurement: MeasurementModel,
-    structural: StructuralModel,
+    latent: LatentModel,
 ) -> dict:
-    """Score a measurement model against its structural model.
+    """Score a measurement model against its latent model.
 
     Scoring rules:
     - +2 per valid indicator (references known construct)
@@ -138,7 +138,7 @@ def _score_measurement_model(
     indicator_points = {}
     total = 0.0
 
-    construct_names = {c.name for c in structural.constructs}
+    construct_names = {c.name for c in latent.constructs}
     indicators_per_construct: dict[str, int] = {}
 
     for indicator in measurement.indicators:
@@ -215,16 +215,16 @@ def measurement_model_scorer():
 
     async def score(state: TaskState, target: Target) -> Score:
         completion = state.output.completion
-        structural_data = state.metadata.get("structural_model", {})
+        latent_data = state.metadata.get("latent_model", {})
 
-        # Parse structural model from metadata
+        # Parse latent model from metadata
         try:
-            structural = StructuralModel(**structural_data)
+            latent = LatentModel(**latent_data)
         except Exception as e:
             return Score(
                 value=0.0,
-                answer="[Invalid structural model in metadata]",
-                explanation=f"ERROR: Could not parse structural model - {e}",
+                answer="[Invalid latent model in metadata]",
+                explanation=f"ERROR: Could not parse latent model - {e}",
             )
 
         # Extract JSON from response
@@ -260,7 +260,7 @@ def measurement_model_scorer():
             )
 
         # Score the measurement model
-        scoring = _score_measurement_model(measurement, structural)
+        scoring = _score_measurement_model(measurement, latent)
 
         return Score(
             value=scoring["total"],
@@ -279,7 +279,7 @@ def measurement_model_scorer():
 def measurement_model_solver():
     """Custom solver that creates the validation tool dynamically per-sample.
 
-    This is needed because each sample has a different structural model,
+    This is needed because each sample has a different latent model,
     and the validation tool must check against the correct one.
     """
 
@@ -289,12 +289,12 @@ def measurement_model_solver():
             model = get_model()
             config = get_generate_config()
 
-            # Get the structural model from this sample's metadata
-            structural_data = state.metadata.get("structural_model", {})
-            structural = StructuralModel(**structural_data)
+            # Get the latent model from this sample's metadata
+            latent_data = state.metadata.get("latent_model", {})
+            latent = LatentModel(**latent_data)
 
-            # Create validation tool bound to this sample's structural model
-            tool = make_validate_measurement_model_tool(structural)
+            # Create validation tool bound to this sample's latent model
+            tool = make_validate_measurement_model_tool(latent)
 
             # Run multi-turn generation with tools
             completion = await multi_turn_generate(
@@ -322,11 +322,11 @@ def measurement_model_eval(
     """Evaluate LLM ability to operationalize constructs into indicators.
 
     Stage 1b evaluation:
-    - Input: Question + reference structural model + data sample
+    - Input: Question + reference latent model + data sample
     - Output: MeasurementModel (indicators)
 
     Uses the production two-stage pipeline:
-    1. Initial proposal from structural model + data
+    1. Initial proposal from latent model + data
     2. Self-review focusing on operationalization coherence
 
     Args:

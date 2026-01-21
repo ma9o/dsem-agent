@@ -13,7 +13,7 @@ from inspect_ai.tool import Tool, tool
 
 if TYPE_CHECKING:
     from inspect_ai.model import ChatMessage
-    from causal_agent.orchestrator.schemas import StructuralModel
+    from causal_agent.orchestrator.schemas import LatentModel
 
 
 def get_generate_config() -> GenerateConfig:
@@ -48,27 +48,27 @@ def parse_json_response(content: str) -> dict:
 
 
 @tool
-def validate_structural_model_tool():
-    """Tool for validating structural model JSON (Stage 1a)."""
+def validate_latent_model_tool():
+    """Tool for validating latent model JSON (Stage 1a)."""
 
     async def execute(structure_json: str) -> str:
         """
-        Validate a structural model and return all validation errors.
+        Validate a latent model and return all validation errors.
 
         Args:
-            structure_json: The JSON string containing the structural model to validate.
+            structure_json: The JSON string containing the latent model to validate.
 
         Returns:
             "VALID" if the structure passes validation, otherwise a list of all errors found.
         """
-        from causal_agent.orchestrator.schemas import validate_structural_model
+        from causal_agent.orchestrator.schemas import validate_latent_model
 
         try:
             data = json.loads(structure_json)
         except json.JSONDecodeError as e:
             return f"JSON parse error: {e}"
 
-        structure, errors = validate_structural_model(data)
+        structure, errors = validate_latent_model(data)
 
         if not errors:
             return "VALID"
@@ -78,11 +78,11 @@ def validate_structural_model_tool():
     return execute
 
 
-def make_validate_measurement_model_tool(structural_model: "StructuralModel") -> Tool:
-    """Create a validation tool for measurement model, bound to a structural model.
+def make_validate_measurement_model_tool(latent_model: "LatentModel") -> Tool:
+    """Create a validation tool for measurement model, bound to a latent model.
 
     Args:
-        structural_model: The structural model to validate against
+        latent_model: The latent model to validate against
 
     Returns:
         A tool function that validates measurement model JSON
@@ -109,7 +109,7 @@ def make_validate_measurement_model_tool(structural_model: "StructuralModel") ->
             except json.JSONDecodeError as e:
                 return f"JSON parse error: {e}"
 
-            model, errors = validate_measurement_model(data, structural_model)
+            model, errors = validate_measurement_model(data, latent_model)
 
             if not errors:
                 return "VALID"

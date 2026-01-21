@@ -55,7 +55,7 @@ not causal identification from DAG structure.
 - **Not supported:** Latent "true_mood" (time-varying) with no indicators, identified only via temporal dynamics
 
 **Implications:**
-- Every latent construct in the structural model must be operationalized into observables
+- Every latent construct in the latent model must be operationalized into observables
 - Identification comes from the measurement model (factor loadings), not from dynamics alone
 - We avoid the process-vs-measurement variance disentanglement problem inherent in state-space models
 
@@ -133,7 +133,7 @@ X_observed = X_true + ε  (where ε is absorbed into model residual)
 
 # A7. Measurement Model Identification Enables Causal Identification
 
-**Assumption:** Once the measurement model is identified (via CFA), latent constructs can be treated as effectively observed for the purpose of causal identification via the structural model.
+**Assumption:** Once the measurement model is identified (via CFA), latent constructs can be treated as effectively observed for the purpose of causal identification via the latent model (topological structure).
 
 ---
 
@@ -141,7 +141,7 @@ X_observed = X_true + ε  (where ε is absorbed into model residual)
 
 The framework implements a two-stage workflow grounded in the structural equation modeling (SEM) tradition, following the approach established by **Anderson & Gerbing (1988)**:
 
-1. **Stage 1a (Latent Causal Structure):** The orchestrator LLM proposes a theoretical causal DAG over latent constructs based on domain knowledge alone—no data. This separates theoretical reasoning from operationalization.
+1. **Stage 1a (Latent Model):** The orchestrator LLM proposes a theoretical causal DAG (topological structure) over latent constructs based on domain knowledge alone—no data. This separates theoretical reasoning from operationalization.
 
 2. **Stage 1b (Measurement Model):** Given data, the orchestrator proposes observed indicators for constructs that can be operationalized from the data. Indicators follow the reflective measurement model (A1). Constructs without indicators remain latent; DoWhy checks in Stage 3 whether this blocks causal identification.
 
@@ -149,7 +149,7 @@ The framework implements a two-stage workflow grounded in the structural equatio
 
 4. **Stage 3 (Causal Identification):** DoWhy checks identification of target causal effects on the latent DAG, treating latents with validated measurement models as effectively observed.
 
-This two-step approach—measurement model first, structural model second—is the standard methodology in SEM research. As Anderson & Gerbing (1988) argue, validating the measurement model is a necessary prerequisite to interpreting structural relationships:
+This two-step approach—measurement model first, latent model second—is the standard methodology in SEM research. As Anderson & Gerbing (1988) argue, validating the measurement model is a necessary prerequisite to interpreting latent relationships:
 
 > "We present a comprehensive, two-step modeling approach that employs a series of nested models and sequential chi-square difference tests. We discuss the comparative advantages of this approach over a one-step approach."
 
@@ -185,7 +185,7 @@ This paper has been cited over 37,000 times and remains the methodological stand
 
 > "SEM is an inference engine that takes in two inputs, qualitative causal assumptions and empirical data, and derives two logical consequences of these inputs: quantitative causal conclusions and statistical measures of fit for the testable implications of the assumptions."
 
-The measurement model provides the mapping from observables to latents; the structural model encodes causal assumptions among latents.
+The measurement model provides the mapping from observables to latents; the latent model encodes causal assumptions (topological structure) among latents.
 
 **Kuroki & Pearl (2014)** show that causal effects can be recovered from proxy variables of unmeasured confounders under specific graphical conditions. This establishes that indicators of latent variables can serve the same role as proxies in causal identification.
 
@@ -210,7 +210,7 @@ As noted in **"Demystifying Proximal Causal Inference" (2024)**:
 
 The following are explicitly NOT assumed and may be added in future versions:
 
-- **Non-linear relationships:** Currently all structural effects are linear in parameters
+- **Non-linear relationships:** Currently all functional effects are linear in parameters
 - **Non-Gaussian distributions:** Currently residuals are assumed Gaussian
 - **Time-varying parameters:** Currently all causal coefficients are time-invariant
 - **Random slopes:** Currently only random intercepts, not person-specific effect sizes

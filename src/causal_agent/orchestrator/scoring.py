@@ -1,4 +1,4 @@
-"""Scoring function for DSEM structure proposals.
+"""Scoring function for DSEM latent model proposals.
 
 Scoring strategy:
 - Award points for each INSTANCE of a hard rule being respected
@@ -14,13 +14,13 @@ from pydantic import ValidationError
 
 from causal_agent.orchestrator.schemas import (
     GRANULARITY_HOURS,
-    StructuralModel,
+    LatentModel,
     TemporalStatus,
 )
 
 
-def score_structural_model(example, pred, trace=None) -> float:
-    """Score a structural model proposal.
+def score_latent_model(example, pred, trace=None) -> float:
+    """Score a latent model proposal.
 
     Compatible with DSPy metric interface but can be used standalone.
 
@@ -45,7 +45,7 @@ def score_structural_model(example, pred, trace=None) -> float:
 
     # Validate against schema (returns 0 if any hard rule violated)
     try:
-        structure = StructuralModel(**data)
+        structure = LatentModel(**data)
     except (ValidationError, ValueError, TypeError):
         return 0.0
 
@@ -53,7 +53,7 @@ def score_structural_model(example, pred, trace=None) -> float:
     return _count_rule_points(structure)
 
 
-def _count_rule_points_detailed(structure: StructuralModel) -> dict:
+def _count_rule_points_detailed(structure: LatentModel) -> dict:
     """Count points with detailed breakdown per category.
 
     Returns dict with:
@@ -159,7 +159,7 @@ def _count_rule_points_detailed(structure: StructuralModel) -> dict:
     }
 
 
-def _count_rule_points(structure: StructuralModel) -> float:
+def _count_rule_points(structure: LatentModel) -> float:
     """Count points for each rule instance correctly applied.
 
     Points per construct:
@@ -235,13 +235,13 @@ def _count_rule_points(structure: StructuralModel) -> float:
     return points
 
 
-def score_structural_model_normalized(example, pred, trace=None) -> float:
-    """Normalized version of score_structural_model (0-1 range).
+def score_latent_model_normalized(example, pred, trace=None) -> float:
+    """Normalized version of score_latent_model (0-1 range).
 
     Useful when comparing across very different structure complexities.
     Divides by theoretical maximum for the given structure size.
     """
-    raw_score = score_structural_model(example, pred, trace)
+    raw_score = score_latent_model(example, pred, trace)
     if raw_score == 0:
         return 0.0
 

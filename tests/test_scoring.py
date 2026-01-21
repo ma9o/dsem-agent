@@ -1,4 +1,4 @@
-"""Tests for structural model scoring function."""
+"""Tests for latent model scoring function."""
 
 import json
 from dataclasses import dataclass
@@ -7,14 +7,14 @@ import pytest
 
 from causal_agent.orchestrator.scoring import (
     _count_rule_points,
-    score_structural_model,
-    score_structural_model_normalized,
+    score_latent_model,
+    score_latent_model_normalized,
 )
 from causal_agent.orchestrator.schemas import (
     CausalEdge,
     Construct,
     Role,
-    StructuralModel,
+    LatentModel,
     TemporalStatus,
 )
 
@@ -26,13 +26,13 @@ class MockPrediction:
     structure: str
 
 
-class TestScoreStructuralModel:
+class TestScoreLatentModel:
     """Tests for the main scoring function."""
 
     def test_invalid_json_returns_zero(self):
         """Invalid JSON should return 0."""
         pred = MockPrediction(structure="not valid json")
-        assert score_structural_model(None, pred) == 0.0
+        assert score_latent_model(None, pred) == 0.0
 
     def test_missing_structure_field_returns_zero(self):
         """Missing structure field should return 0."""
@@ -40,13 +40,13 @@ class TestScoreStructuralModel:
         class BadPred:
             pass
 
-        assert score_structural_model(None, BadPred()) == 0.0
+        assert score_latent_model(None, BadPred()) == 0.0
 
     def test_schema_validation_failure_returns_zero(self):
         """Schema validation failure should return 0."""
         # Missing outcome
         pred = MockPrediction(structure='{"constructs": [], "edges": []}')
-        assert score_structural_model(None, pred) == 0.0
+        assert score_latent_model(None, pred) == 0.0
 
         # Invalid: time_varying without causal_granularity
         invalid = {
@@ -63,7 +63,7 @@ class TestScoreStructuralModel:
             "edges": [],
         }
         pred = MockPrediction(structure=json.dumps(invalid))
-        assert score_structural_model(None, pred) == 0.0
+        assert score_latent_model(None, pred) == 0.0
 
     def test_invalid_edge_returns_zero(self):
         """Edge referencing non-existent construct should return 0."""
@@ -81,7 +81,7 @@ class TestScoreStructuralModel:
             "edges": [{"cause": "nonexistent", "effect": "mood", "description": "Test"}],
         }
         pred = MockPrediction(structure=json.dumps(invalid))
-        assert score_structural_model(None, pred) == 0.0
+        assert score_latent_model(None, pred) == 0.0
 
     def test_valid_simple_structure_scores_positive(self):
         """Valid simple structure should score > 0."""
@@ -106,7 +106,7 @@ class TestScoreStructuralModel:
             "edges": [{"cause": "stress", "effect": "mood", "description": "Stress affects mood", "lagged": False}],
         }
         pred = MockPrediction(structure=json.dumps(valid))
-        score = score_structural_model(None, pred)
+        score = score_latent_model(None, pred)
         assert score > 0
 
     def test_complex_structure_scores_higher(self):
@@ -170,8 +170,8 @@ class TestScoreStructuralModel:
             ],
         }
 
-        simple_score = score_structural_model(None, MockPrediction(json.dumps(simple)))
-        complex_score = score_structural_model(None, MockPrediction(json.dumps(complex_struct)))
+        simple_score = score_latent_model(None, MockPrediction(json.dumps(simple)))
+        complex_score = score_latent_model(None, MockPrediction(json.dumps(complex_struct)))
 
         assert complex_score > simple_score
 
@@ -192,8 +192,8 @@ class TestCountRulePoints:
         )
 
     def _make_structure(self, constructs, edges):
-        """Helper to create StructuralModel."""
-        return StructuralModel(constructs=constructs, edges=edges)
+        """Helper to create LatentModel."""
+        return LatentModel(constructs=constructs, edges=edges)
 
     def test_endogenous_time_varying_construct_points(self):
         """Endogenous time-varying construct with all correct fields scores points."""
@@ -252,7 +252,7 @@ class TestNormalizedScoring:
     def test_invalid_returns_zero(self):
         """Invalid structure returns 0."""
         pred = MockPrediction(structure="invalid")
-        assert score_structural_model_normalized(None, pred) == 0.0
+        assert score_latent_model_normalized(None, pred) == 0.0
 
     def test_valid_returns_between_zero_and_one(self):
         """Valid structure returns score in [0, 1]."""
@@ -277,7 +277,7 @@ class TestNormalizedScoring:
             "edges": [{"cause": "X", "effect": "Y", "description": "X causes Y"}],
         }
         pred = MockPrediction(structure=json.dumps(valid))
-        score = score_structural_model_normalized(None, pred)
+        score = score_latent_model_normalized(None, pred)
         assert 0 < score <= 1.0
 
 
@@ -307,7 +307,7 @@ class TestExogenousEffectViolation:
             "edges": [{"cause": "mood", "effect": "weather", "description": "Invalid"}],  # Invalid: exogenous effect
         }
         pred = MockPrediction(structure=json.dumps(invalid))
-        assert score_structural_model(None, pred) == 0.0
+        assert score_latent_model(None, pred) == 0.0
 
 
 class TestCrossScaleEdges:
@@ -338,7 +338,7 @@ class TestCrossScaleEdges:
             ],
         }
         pred = MockPrediction(structure=json.dumps(valid))
-        assert score_structural_model(None, pred) > 0.0
+        assert score_latent_model(None, pred) > 0.0
 
     def test_coarser_to_finer_valid(self):
         """Coarser->finer edge is valid."""
@@ -365,4 +365,4 @@ class TestCrossScaleEdges:
             ],
         }
         pred = MockPrediction(structure=json.dumps(valid))
-        assert score_structural_model(None, pred) > 0.0
+        assert score_latent_model(None, pred) > 0.0

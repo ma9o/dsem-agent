@@ -9,9 +9,9 @@ def test_import_pipeline():
 
 
 def test_import_orchestrator():
-    from causal_agent.orchestrator.agents import propose_structural_model, propose_measurement_model
-    from causal_agent.orchestrator.schemas import StructuralModel, MeasurementModel, DSEMModel, CausalEdge
-    assert callable(propose_structural_model)
+    from causal_agent.orchestrator.agents import propose_latent_model, propose_measurement_model
+    from causal_agent.orchestrator.schemas import LatentModel, MeasurementModel, DSEMModel, CausalEdge
+    assert callable(propose_latent_model)
     assert callable(propose_measurement_model)
 
 
@@ -47,11 +47,11 @@ def test_schema_to_networkx():
         Indicator,
         MeasurementModel,
         Role,
-        StructuralModel,
+        LatentModel,
         TemporalStatus,
     )
 
-    structural = StructuralModel(
+    latent = LatentModel(
         constructs=[
             Construct(
                 name="X",
@@ -93,7 +93,7 @@ def test_schema_to_networkx():
         ]
     )
 
-    dsem = DSEMModel(structural=structural, measurement=measurement)
+    dsem = DSEMModel(latent=latent, measurement=measurement)
     G = dsem.to_networkx()
 
     # Construct nodes exist

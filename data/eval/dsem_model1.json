@@ -1,5 +1,5 @@
 {
-  "structural": {
+  "latent": {
     "constructs": [
       {
         "name": "error_resolution_speed",

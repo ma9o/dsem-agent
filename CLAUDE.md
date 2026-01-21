@@ -16,6 +16,23 @@
 
 ------
 
+# Terminology: Causal Modeling
+
+We avoid "structural" due to SEM/SCM terminology collision:
+- In SEM: "structural" loosely means "latent-to-latent relationships" (vs measurement)
+- In SCM/Pearl: "structural" means the functional equations X_i = f_i(Pa_i, U_i)
+
+**Use these terms instead:**
+
+| Concept | Term | Domain |
+|---------|------|--------|
+| Latent-to-latent DAG (what LLM proposes) | **Latent model** | SEM distinction |
+| Latent-to-observed mapping | **Measurement model** | SEM distinction |
+| DAG encoding parent-child relationships | **Topological structure** | SCM distinction (DoWhy) |
+| Mathematical form of causal mechanisms | **Functional specification** | SCM distinction (PyMC) |
+
+------
+
 # polars
 Docs: https://docs.pola.rs/api/python/stable/reference/index.html
 

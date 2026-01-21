@@ -1,14 +1,14 @@
 """Orchestrator module for causal model specification.
 
 Two-stage approach following Anderson & Gerbing (1988):
-1. Structural Model - theoretical constructs + causal edges (theory-driven)
+1. Latent Model - theoretical constructs + causal edges (theory-driven)
 2. Measurement Model - observed indicators that reflect constructs (data-driven)
 """
 
 from .agents import (
     build_dsem_model,
     propose_measurement_model,
-    propose_structural_model,
+    propose_latent_model,
 )
 from .schemas import (
     CausalEdge,
@@ -16,18 +16,18 @@ from .schemas import (
     DSEMModel,
     Indicator,
     MeasurementModel,
-    StructuralModel,
+    LatentModel,
 )
 
 __all__ = [
     # Agents
-    "propose_structural_model",
+    "propose_latent_model",
     "propose_measurement_model",
     "build_dsem_model",
-    # Schemas - Structural
+    # Schemas - Latent
     "Construct",
     "CausalEdge",
-    "StructuralModel",
+    "LatentModel",
     # Schemas - Measurement
     "Indicator",
     "MeasurementModel",

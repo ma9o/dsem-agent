@@ -1,5 +1,5 @@
 {
-  "structural": {
+  "latent": {
     "constructs": [
       {
         "name": "weekend_work",

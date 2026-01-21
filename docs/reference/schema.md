@@ -5,15 +5,17 @@
 - **Orchestrator schemas:** `src/causal_agent/orchestrator/schemas.py`
   - `Construct` - A theoretical entity in the causal model
   - `CausalEdge` - A directed causal edge between constructs
-  - `StructuralModel` - Theoretical causal structure (Stage 1a output)
+  - `LatentModel` - Theoretical causal structure (Stage 1a output)
   - `Indicator` - An observed measurement of a construct
   - `MeasurementModel` - Operationalization of constructs (Stage 1b output)
-  - `DSEMModel` - Complete DSEM specification (structural + measurement)
+  - `DSEMModel` - Complete DSEM specification (latent + measurement)
 
 - **Worker schemas:** `src/causal_agent/workers/schemas.py`
   - `WorkerOutput` - Extraction results from a single chunk
   - `Extraction` - Single indicator value extracted from data
   - `ProposedIndicator` - Worker-proposed new indicator
+
+**Terminology:** We avoid "structural" due to SEM/SCM ambiguity. Use measurement/latent for the SEM distinction and functional/topological for SCM.
 
 ---
 
@@ -21,10 +23,10 @@
 
 Following Anderson & Gerbing (1988), the schema separates:
 
-1. **Structural Model (Stage 1a):** Theory-driven causal DAG over constructs
+1. **Latent Model (Stage 1a):** Theory-driven causal DAG over constructs
    - No data required - pure domain knowledge
    - Constructs represent theoretical entities
-   - Edges encode causal relationships
+   - Edges encode causal relationships (topological structure)
 
 2. **Measurement Model (Stage 1b):** Data-driven operationalization
    - Requires seeing actual data
@@ -35,7 +37,7 @@ Following Anderson & Gerbing (1988), the schema separates:
 
 ## Validation Rules
 
-### StructuralModel Validation
+### LatentModel Validation
 
 1. **Exogenous edges:** If `role='exogenous'`, construct cannot appear as `effect` in any edge
 2. **Contemporaneous same-scale only:** If `lagged=False`, cause and effect must have identical `causal_granularity`
@@ -46,7 +48,7 @@ Following Anderson & Gerbing (1988), the schema separates:
 
 ### MeasurementModel Validation
 
-1. **Valid construct reference:** Each indicator's `construct_name` must exist in the structural model
+1. **Valid construct reference:** Each indicator's `construct_name` must exist in the latent model
 2. **Valid aggregation:** `aggregation` must be a key in the aggregation registry
 3. **Valid granularity:** `measurement_granularity` must be one of: hourly, daily, weekly, monthly, yearly
 

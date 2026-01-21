@@ -1,7 +1,7 @@
 """Orchestrator agents using Inspect AI with OpenRouter.
 
 Two-stage approach following Anderson & Gerbing (1988):
-1. Structural Model (Stage 1a) - theoretical constructs + causal edges, NO DATA
+1. Latent Model (Stage 1a) - theoretical constructs + causal edges, NO DATA
 2. Measurement Model (Stage 1b) - operationalize constructs into indicators, WITH DATA
 """
 
@@ -20,30 +20,30 @@ from causal_agent.utils.llm import (
     make_validate_measurement_model_tool,
     multi_turn_generate,
     parse_json_response,
-    validate_structural_model_tool,
+    validate_latent_model_tool,
 )
 from .prompts import (
-    STRUCTURAL_MODEL_SYSTEM,
-    STRUCTURAL_MODEL_USER,
-    STRUCTURAL_MODEL_REVIEW,
+    LATENT_MODEL_SYSTEM,
+    LATENT_MODEL_USER,
+    LATENT_MODEL_REVIEW,
     MEASUREMENT_MODEL_SYSTEM,
     MEASUREMENT_MODEL_USER,
     MEASUREMENT_MODEL_REVIEW,
 )
-from .schemas import DSEMModel, MeasurementModel, StructuralModel
+from .schemas import DSEMModel, MeasurementModel, LatentModel
 
 # Load environment variables from .env file (for API keys)
 load_dotenv(Path(__file__).parent.parent.parent.parent / ".env")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# STAGE 1a: STRUCTURAL MODEL (theory-driven, no data)
+# STAGE 1a: LATENT MODEL (theory-driven, no data)
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-async def propose_structural_model_async(question: str) -> dict:
+async def propose_latent_model_async(question: str) -> dict:
     """
-    Use the orchestrator LLM to propose a theoretical causal structure.
+    Use the orchestrator LLM to propose a theoretical causal structure (latent model).
 
     This is Stage 1a - the LLM reasons from domain knowledge only, without seeing data.
 
@@ -55,44 +55,44 @@ async def propose_structural_model_async(question: str) -> dict:
         question: The causal research question (natural language)
 
     Returns:
-        StructuralModel as a dictionary
+        LatentModel as a dictionary
     """
     model_name = get_config().stage1_structure_proposal.model
     model = get_model(model_name)
 
     messages = [
-        ChatMessageSystem(content=STRUCTURAL_MODEL_SYSTEM),
-        ChatMessageUser(content=STRUCTURAL_MODEL_USER.format(question=question)),
+        ChatMessageSystem(content=LATENT_MODEL_SYSTEM),
+        ChatMessageUser(content=LATENT_MODEL_USER.format(question=question)),
     ]
 
     # Run multi-turn: initial proposal + self-review, with validation tool available
     completion = await multi_turn_generate(
         messages=messages,
         model=model,
-        follow_ups=[STRUCTURAL_MODEL_REVIEW],
-        tools=[validate_structural_model_tool()],
+        follow_ups=[LATENT_MODEL_REVIEW],
+        tools=[validate_latent_model_tool()],
     )
 
     # Parse and validate final result
     data = parse_json_response(completion)
-    structural_model = StructuralModel.model_validate(data)
+    latent_model = LatentModel.model_validate(data)
 
-    return structural_model.model_dump()
+    return latent_model.model_dump()
 
 
-def propose_structural_model(question: str) -> dict:
+def propose_latent_model(question: str) -> dict:
     """
-    Synchronous wrapper for propose_structural_model_async.
+    Synchronous wrapper for propose_latent_model_async.
 
     Args:
         question: The causal research question
 
     Returns:
-        StructuralModel as a dictionary
+        LatentModel as a dictionary
     """
     import asyncio
 
-    return asyncio.run(propose_structural_model_async(question))
+    return asyncio.run(propose_latent_model_async(question))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -102,22 +102,22 @@ def propose_structural_model(question: str) -> dict:
 
 async def propose_measurement_model_async(
     question: str,
-    structural_model: dict,
+    latent_model: dict,
     data_sample: list[str],
     dataset_summary: str = "",
 ) -> dict:
     """
-    Use the orchestrator LLM to propose a measurement model for the structural model.
+    Use the orchestrator LLM to propose a measurement model for the latent model.
 
     This is Stage 1b - the LLM sees data and operationalizes constructs into indicators.
 
     Two-step process:
-    1. Initial proposal: Generate indicators from structural model + data
+    1. Initial proposal: Generate indicators from latent model + data
     2. Self-review: Check operationalization coherence
 
     Args:
         question: The causal research question (natural language)
-        structural_model: The structural model dict from Stage 1a
+        latent_model: The latent model dict from Stage 1a
         data_sample: Sample chunks from the dataset
         dataset_summary: Brief overview of the full dataset (size, timespan, etc.)
 
@@ -127,8 +127,8 @@ async def propose_measurement_model_async(
     model_name = get_config().stage1_structure_proposal.model
     model = get_model(model_name)
 
-    # Parse structural model for validation tool
-    structural = StructuralModel.model_validate(structural_model)
+    # Parse latent model for validation tool
+    latent = LatentModel.model_validate(latent_model)
 
     # Format the chunks for the prompt
     chunks_text = "\n".join(data_sample)
@@ -138,7 +138,7 @@ async def propose_measurement_model_async(
         ChatMessageUser(
             content=MEASUREMENT_MODEL_USER.format(
                 question=question,
-                structural_model_json=json.dumps(structural_model, indent=2),
+                latent_model_json=json.dumps(latent_model, indent=2),
                 dataset_summary=dataset_summary or "Not provided",
                 chunks=chunks_text,
             )
@@ -150,7 +150,7 @@ async def propose_measurement_model_async(
         messages=messages,
         model=model,
         follow_ups=[MEASUREMENT_MODEL_REVIEW],
-        tools=[make_validate_measurement_model_tool(structural)],
+        tools=[make_validate_measurement_model_tool(latent)],
     )
 
     # Parse and validate final result
@@ -162,7 +162,7 @@ async def propose_measurement_model_async(
 
 def propose_measurement_model(
     question: str,
-    structural_model: dict,
+    latent_model: dict,
     data_sample: list[str],
     dataset_summary: str = "",
 ) -> dict:
@@ -171,7 +171,7 @@ def propose_measurement_model(
 
     Args:
         question: The causal research question
-        structural_model: The structural model dict from Stage 1a
+        latent_model: The latent model dict from Stage 1a
         data_sample: Sample chunks from the dataset
         dataset_summary: Brief overview of the full dataset
 
@@ -181,7 +181,7 @@ def propose_measurement_model(
     import asyncio
 
     return asyncio.run(
-        propose_measurement_model_async(question, structural_model, data_sample, dataset_summary)
+        propose_measurement_model_async(question, latent_model, data_sample, dataset_summary)
     )
 
 
@@ -190,19 +190,19 @@ def propose_measurement_model(
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def build_dsem_model(structural_model: dict, measurement_model: dict) -> dict:
+def build_dsem_model(latent_model: dict, measurement_model: dict) -> dict:
     """
-    Combine structural and measurement models into a full DSEMModel.
+    Combine latent and measurement models into a full DSEMModel.
 
     Args:
-        structural_model: The structural model dict from Stage 1a
+        latent_model: The latent model dict from Stage 1a
         measurement_model: The measurement model dict from Stage 1b
 
     Returns:
         DSEMModel as a dictionary
     """
     dsem = DSEMModel(
-        structural=StructuralModel.model_validate(structural_model),
+        latent=LatentModel.model_validate(latent_model),
         measurement=MeasurementModel.model_validate(measurement_model),
     )
     return dsem.model_dump()

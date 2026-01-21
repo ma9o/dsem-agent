@@ -3,7 +3,7 @@
 Orchestrates all stages from structure proposal to intervention analysis.
 
 Two-stage specification following Anderson & Gerbing (1988):
-- Stage 1a: Structural model (theory-driven, no data)
+- Stage 1a: Latent model (theory-driven, no data)
 - Stage 1b: Measurement model (data-driven operationalization)
 """
 
@@ -18,7 +18,7 @@ from causal_agent.utils.data import (
 
 from .stages import (
     # Stage 1a
-    propose_structural_model,
+    propose_latent_model,
     # Stage 1b
     build_dsem_model,
     load_orchestrator_chunks,
@@ -61,12 +61,12 @@ def causal_inference_pipeline(
     print(f"Using input file: {input_path.name}")
 
     # ══════════════════════════════════════════════════════════════════════════
-    # Stage 1a: Propose structural model (theory only, no data)
+    # Stage 1a: Propose latent model (theory only, no data)
     # ══════════════════════════════════════════════════════════════════════════
-    print("\n=== Stage 1a: Structural Model ===")
-    structural_model = propose_structural_model(question)
-    n_constructs = len(structural_model["constructs"])
-    n_edges = len(structural_model["edges"])
+    print("\n=== Stage 1a: Latent Model ===")
+    latent_model = propose_latent_model(question)
+    n_constructs = len(latent_model["constructs"])
+    n_edges = len(latent_model["edges"])
     print(f"Proposed {n_constructs} constructs with {n_edges} causal edges")
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -78,14 +78,14 @@ def causal_inference_pipeline(
 
     measurement_model = propose_measurement_model(
         question,
-        structural_model,
+        latent_model,
         orchestrator_chunks[:SAMPLE_CHUNKS],
     )
     n_indicators = len(measurement_model["indicators"])
     print(f"Proposed {n_indicators} indicators")
 
     # Combine into full DSEM model
-    dsem_model = build_dsem_model(structural_model, measurement_model)
+    dsem_model = build_dsem_model(latent_model, measurement_model)
 
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 2: Parallel indicator population (worker chunk size)
@@ -113,15 +113,15 @@ def causal_inference_pipeline(
     # Stage 3: Identifiability
     # ══════════════════════════════════════════════════════════════════════════
     print("\n=== Stage 3: Identifiability ===")
-    # TODO: Update to work with new DSEMModel - use structural.edges
-    identifiable = check_identifiability(dsem_model["structural"], target_effects)
+    # TODO: Update to work with new DSEMModel - use latent.edges
+    identifiable = check_identifiability(dsem_model["latent"], target_effects)
 
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 4: Model specification
     # ══════════════════════════════════════════════════════════════════════════
     print("\n=== Stage 4: Model Specification ===")
     # TODO: Update to work with new DSEMModel
-    model_spec = specify_model(dsem_model["structural"], dsem_model)
+    model_spec = specify_model(dsem_model["latent"], dsem_model)
     priors = elicit_priors(model_spec)
 
     # ══════════════════════════════════════════════════════════════════════════

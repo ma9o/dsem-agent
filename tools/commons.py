@@ -10,11 +10,11 @@ from dowhy import CausalModel
 
 
 def parse_dag_json(json_str: str) -> tuple[dict | None, str | None]:
-    """Parse DAG JSON - accepts both structural-only and full DSEM formats.
+    """Parse DAG JSON - accepts both latent-only and full DSEM formats.
 
-    Structural-only format:
+    Latent-only format:
     {
-        "structural": {
+        "latent": {
             "constructs": [...],
             "edges": [...]
         }
@@ -22,7 +22,7 @@ def parse_dag_json(json_str: str) -> tuple[dict | None, str | None]:
 
     Full DSEM format:
     {
-        "structural": {
+        "latent": {
             "constructs": [...],
             "edges": [...]
         },
@@ -40,14 +40,14 @@ def parse_dag_json(json_str: str) -> tuple[dict | None, str | None]:
     except json.JSONDecodeError as e:
         return None, f"Invalid JSON: {e}"
 
-    # Validate structural model format
-    if "structural" not in data or "constructs" not in data.get("structural", {}):
-        return None, "JSON must have 'structural.constructs'"
+    # Validate latent model format
+    if "latent" not in data or "constructs" not in data.get("latent", {}):
+        return None, "JSON must have 'latent.constructs'"
 
-    structural = data["structural"]
+    latent = data["latent"]
     normalized = {
-        "constructs": structural.get("constructs", []),
-        "edges": structural.get("edges", []),
+        "constructs": latent.get("constructs", []),
+        "edges": latent.get("edges", []),
         "indicators": [],  # Always present, defaults to empty
     }
 

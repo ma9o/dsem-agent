@@ -1,15 +1,15 @@
 """Prompts for the orchestrator LLM agents.
 
 Two-stage approach following Anderson & Gerbing (1988):
-1. Structural Model (Stage 1a) - theoretical constructs + causal edges, NO DATA
+1. Latent Model (Stage 1a) - theoretical constructs + causal edges, NO DATA
 2. Measurement Model (Stage 1b) - operationalize constructs into indicators, WITH DATA
 """
 
 # ══════════════════════════════════════════════════════════════════════════════
-# STAGE 1a: STRUCTURAL MODEL (theory-driven, no data)
+# STAGE 1a: LATENT MODEL (theory-driven, no data)
 # ══════════════════════════════════════════════════════════════════════════════
 
-STRUCTURAL_MODEL_SYSTEM = """\
+LATENT_MODEL_SYSTEM = """\
 You are a causal inference expert. Given a research question, propose a THEORETICAL causal structure.
 
 IMPORTANT: You will NOT see any data. Reason purely from domain knowledge and first principles.
@@ -89,15 +89,15 @@ Cross-timescale edges are always lagged. The system computes lag in hours automa
 
 ## Validation Tool
 
-You have access to `validate_structural_model` tool. Use it to validate your JSON before returning the final answer. Keep validating until you get "VALID".
+You have access to `validate_latent_model` tool. Use it to validate your JSON before returning the final answer. Keep validating until you get "VALID".
 
 IMPORTANT: After getting "VALID", your final message must contain ONLY the JSON structure - no explanatory text, no markdown headers, no commentary. Just the raw JSON object.
 """
 
-STRUCTURAL_MODEL_USER = """\
+LATENT_MODEL_USER = """\
 Question: {question}
 
-Propose a theoretical causal structure for answering this question. Remember:
+Propose a theoretical causal structure (latent model) for answering this question. Remember:
 - You will NOT see data - reason from domain knowledge only
 - Focus on WHAT constructs matter and HOW they relate causally
 - Be rich and deep - later stages will operationalize and validate
@@ -113,7 +113,7 @@ You are a measurement specialist. Given a theoretical causal structure and sampl
 ## Context
 
 You are given:
-1. A structural model with theoretical constructs and causal edges (from Stage 1a)
+1. A latent model with theoretical constructs and causal edges (from Stage 1a)
 2. Sample data from the dataset
 
 Your job is to propose INDICATORS - observable variables that measure each construct.
@@ -192,7 +192,7 @@ The `how_to_measure` field tells workers what to extract. Be specific:
 ## Constraints
 
 1. Every **time-varying** construct MUST have at least one indicator (A2)
-2. Indicators can only reference constructs from the structural model
+2. Indicators can only reference constructs from the latent model
 3. measurement_granularity must be ≤ construct's causal_granularity
 4. You CANNOT add new causal edges - only operationalize existing constructs
 
@@ -223,9 +223,9 @@ IMPORTANT: After getting "VALID", your final message must contain ONLY the JSON 
 MEASUREMENT_MODEL_USER = """\
 Question: {question}
 
-## Structural Model (from Stage 1a)
+## Latent Model (from Stage 1a)
 
-{structural_model_json}
+{latent_model_json}
 
 ## Dataset Overview
 
@@ -248,8 +248,8 @@ Propose indicators to operationalize each construct. Remember:
 # REVIEW PROMPTS (self-review after initial proposal)
 # ══════════════════════════════════════════════════════════════════════════════
 
-STRUCTURAL_MODEL_REVIEW = """\
-Review your proposed structural model for theoretical coherence.
+LATENT_MODEL_REVIEW = """\
+Review your proposed latent model for theoretical coherence.
 
 ## Check for:
 
