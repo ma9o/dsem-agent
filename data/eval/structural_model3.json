@@ -1,0 +1,324 @@
+{
+  "constructs": [
+    {
+      "name": "context_switches",
+      "description": "Number of topic switches detected - when consecutive activities are on unrelated topics",
+      "role": "endogenous",
+      "is_outcome": true,
+      "temporal_status": "time_varying",
+      "causal_granularity": "hourly"
+    },
+    {
+      "name": "total_activities",
+      "description": "Total number of searches and visits - overall browsing activity level",
+      "role": "endogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "hourly"
+    },
+    {
+      "name": "topic_category",
+      "description": "The semantic topic category of each browsing activity - used to compute topic diversity",
+      "role": "endogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "hourly"
+    },
+    {
+      "name": "rapid_switch_count",
+      "description": "Number of topic switches occurring within 5 minutes of previous activity - captures truly compulsive/impulsive switching",
+      "role": "endogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "hourly"
+    },
+    {
+      "name": "is_work_related",
+      "description": "Whether activity is work/productivity related vs leisure browsing",
+      "role": "endogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "hourly"
+    },
+    {
+      "name": "is_wikipedia_visit",
+      "description": "Whether activity is a Wikipedia visit - indicator of curiosity-driven exploration",
+      "role": "endogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "hourly"
+    },
+    {
+      "name": "is_reddit_visit",
+      "description": "Whether activity is a Reddit visit - high-switching-risk site",
+      "role": "endogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "hourly"
+    },
+    {
+      "name": "minutes_since_last_activity",
+      "description": "Time gap since previous browsing activity - captures browsing pace and session breaks",
+      "role": "endogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "hourly"
+    },
+    {
+      "name": "hour_of_day",
+      "description": "Hour of day (0-23) - attention capacity varies with circadian rhythm",
+      "role": "exogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "hourly"
+    },
+    {
+      "name": "is_late_night",
+      "description": "Whether activity is during late night hours (23:00-05:00) - indicates possible fatigue or insomnia",
+      "role": "exogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "hourly"
+    },
+    {
+      "name": "is_weekend",
+      "description": "Whether day is Saturday or Sunday - different browsing patterns and goals",
+      "role": "exogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
+    },
+    {
+      "name": "daily_total_activities",
+      "description": "Total browsing activities for the entire day - captures overall browsing intensity for cross-day effects",
+      "role": "endogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
+    },
+    {
+      "name": "sustained_attention",
+      "description": "Latent capacity for sustained focus - varying ability to maintain attention on single topic",
+      "role": "endogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "hourly"
+    },
+    {
+      "name": "exploration_drive",
+      "description": "Latent urge to explore and learn new things - curiosity state that drives topic breadth",
+      "role": "endogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "hourly"
+    },
+    {
+      "name": "restlessness",
+      "description": "Latent state of mental restlessness or agitation - drives compulsive switching independent of curiosity",
+      "role": "endogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "hourly"
+    },
+    {
+      "name": "task_engagement",
+      "description": "Latent level of engagement with current browsing task - low engagement leads to switching",
+      "role": "endogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "hourly"
+    },
+    {
+      "name": "baseline_switching_tendency",
+      "description": "Person-level trait tendency toward context-switching - stable individual difference",
+      "role": "endogenous",
+      "is_outcome": false,
+      "temporal_status": "time_invariant",
+      "causal_granularity": null
+    },
+    {
+      "name": "daily_exploration_level",
+      "description": "Daily aggregate of exploration drive - indicates day-level curiosity mode",
+      "role": "endogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
+    }
+  ],
+  "edges": [
+    {
+      "cause": "sustained_attention",
+      "effect": "context_switches",
+      "description": "Lower sustained attention capacity leads to more frequent context switches - core mechanism of compulsive switching",
+      "lagged": false
+    },
+    {
+      "cause": "restlessness",
+      "effect": "context_switches",
+      "description": "Higher restlessness drives more switching behavior independent of attention - the 'compulsive' aspect",
+      "lagged": false
+    },
+    {
+      "cause": "exploration_drive",
+      "effect": "context_switches",
+      "description": "High curiosity/exploration drive leads to wanting to explore more topics, causing switches",
+      "lagged": false
+    },
+    {
+      "cause": "task_engagement",
+      "effect": "context_switches",
+      "description": "Low engagement with current content triggers seeking novelty elsewhere",
+      "lagged": false
+    },
+    {
+      "cause": "exploration_drive",
+      "effect": "topic_category",
+      "description": "High curiosity drives broader topic exploration across more categories",
+      "lagged": false
+    },
+    {
+      "cause": "restlessness",
+      "effect": "rapid_switch_count",
+      "description": "Restlessness specifically drives rapid/impulsive switches under 5 minutes",
+      "lagged": false
+    },
+    {
+      "cause": "hour_of_day",
+      "effect": "sustained_attention",
+      "description": "Attention capacity varies with circadian rhythm - typically lower in afternoon slump and late night",
+      "lagged": false
+    },
+    {
+      "cause": "is_late_night",
+      "effect": "sustained_attention",
+      "description": "Late night browsing typically associated with depleted attention",
+      "lagged": false
+    },
+    {
+      "cause": "is_late_night",
+      "effect": "restlessness",
+      "description": "Late night may indicate insomnia/restlessness state",
+      "lagged": false
+    },
+    {
+      "cause": "minutes_since_last_activity",
+      "effect": "sustained_attention",
+      "description": "Longer gaps between activities indicate breaks that may restore attention; very short gaps indicate depleted/scattered attention",
+      "lagged": false
+    },
+    {
+      "cause": "restlessness",
+      "effect": "minutes_since_last_activity",
+      "description": "High restlessness leads to rapid-fire browsing with shorter gaps between activities",
+      "lagged": false
+    },
+    {
+      "cause": "is_weekend",
+      "effect": "daily_exploration_level",
+      "description": "Weekends may have higher exploratory curiosity browsing vs focused work",
+      "lagged": false
+    },
+    {
+      "cause": "daily_exploration_level",
+      "effect": "exploration_drive",
+      "description": "Daily exploration mode influences hourly exploration drive",
+      "lagged": true
+    },
+    {
+      "cause": "is_work_related",
+      "effect": "task_engagement",
+      "description": "Work-related tasks may have different (often higher) engagement due to external accountability",
+      "lagged": false
+    },
+    {
+      "cause": "is_wikipedia_visit",
+      "effect": "context_switches",
+      "description": "Wikipedia visits often trigger tangential exploration via hyperlinks, causing topic switches",
+      "lagged": false
+    },
+    {
+      "cause": "is_reddit_visit",
+      "effect": "context_switches",
+      "description": "Reddit's structure promotes tangential browsing and topic switching across subreddits",
+      "lagged": false
+    },
+    {
+      "cause": "exploration_drive",
+      "effect": "is_wikipedia_visit",
+      "description": "High curiosity leads to more Wikipedia exploration for learning",
+      "lagged": false
+    },
+    {
+      "cause": "exploration_drive",
+      "effect": "is_reddit_visit",
+      "description": "Curiosity drives Reddit browsing for diverse information and discussion",
+      "lagged": false
+    },
+    {
+      "cause": "topic_category",
+      "effect": "context_switches",
+      "description": "More unique topic categories explored necessarily involves more switches between them",
+      "lagged": false
+    },
+    {
+      "cause": "rapid_switch_count",
+      "effect": "context_switches",
+      "description": "Rapid switches are a subset of total switches - contributes to overall count",
+      "lagged": false
+    },
+    {
+      "cause": "daily_total_activities",
+      "effect": "sustained_attention",
+      "description": "Heavy browsing yesterday depletes next day's attention capacity - recovery needed",
+      "lagged": true
+    },
+    {
+      "cause": "daily_total_activities",
+      "effect": "restlessness",
+      "description": "High prior day activity may carry over restless browsing patterns",
+      "lagged": true
+    },
+    {
+      "cause": "baseline_switching_tendency",
+      "effect": "context_switches",
+      "description": "Stable trait tendency influences baseline switching rate",
+      "lagged": false
+    },
+    {
+      "cause": "baseline_switching_tendency",
+      "effect": "restlessness",
+      "description": "Trait switching tendency manifests through state-level restlessness",
+      "lagged": false
+    },
+    {
+      "cause": "sustained_attention",
+      "effect": "task_engagement",
+      "description": "Attention capacity enables engagement - hard to engage deeply when attention is scattered",
+      "lagged": false
+    },
+    {
+      "cause": "restlessness",
+      "effect": "total_activities",
+      "description": "Restless state leads to more frantic browsing activity",
+      "lagged": false
+    },
+    {
+      "cause": "exploration_drive",
+      "effect": "total_activities",
+      "description": "High curiosity drives more overall browsing activity",
+      "lagged": false
+    },
+    {
+      "cause": "total_activities",
+      "effect": "context_switches",
+      "description": "More activities creates more opportunities for switching - base rate effect",
+      "lagged": false
+    },
+    {
+      "cause": "exploration_drive",
+      "effect": "is_work_related",
+      "description": "High exploration drive leads to more leisure/curiosity browsing, reducing work-related proportion",
+      "lagged": false
+    }
+  ]
+}

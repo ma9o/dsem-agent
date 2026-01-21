@@ -1,0 +1,240 @@
+{
+  "constructs": [
+    {
+      "name": "error_resolution_duration",
+      "description": "Time in minutes from first error-related search to apparent resolution (last related search before topic change or extended break)",
+      "role": "endogenous",
+      "is_outcome": true,
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
+    },
+    {
+      "name": "search_iterations",
+      "description": "Number of search queries performed during a debugging session before resolution, indicating search efficiency",
+      "role": "endogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
+    },
+    {
+      "name": "technical_search_count",
+      "description": "Daily count of searches and visits related to technical programming topics, indicating engagement with technology",
+      "role": "exogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
+    },
+    {
+      "name": "debugging_start_hour",
+      "description": "Hour of day (0-23) when debugging sessions start, capturing circadian effects on performance",
+      "role": "exogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
+    },
+    {
+      "name": "topic_category",
+      "description": "Topic cluster of each search, used to measure context switching via topic diversity",
+      "role": "exogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
+    },
+    {
+      "name": "is_official_doc",
+      "description": "Whether a URL visited during debugging is official documentation vs community forum",
+      "role": "endogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
+    },
+    {
+      "name": "leisure_activity_count",
+      "description": "Count of non-technical browsing activities indicating breaks and mental rest",
+      "role": "exogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
+    },
+    {
+      "name": "debugging_sessions_today",
+      "description": "Number of distinct debugging sessions on a given day, indicating debugging workload",
+      "role": "exogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
+    },
+    {
+      "name": "learning_activity_count",
+      "description": "Count of technical learning activities (not debugging), indicating knowledge building",
+      "role": "exogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
+    },
+    {
+      "name": "initial_query_technical_terms",
+      "description": "Count of technical/specific terms in the first search query of a debugging session",
+      "role": "endogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
+    },
+    {
+      "name": "error_domain_familiarity",
+      "description": "Latent familiarity and expertise with the specific error domain, shaped by exposure and learning",
+      "role": "endogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
+    },
+    {
+      "name": "cognitive_efficiency",
+      "description": "Latent cognitive state affecting information processing speed, focus, and problem-solving ability",
+      "role": "endogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
+    },
+    {
+      "name": "search_strategy_quality",
+      "description": "Latent quality of debugging search approach - knowing what to search, where to look, how to refine",
+      "role": "endogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
+    },
+    {
+      "name": "is_weekend",
+      "description": "Whether the day is a weekend (Saturday or Sunday)",
+      "role": "exogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
+    },
+    {
+      "name": "activity_gap_hours",
+      "description": "Hours since last browsing activity when debugging session starts, indicating fresh start vs continuous work",
+      "role": "exogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
+    }
+  ],
+  "edges": [
+    {
+      "cause": "technical_search_count",
+      "effect": "error_domain_familiarity",
+      "description": "More exposure to technical topics builds familiarity with error patterns and solutions",
+      "lagged": true
+    },
+    {
+      "cause": "learning_activity_count",
+      "effect": "error_domain_familiarity",
+      "description": "Technical learning expands knowledge base and deepens understanding of concepts",
+      "lagged": true
+    },
+    {
+      "cause": "error_domain_familiarity",
+      "effect": "error_resolution_duration",
+      "description": "Greater familiarity enables faster pattern recognition of errors and known solutions",
+      "lagged": false
+    },
+    {
+      "cause": "error_domain_familiarity",
+      "effect": "search_strategy_quality",
+      "description": "Domain expertise helps formulate better search queries and know where to find answers",
+      "lagged": false
+    },
+    {
+      "cause": "topic_category",
+      "effect": "cognitive_efficiency",
+      "description": "High topic diversity (many distinct categories) depletes working memory and reduces efficiency",
+      "lagged": false
+    },
+    {
+      "cause": "debugging_start_hour",
+      "effect": "cognitive_efficiency",
+      "description": "Circadian rhythms affect alertness and cognitive performance throughout the day",
+      "lagged": false
+    },
+    {
+      "cause": "leisure_activity_count",
+      "effect": "cognitive_efficiency",
+      "description": "Mental breaks allow cognitive recovery, reduce fatigue, and improve subsequent focus",
+      "lagged": false
+    },
+    {
+      "cause": "debugging_sessions_today",
+      "effect": "cognitive_efficiency",
+      "description": "Accumulated debugging workload depletes mental resources and increases fatigue",
+      "lagged": false
+    },
+    {
+      "cause": "activity_gap_hours",
+      "effect": "cognitive_efficiency",
+      "description": "Starting fresh after a break vs continuous work affects mental sharpness",
+      "lagged": false
+    },
+    {
+      "cause": "is_weekend",
+      "effect": "cognitive_efficiency",
+      "description": "Weekend debugging may have different cognitive context - either more relaxed or less focused",
+      "lagged": false
+    },
+    {
+      "cause": "cognitive_efficiency",
+      "effect": "error_resolution_duration",
+      "description": "Higher cognitive efficiency enables faster information processing and problem solving",
+      "lagged": false
+    },
+    {
+      "cause": "cognitive_efficiency",
+      "effect": "search_strategy_quality",
+      "description": "Better cognitive state leads to more thoughtful, strategic search behavior",
+      "lagged": false
+    },
+    {
+      "cause": "search_strategy_quality",
+      "effect": "search_iterations",
+      "description": "Better search strategy leads to more efficient queries and fewer iterations needed",
+      "lagged": false
+    },
+    {
+      "cause": "search_strategy_quality",
+      "effect": "initial_query_technical_terms",
+      "description": "Good strategy manifests in more specific, targeted initial search queries",
+      "lagged": false
+    },
+    {
+      "cause": "search_strategy_quality",
+      "effect": "is_official_doc",
+      "description": "Skilled debuggers know to prioritize official documentation over forums",
+      "lagged": false
+    },
+    {
+      "cause": "initial_query_technical_terms",
+      "effect": "error_resolution_duration",
+      "description": "More specific initial queries find relevant results faster, reducing resolution time",
+      "lagged": false
+    },
+    {
+      "cause": "search_iterations",
+      "effect": "error_resolution_duration",
+      "description": "More search iterations extend the debugging session duration",
+      "lagged": false
+    },
+    {
+      "cause": "is_official_doc",
+      "effect": "error_resolution_duration",
+      "description": "Official documentation typically provides more accurate, authoritative solutions faster",
+      "lagged": false
+    },
+    {
+      "cause": "error_domain_familiarity",
+      "effect": "initial_query_technical_terms",
+      "description": "Domain knowledge enables more precise error query formulation from the start",
+      "lagged": false
+    }
+  ]
+}
