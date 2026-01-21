@@ -32,75 +32,32 @@ class WorkerResult:
 def _format_indicators(dsem_model: dict) -> str:
     """Format indicators for the worker prompt.
 
-    Supports both new format (structural + measurement) and old format (dimensions).
-
     Shows: name, dtype, measurement_granularity, how_to_measure
     """
-    # New format
-    if "measurement" in dsem_model and "indicators" in dsem_model["measurement"]:
-        indicators = dsem_model["measurement"]["indicators"]
-        lines = []
-        for ind in indicators:
-            name = ind.get("name", "unknown")
-            how_to_measure = ind.get("how_to_measure", "")
-            dtype = ind.get("measurement_dtype", "")
-            measurement_granularity = ind.get("measurement_granularity", "")
+    indicators = dsem_model.get("measurement", {}).get("indicators", [])
+    lines = []
+    for ind in indicators:
+        name = ind.get("name", "unknown")
+        how_to_measure = ind.get("how_to_measure", "")
+        dtype = ind.get("measurement_dtype", "")
+        measurement_granularity = ind.get("measurement_granularity", "")
 
-            # Build info string with dtype and measurement_granularity
-            info_parts = [dtype]
-            if measurement_granularity:
-                info_parts.append(f"@{measurement_granularity}")
-            info = ", ".join(info_parts)
+        # Build info string with dtype and measurement_granularity
+        info_parts = [dtype]
+        if measurement_granularity:
+            info_parts.append(f"@{measurement_granularity}")
+        info = ", ".join(info_parts)
 
-            lines.append(f"- {name} ({info}): {how_to_measure}")
-        return "\n".join(lines)
-
-    # Old format (dimensions)
-    if "dimensions" in dsem_model:
-        dimensions = dsem_model["dimensions"]
-        lines = []
-        for dim in dimensions:
-            # Skip latent dimensions - workers only extract observed variables
-            if dim.get("observability") == "latent":
-                continue
-            name = dim.get("name", "unknown")
-            how_to_measure = dim.get("how_to_measure", "")
-            dtype = dim.get("measurement_dtype", "")
-            measurement_granularity = dim.get("measurement_granularity", "")
-
-            # Build info string with dtype and measurement_granularity
-            info_parts = [dtype]
-            if measurement_granularity:
-                info_parts.append(f"@{measurement_granularity}")
-            info = ", ".join(info_parts)
-
-            lines.append(f"- {name} ({info}): {how_to_measure}")
-        return "\n".join(lines)
-
-    return ""
+        lines.append(f"- {name} ({info}): {how_to_measure}")
+    return "\n".join(lines)
 
 
 def _get_outcome_description(dsem_model: dict) -> str:
-    """Get the description of the outcome variable.
-
-    Supports both new format (structural + measurement) and old format (dimensions).
-    """
-    # New format
-    if "structural" in dsem_model and "constructs" in dsem_model["structural"]:
-        constructs = dsem_model["structural"]["constructs"]
-        for c in constructs:
-            if c.get("is_outcome"):
-                return c.get("description", c.get("name", "outcome"))
-        return "Not specified"
-
-    # Old format
-    if "dimensions" in dsem_model:
-        dimensions = dsem_model["dimensions"]
-        for dim in dimensions:
-            if dim.get("is_outcome"):
-                return dim.get("description", dim.get("name", "outcome"))
-        return "Not specified"
-
+    """Get the description of the outcome variable."""
+    constructs = dsem_model.get("structural", {}).get("constructs", [])
+    for c in constructs:
+        if c.get("is_outcome"):
+            return c.get("description", c.get("name", "outcome"))
     return "Not specified"
 
 
@@ -115,7 +72,7 @@ async def process_chunk_async(
     Args:
         chunk: The data chunk to process
         question: The causal research question
-        dsem_model: The DSEMModel dict (new or old format)
+        dsem_model: The DSEMModel dict
 
     Returns:
         WorkerResult with validated output and Polars dataframe
@@ -168,7 +125,7 @@ def process_chunk(
     Args:
         chunk: The data chunk to process
         question: The causal research question
-        dsem_model: The DSEMModel dict (new or old format)
+        dsem_model: The DSEMModel dict
 
     Returns:
         WorkerResult with validated output and Polars dataframe
@@ -187,7 +144,7 @@ async def process_chunks_async(
     Args:
         chunks: List of data chunks to process
         question: The causal research question
-        dsem_model: The DSEMModel dict (new or old format)
+        dsem_model: The DSEMModel dict
 
     Returns:
         List of WorkerResults
@@ -211,7 +168,7 @@ def process_chunks(
     Args:
         chunks: List of data chunks to process
         question: The causal research question
-        dsem_model: The DSEMModel dict (new or old format)
+        dsem_model: The DSEMModel dict
 
     Returns:
         List of WorkerResults

@@ -134,18 +134,6 @@ def extract_json_from_response(text: str) -> str | None:
     return None
 
 
-def load_example_dag() -> dict:
-    """Load the default example DAG for worker evals from config path.
-
-    Note: This loads the OLD format (dimensions + edges). For the new format,
-    use load_structural_model_by_question_id() or load_dsem_model_by_question_id().
-    """
-    config = load_eval_config()
-    dag_path = DATA_DIR / config["example_dag"]
-    with open(dag_path) as f:
-        return json.load(f)
-
-
 def load_structural_model_by_question_id(question_id: int) -> dict:
     """Load a reference structural model by question ID.
 

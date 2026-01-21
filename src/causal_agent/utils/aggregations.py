@@ -167,57 +167,35 @@ def _coerce_value_to_numeric(value) -> float | None:
 def _get_indicator_metadata(dsem_model: dict) -> dict[str, dict]:
     """Extract indicator metadata from a DSEMModel dict.
 
-    Supports both new format (structural + measurement) and old format (dimensions).
-
     Args:
-        dsem_model: DSEMModel dict (new or old format)
+        dsem_model: DSEMModel dict with structural.constructs and measurement.indicators
 
     Returns:
         Dict mapping indicator name to {causal_granularity, aggregation}
     """
-    # New format: structural + measurement
-    if "measurement" in dsem_model and "indicators" in dsem_model["measurement"]:
-        indicators = dsem_model["measurement"]["indicators"]
-        constructs = dsem_model.get("structural", {}).get("constructs", [])
+    indicators = dsem_model.get("measurement", {}).get("indicators", [])
+    constructs = dsem_model.get("structural", {}).get("constructs", [])
 
-        # Build construct name -> causal_granularity map
-        construct_granularity = {
-            c.get("name"): c.get("causal_granularity")
-            for c in constructs
+    # Build construct name -> causal_granularity map
+    construct_granularity = {
+        c.get("name"): c.get("causal_granularity")
+        for c in constructs
+    }
+
+    indicator_info = {}
+    for ind in indicators:
+        name = ind.get("name")
+        if not name:
+            continue
+        # Get causal_granularity from the construct this indicator measures
+        construct_name = ind.get("construct") or ind.get("construct_name")
+        causal_gran = construct_granularity.get(construct_name)
+
+        indicator_info[name] = {
+            "causal_granularity": causal_gran,
+            "aggregation": ind.get("aggregation", "mean"),
         }
-
-        indicator_info = {}
-        for ind in indicators:
-            name = ind.get("name")
-            if not name:
-                continue
-            # Get causal_granularity from the construct this indicator measures
-            construct_name = ind.get("construct") or ind.get("construct_name")
-            causal_gran = construct_granularity.get(construct_name)
-
-            indicator_info[name] = {
-                "causal_granularity": causal_gran,
-                "aggregation": ind.get("aggregation", "mean"),
-            }
-        return indicator_info
-
-    # Old format: dimensions with observability
-    if "dimensions" in dsem_model:
-        dim_info = {}
-        for dim in dsem_model["dimensions"]:
-            name = dim.get("name")
-            if not name:
-                continue
-            # Only process observed dimensions (latent have no measurements)
-            if dim.get("observability") == "latent":
-                continue
-            dim_info[name] = {
-                "causal_granularity": dim.get("causal_granularity"),
-                "aggregation": dim.get("aggregation", "mean"),
-            }
-        return dim_info
-
-    return {}
+    return indicator_info
 
 
 def aggregate_worker_measurements(
@@ -236,9 +214,8 @@ def aggregate_worker_measurements(
 
     Args:
         dataframes: List of DataFrames from workers, each with columns
-                   (indicator, value, timestamp). Also supports legacy format
-                   with (dimension, value, timestamp).
-        dsem_model: DSEMModel dict (new or old format)
+                   (indicator, value, timestamp).
+        dsem_model: DSEMModel dict with structural.constructs and measurement.indicators
 
     Returns:
         Dict mapping granularity -> DataFrame. Each DataFrame has 'time_bucket'
@@ -254,10 +231,6 @@ def aggregate_worker_measurements(
 
     if combined.is_empty():
         return {}
-
-    # Normalize column name: support both "indicator" and "dimension"
-    if "dimension" in combined.columns and "indicator" not in combined.columns:
-        combined = combined.rename({"dimension": "indicator"})
 
     # Build indicator metadata from dsem_model
     ind_info = _get_indicator_metadata(dsem_model)

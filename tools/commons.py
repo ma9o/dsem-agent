@@ -9,61 +9,41 @@ import pandas as pd
 from dowhy import CausalModel
 
 
-def _normalize_dag_format(data: dict) -> dict:
-    """Normalize DAG data to internal format with 'constructs' and 'edges'.
-
-    Supports both:
-    - New format: structural.constructs + structural.edges + measurement.indicators
-    - Old format: dimensions + edges
-
-    Returns normalized dict with 'constructs', 'edges', and optionally 'indicators'.
-    """
-    # New DSEMModel format
-    if "structural" in data and "constructs" in data.get("structural", {}):
-        structural = data["structural"]
-        normalized = {
-            "constructs": structural.get("constructs", []),
-            "edges": structural.get("edges", []),
-        }
-        # Include indicators if present
-        if "measurement" in data and "indicators" in data.get("measurement", {}):
-            normalized["indicators"] = data["measurement"]["indicators"]
-        return normalized
-
-    # Old dimensions format
-    if "dimensions" in data:
-        return {
-            "constructs": data["dimensions"],
-            "edges": data.get("edges", []),
-        }
-
-    return data
-
-
 def parse_dag_json(json_str: str) -> tuple[dict | None, str | None]:
-    """Parse the DAG JSON format.
+    """Parse the DAG JSON format (DSEMModel structure).
 
-    Supports both:
-    - New format: structural.constructs + structural.edges (DSEMModel)
-    - Old format: dimensions + edges
+    Expected format:
+    {
+        "structural": {
+            "constructs": [...],
+            "edges": [...]
+        },
+        "measurement": {
+            "indicators": [...]
+        }
+    }
 
     Returns (data, error) tuple - one will always be None.
-    Data is normalized to have 'constructs' and 'edges' keys.
+    Data is normalized to have 'constructs', 'edges', and optionally 'indicators' keys.
     """
     try:
         data = json.loads(json_str)
     except json.JSONDecodeError as e:
         return None, f"Invalid JSON: {e}"
 
-    # Check for valid format
-    has_new_format = "structural" in data and "constructs" in data.get("structural", {})
-    has_old_format = "dimensions" in data and "edges" in data
+    # Validate DSEMModel format
+    if "structural" not in data or "constructs" not in data.get("structural", {}):
+        return None, "JSON must have 'structural.constructs' and 'structural.edges'"
 
-    if not has_new_format and not has_old_format:
-        return None, "JSON must have either 'structural.constructs' (new format) or 'dimensions' and 'edges' arrays (old format)"
+    structural = data["structural"]
+    normalized = {
+        "constructs": structural.get("constructs", []),
+        "edges": structural.get("edges", []),
+    }
 
-    # Normalize to internal format
-    normalized = _normalize_dag_format(data)
+    # Include indicators if present
+    if "measurement" in data and "indicators" in data.get("measurement", {}):
+        normalized["indicators"] = data["measurement"]["indicators"]
 
     # Validate edges reference valid nodes
     node_names = {c["name"] for c in normalized["constructs"]}

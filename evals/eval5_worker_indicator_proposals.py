@@ -174,8 +174,7 @@ def extract_proposed_indicators(output: str) -> list[dict]:
     """
     try:
         data = parse_json_response(output)
-        # Support both old and new field names
-        proposed = data.get("proposed_indicators") or data.get("proposed_dimensions")
+        proposed = data.get("proposed_indicators")
         if proposed and isinstance(proposed, list):
             return proposed
         return []
@@ -192,33 +191,15 @@ def format_proposals_for_judge(proposals: list[dict]) -> str:
 
 def format_existing_indicators(dsem_model: dict) -> str:
     """Format existing indicators from DSEMModel for judge context."""
-    # New format
-    if "measurement" in dsem_model and "indicators" in dsem_model["measurement"]:
-        indicators = dsem_model["measurement"]["indicators"]
-        constructs = dsem_model.get("structural", {}).get("constructs", [])
-        construct_desc = {c.get("name"): c.get("description", "") for c in constructs}
-
-        lines = []
-        for ind in indicators:
-            name = ind.get("name", "unknown")
-            construct_name = ind.get("construct") or ind.get("construct_name", "")
-            how = ind.get("how_to_measure", "")
-            construct_info = f" (measures: {construct_name})" if construct_name else ""
-            lines.append(f"- **{name}**{construct_info}: {how}")
-        return "\n".join(lines)
-
-    # Old format
-    if "dimensions" in dsem_model:
-        dimensions = dsem_model["dimensions"]
-        lines = []
-        for dim in dimensions:
-            name = dim.get("name", "unknown")
-            desc = dim.get("description", "")
-            obs = dim.get("observability", "")
-            lines.append(f"- **{name}** ({obs}): {desc}")
-        return "\n".join(lines)
-
-    return ""
+    indicators = dsem_model.get("measurement", {}).get("indicators", [])
+    lines = []
+    for ind in indicators:
+        name = ind.get("name", "unknown")
+        construct_name = ind.get("construct") or ind.get("construct_name", "")
+        how = ind.get("how_to_measure", "")
+        construct_info = f" (measures: {construct_name})" if construct_name else ""
+        lines.append(f"- **{name}**{construct_info}: {how}")
+    return "\n".join(lines)
 
 
 def create_eval_dataset(

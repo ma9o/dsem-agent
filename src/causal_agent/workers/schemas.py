@@ -90,55 +90,26 @@ def _check_dtype_match(value: Any, expected_dtype: str) -> bool:
 def _get_indicator_info(dsem_model: dict) -> dict[str, dict]:
     """Extract indicator info from a DSEMModel dict.
 
-    Supports both new format (structural.constructs + measurement.indicators)
-    and old format (dimensions with observability).
-
     Args:
-        dsem_model: DSEMModel dict (new format) or old format with dimensions
+        dsem_model: DSEMModel dict with structural.constructs and measurement.indicators
 
     Returns:
         Dict mapping indicator name to {dtype, construct_name}
     """
-    # Check for new format (structural + measurement)
-    if "measurement" in dsem_model and "indicators" in dsem_model["measurement"]:
-        indicators = dsem_model["measurement"]["indicators"]
-        return {
-            ind.get("name"): {
-                "dtype": ind.get("measurement_dtype"),
-                "construct_name": ind.get("construct") or ind.get("construct_name"),
-            }
-            for ind in indicators
+    indicators = dsem_model.get("measurement", {}).get("indicators", [])
+    return {
+        ind.get("name"): {
+            "dtype": ind.get("measurement_dtype"),
+            "construct_name": ind.get("construct") or ind.get("construct_name"),
         }
-
-    # Old format (dimensions with observability)
-    if "dimensions" in dsem_model:
-        dimensions = dsem_model["dimensions"]
-        return {
-            dim.get("name"): {
-                "dtype": dim.get("measurement_dtype"),
-                "construct_name": dim.get("name"),  # In old format, dimension = construct
-            }
-            for dim in dimensions
-            if dim.get("observability") == "observed"
-        }
-
-    return {}
+        for ind in indicators
+    }
 
 
 def _get_all_construct_names(dsem_model: dict) -> set[str]:
-    """Get all construct names from a DSEMModel dict.
-
-    Supports both new and old formats.
-    """
-    # New format
-    if "structural" in dsem_model and "constructs" in dsem_model["structural"]:
-        return {c.get("name") for c in dsem_model["structural"]["constructs"]}
-
-    # Old format
-    if "dimensions" in dsem_model:
-        return {d.get("name") for d in dsem_model["dimensions"]}
-
-    return set()
+    """Get all construct names from a DSEMModel dict."""
+    constructs = dsem_model.get("structural", {}).get("constructs", [])
+    return {c.get("name") for c in constructs}
 
 
 def validate_worker_output(
@@ -149,7 +120,7 @@ def validate_worker_output(
 
     Args:
         data: Dictionary to validate as WorkerOutput
-        dsem_model: The DSEMModel dict to validate against (new or old format)
+        dsem_model: The DSEMModel dict to validate against
 
     Returns:
         Tuple of (validated output or None, list of error messages)
@@ -161,7 +132,7 @@ def validate_worker_output(
         return None, ["Input must be a dictionary"]
 
     extractions = data.get("extractions", [])
-    proposed_indicators = data.get("proposed_indicators") or data.get("proposed_dimensions")
+    proposed_indicators = data.get("proposed_indicators")
 
     if not isinstance(extractions, list):
         errors.append("'extractions' must be a list")
@@ -237,16 +208,12 @@ def validate_worker_output(
                 )
                 continue
 
-            # Normalize field names for backwards compatibility
             normalized_prop = {
                 "name": name,
                 "description": prop_data.get("description", ""),
                 "evidence": prop_data.get("evidence", ""),
                 "relevant_because": prop_data.get("relevant_because", ""),
-                "not_already_in_indicators_because": (
-                    prop_data.get("not_already_in_indicators_because")
-                    or prop_data.get("not_already_in_dimensions_because", "")
-                ),
+                "not_already_in_indicators_because": prop_data.get("not_already_in_indicators_because", ""),
             }
 
             try:

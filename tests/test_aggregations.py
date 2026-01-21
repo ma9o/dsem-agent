@@ -167,33 +167,35 @@ class TestAggregateWorkerMeasurements:
     """Test aggregate_worker_measurements function.
 
     The function returns a dict of DataFrames, one per causal_granularity:
-    - Each DataFrame has time_bucket as index and dimensions as columns
-    - Dimensions are grouped by their causal_granularity
+    - Each DataFrame has time_bucket as index and indicators as columns
+    - Indicators are grouped by their construct's causal_granularity
     """
 
     @pytest.fixture
     def daily_schema(self):
-        """Schema with daily causal_granularity dimensions."""
+        """DSEMModel schema with daily causal_granularity constructs."""
         return {
-            "dimensions": [
-                {
-                    "name": "temperature",
-                    "aggregation": "mean",
-                    "observability": "observed",
-                    "causal_granularity": "daily",
-                },
-                {
-                    "name": "step_count",
-                    "aggregation": "sum",
-                    "observability": "observed",
-                    "causal_granularity": "daily",
-                },
-                {
-                    "name": "sleep_quality",
-                    "observability": "latent",  # Should be skipped
-                    "causal_granularity": "daily",
-                },
-            ]
+            "structural": {
+                "constructs": [
+                    {"name": "body_temp", "causal_granularity": "daily"},
+                    {"name": "activity", "causal_granularity": "daily"},
+                ],
+                "edges": [],
+            },
+            "measurement": {
+                "indicators": [
+                    {
+                        "name": "temperature",
+                        "construct_name": "body_temp",
+                        "aggregation": "mean",
+                    },
+                    {
+                        "name": "step_count",
+                        "construct_name": "activity",
+                        "aggregation": "sum",
+                    },
+                ],
+            },
         }
 
     @pytest.fixture
@@ -205,16 +207,16 @@ class TestAggregateWorkerMeasurements:
         - 2024-01-02: temperature=[24], step_count=[3000, 4000]
         """
         df1 = pl.DataFrame({
-            "dimension": ["temperature", "temperature", "step_count", "step_count"],
+            "indicator": ["temperature", "temperature", "step_count", "step_count"],
             "value": [20.0, 22.0, 5000, 3000],
             "timestamp": ["2024-01-01 10:00", "2024-01-01 14:00", "2024-01-01 08:00", "2024-01-02 09:00"],
-        }, schema={"dimension": pl.Utf8, "value": pl.Object, "timestamp": pl.Utf8})
+        }, schema={"indicator": pl.Utf8, "value": pl.Object, "timestamp": pl.Utf8})
 
         df2 = pl.DataFrame({
-            "dimension": ["temperature", "step_count", "step_count"],
+            "indicator": ["temperature", "step_count", "step_count"],
             "value": [24.0, 2000, 4000],
             "timestamp": ["2024-01-02 12:00", "2024-01-01 20:00", "2024-01-02 18:00"],
-        }, schema={"dimension": pl.Utf8, "value": pl.Object, "timestamp": pl.Utf8})
+        }, schema={"indicator": pl.Utf8, "value": pl.Object, "timestamp": pl.Utf8})
 
         return [df1, df2]
 
@@ -229,15 +231,14 @@ class TestAggregateWorkerMeasurements:
 
         assert isinstance(result, dict)
         assert "daily" in result
-        # Should have time_bucket column and dimension columns
+        # Should have time_bucket column and indicator columns
         daily_df = result["daily"]
         assert "time_bucket" in daily_df.columns
         assert "temperature" in daily_df.columns
         assert "step_count" in daily_df.columns
-        assert "sleep_quality" not in daily_df.columns  # latent
 
     def test_aggregates_within_time_buckets(self, daily_schema, worker_dataframes):
-        """Values are aggregated within each time bucket using dimension's aggregation."""
+        """Values are aggregated within each time bucket using indicator's aggregation."""
         result = aggregate_worker_measurements(worker_dataframes, daily_schema)
         daily_df = result["daily"].sort("time_bucket")
 
@@ -254,26 +255,25 @@ class TestAggregateWorkerMeasurements:
         assert jan2["step_count"][0] == pytest.approx(7000.0)
 
     def test_separates_different_granularities(self):
-        """Dimensions with different granularities go to separate DataFrames."""
+        """Indicators with different construct granularities go to separate DataFrames."""
         schema = {
-            "dimensions": [
-                {
-                    "name": "hourly_metric",
-                    "aggregation": "mean",
-                    "observability": "observed",
-                    "causal_granularity": "hourly",
-                },
-                {
-                    "name": "daily_metric",
-                    "aggregation": "sum",
-                    "observability": "observed",
-                    "causal_granularity": "daily",
-                },
-            ]
+            "structural": {
+                "constructs": [
+                    {"name": "hourly_construct", "causal_granularity": "hourly"},
+                    {"name": "daily_construct", "causal_granularity": "daily"},
+                ],
+                "edges": [],
+            },
+            "measurement": {
+                "indicators": [
+                    {"name": "hourly_metric", "construct_name": "hourly_construct", "aggregation": "mean"},
+                    {"name": "daily_metric", "construct_name": "daily_construct", "aggregation": "sum"},
+                ],
+            },
         }
 
         df = pl.DataFrame({
-            "dimension": ["hourly_metric", "hourly_metric", "hourly_metric", "daily_metric", "daily_metric"],
+            "indicator": ["hourly_metric", "hourly_metric", "hourly_metric", "daily_metric", "daily_metric"],
             "value": [10.0, 20.0, 30.0, 100.0, 200.0],
             "timestamp": [
                 "2024-01-01 10:15",  # hourly bucket: 10:00
@@ -282,7 +282,7 @@ class TestAggregateWorkerMeasurements:
                 "2024-01-01 10:00",  # daily bucket: 2024-01-01
                 "2024-01-01 22:00",  # daily bucket: 2024-01-01
             ],
-        }, schema={"dimension": pl.Utf8, "value": pl.Object, "timestamp": pl.Utf8})
+        }, schema={"indicator": pl.Utf8, "value": pl.Object, "timestamp": pl.Utf8})
 
         result = aggregate_worker_measurements([df], schema)
 
@@ -311,44 +311,43 @@ class TestAggregateWorkerMeasurements:
         # Check daily aggregation: [100, 200] -> sum = 300
         assert daily_df["daily_metric"][0] == pytest.approx(300.0)
 
-    def test_skips_latent_dimensions(self, daily_schema):
-        """Latent dimensions are not included in output."""
+    def test_only_includes_known_indicators(self, daily_schema):
+        """Only indicators defined in schema are processed."""
         df = pl.DataFrame({
-            "dimension": ["sleep_quality", "temperature"],
+            "indicator": ["unknown_metric", "temperature"],
             "value": [8.0, 20.0],
             "timestamp": ["2024-01-01 08:00", "2024-01-01 10:00"],
-        }, schema={"dimension": pl.Utf8, "value": pl.Object, "timestamp": pl.Utf8})
+        }, schema={"indicator": pl.Utf8, "value": pl.Object, "timestamp": pl.Utf8})
 
         result = aggregate_worker_measurements([df], daily_schema)
 
         daily_df = result["daily"]
-        assert "sleep_quality" not in daily_df.columns
+        assert "unknown_metric" not in daily_df.columns
         assert "temperature" in daily_df.columns
 
     def test_time_invariant_in_separate_key(self):
-        """Time-invariant dimensions go to 'time_invariant' key."""
+        """Time-invariant indicators go to 'time_invariant' key."""
         schema = {
-            "dimensions": [
-                {
-                    "name": "age",
-                    "aggregation": "first",
-                    "observability": "observed",
-                    "causal_granularity": None,  # time-invariant
-                },
-                {
-                    "name": "mood",
-                    "aggregation": "mean",
-                    "observability": "observed",
-                    "causal_granularity": "daily",
-                },
-            ]
+            "structural": {
+                "constructs": [
+                    {"name": "demographics", "causal_granularity": None},  # time-invariant
+                    {"name": "wellbeing", "causal_granularity": "daily"},
+                ],
+                "edges": [],
+            },
+            "measurement": {
+                "indicators": [
+                    {"name": "age", "construct_name": "demographics", "aggregation": "first"},
+                    {"name": "mood", "construct_name": "wellbeing", "aggregation": "mean"},
+                ],
+            },
         }
 
         df = pl.DataFrame({
-            "dimension": ["age", "age", "mood"],
+            "indicator": ["age", "age", "mood"],
             "value": [30, 31, 7.5],
             "timestamp": ["2024-01-01", "2024-01-02", "2024-01-01 10:00"],
-        }, schema={"dimension": pl.Utf8, "value": pl.Object, "timestamp": pl.Utf8})
+        }, schema={"indicator": pl.Utf8, "value": pl.Object, "timestamp": pl.Utf8})
 
         result = aggregate_worker_measurements([df], schema)
 
@@ -371,10 +370,10 @@ class TestAggregateWorkerMeasurements:
     def test_handles_unparseable_timestamps(self, daily_schema):
         """Rows with unparseable timestamps are filtered out."""
         df = pl.DataFrame({
-            "dimension": ["temperature", "temperature", "temperature"],
+            "indicator": ["temperature", "temperature", "temperature"],
             "value": [20.0, 22.0, 24.0],
             "timestamp": ["2024-01-01 10:00", "invalid-date", "2024-01-01 14:00"],
-        }, schema={"dimension": pl.Utf8, "value": pl.Object, "timestamp": pl.Utf8})
+        }, schema={"indicator": pl.Utf8, "value": pl.Object, "timestamp": pl.Utf8})
 
         result = aggregate_worker_measurements([df], daily_schema)
 
@@ -386,21 +385,24 @@ class TestAggregateWorkerMeasurements:
     def test_handles_boolean_values(self):
         """Boolean values are converted to 0/1 for aggregation."""
         schema = {
-            "dimensions": [
-                {
-                    "name": "is_active",
-                    "aggregation": "mean",
-                    "observability": "observed",
-                    "causal_granularity": "daily",
-                },
-            ]
+            "structural": {
+                "constructs": [
+                    {"name": "activity", "causal_granularity": "daily"},
+                ],
+                "edges": [],
+            },
+            "measurement": {
+                "indicators": [
+                    {"name": "is_active", "construct_name": "activity", "aggregation": "mean"},
+                ],
+            },
         }
 
         df = pl.DataFrame({
-            "dimension": ["is_active", "is_active", "is_active", "is_active"],
+            "indicator": ["is_active", "is_active", "is_active", "is_active"],
             "value": [True, False, True, True],
             "timestamp": ["2024-01-01 08:00", "2024-01-01 10:00", "2024-01-01 12:00", "2024-01-01 14:00"],
-        }, schema={"dimension": pl.Utf8, "value": pl.Object, "timestamp": pl.Utf8})
+        }, schema={"indicator": pl.Utf8, "value": pl.Object, "timestamp": pl.Utf8})
 
         result = aggregate_worker_measurements([df], schema)
 
@@ -408,38 +410,37 @@ class TestAggregateWorkerMeasurements:
         daily_df = result["daily"]
         assert daily_df["is_active"][0] == pytest.approx(0.75)
 
-    def test_outer_join_fills_missing_dimensions(self):
-        """Dimensions with no data for a time bucket get null values."""
+    def test_outer_join_fills_missing_indicators(self):
+        """Indicators with no data for a time bucket get null values."""
         schema = {
-            "dimensions": [
-                {
-                    "name": "dim_a",
-                    "aggregation": "mean",
-                    "observability": "observed",
-                    "causal_granularity": "daily",
-                },
-                {
-                    "name": "dim_b",
-                    "aggregation": "mean",
-                    "observability": "observed",
-                    "causal_granularity": "daily",
-                },
-            ]
+            "structural": {
+                "constructs": [
+                    {"name": "metric_a", "causal_granularity": "daily"},
+                    {"name": "metric_b", "causal_granularity": "daily"},
+                ],
+                "edges": [],
+            },
+            "measurement": {
+                "indicators": [
+                    {"name": "ind_a", "construct_name": "metric_a", "aggregation": "mean"},
+                    {"name": "ind_b", "construct_name": "metric_b", "aggregation": "mean"},
+                ],
+            },
         }
 
         df = pl.DataFrame({
-            "dimension": ["dim_a", "dim_a", "dim_b"],
+            "indicator": ["ind_a", "ind_a", "ind_b"],
             "value": [10.0, 20.0, 100.0],
             "timestamp": ["2024-01-01 10:00", "2024-01-02 10:00", "2024-01-01 10:00"],
-        }, schema={"dimension": pl.Utf8, "value": pl.Object, "timestamp": pl.Utf8})
+        }, schema={"indicator": pl.Utf8, "value": pl.Object, "timestamp": pl.Utf8})
 
         result = aggregate_worker_measurements([df], schema)
         daily_df = result["daily"].sort("time_bucket")
 
-        # 2024-01-01 has both dim_a=10 and dim_b=100
-        # 2024-01-02 has dim_a=20 but dim_b should be null
+        # 2024-01-01 has both ind_a=10 and ind_b=100
+        # 2024-01-02 has ind_a=20 but ind_b should be null
         assert daily_df.height == 2
         jan2 = daily_df.filter(pl.col("time_bucket").dt.day() == 2)
-        assert jan2["dim_a"][0] == pytest.approx(20.0)
-        assert jan2["dim_b"][0] is None
+        assert jan2["ind_a"][0] == pytest.approx(20.0)
+        assert jan2["ind_b"][0] is None
 
