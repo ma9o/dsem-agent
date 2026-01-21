@@ -1,29 +1,37 @@
 """Main causal inference pipeline.
 
 Orchestrates all stages from structure proposal to intervention analysis.
+
+Two-stage specification following Anderson & Gerbing (1988):
+- Stage 1a: Structural model (theory-driven, no data)
+- Stage 1b: Measurement model (data-driven operationalization)
 """
 
 from prefect import flow
 from prefect.utilities.annotations import unmapped
 
 from causal_agent.utils.data import (
-    resolve_input_path,
-    load_query,
     SAMPLE_CHUNKS,
+    load_query,
+    resolve_input_path,
 )
+
 from .stages import (
-    # Stage 1
+    # Stage 1a
+    propose_structural_model,
+    # Stage 1b
+    build_dsem_model,
     load_orchestrator_chunks,
-    propose_structure,
+    propose_measurement_model,
     # Stage 2
+    aggregate_measurements,
     load_worker_chunks,
     populate_dimensions,
-    aggregate_measurements,
     # Stage 3
     check_identifiability,
     # Stage 4
-    specify_model,
     elicit_priors,
+    specify_model,
     # Stage 5
     fit_model,
     run_interventions,
@@ -52,23 +60,49 @@ def causal_inference_pipeline(
     input_path = resolve_input_path(input_file)
     print(f"Using input file: {input_path.name}")
 
-    # Stage 1: Propose structure from sample (orchestrator chunk size)
+    # ══════════════════════════════════════════════════════════════════════════
+    # Stage 1a: Propose structural model (theory only, no data)
+    # ══════════════════════════════════════════════════════════════════════════
+    print("\n=== Stage 1a: Structural Model ===")
+    structural_model = propose_structural_model(question)
+    n_constructs = len(structural_model["constructs"])
+    n_edges = len(structural_model["edges"])
+    print(f"Proposed {n_constructs} constructs with {n_edges} causal edges")
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # Stage 1b: Propose measurement model (with data)
+    # ══════════════════════════════════════════════════════════════════════════
+    print("\n=== Stage 1b: Measurement Model ===")
     orchestrator_chunks = load_orchestrator_chunks(input_path)
     print(f"Loaded {len(orchestrator_chunks)} orchestrator chunks")
-    schema = propose_structure(question, orchestrator_chunks[:SAMPLE_CHUNKS])
 
+    measurement_model = propose_measurement_model(
+        question,
+        structural_model,
+        orchestrator_chunks[:SAMPLE_CHUNKS],
+    )
+    n_indicators = len(measurement_model["indicators"])
+    print(f"Proposed {n_indicators} indicators")
+
+    # Combine into full DSEM model
+    dsem_model = build_dsem_model(structural_model, measurement_model)
+
+    # ══════════════════════════════════════════════════════════════════════════
     # Stage 2: Parallel dimension population (worker chunk size)
-    # Each worker returns a WorkerResult with extractions as a Polars dataframe
+    # ══════════════════════════════════════════════════════════════════════════
+    print("\n=== Stage 2: Worker Extraction ===")
     worker_chunks = load_worker_chunks(input_path)
     print(f"Loaded {len(worker_chunks)} worker chunks")
+
+    # TODO: Update populate_dimensions to work with new DSEMModel schema
     worker_results = populate_dimensions.map(
         worker_chunks,
         question=unmapped(question),
-        schema=unmapped(schema),
+        schema=unmapped(dsem_model),
     )
 
     # Stage 2b: Aggregate measurements into time-series by causal_granularity
-    measurements = aggregate_measurements(worker_results, schema)
+    measurements = aggregate_measurements(worker_results, dsem_model)
     for granularity, df in measurements.items():
         n_dims = len([c for c in df.columns if c != "time_bucket"])
         if granularity == "time_invariant":
@@ -76,17 +110,25 @@ def causal_inference_pipeline(
         else:
             print(f"  {granularity}: {df.height} time points × {n_dims} dimensions")
 
-    # TODO: Stage 2c - Merge proposed dimensions from workers (disabled, proved brittle)
-
+    # ══════════════════════════════════════════════════════════════════════════
     # Stage 3: Identifiability
-    identifiable = check_identifiability(schema["dag"], target_effects)
-    # TODO: conditional logic for sensitivity analysis
+    # ══════════════════════════════════════════════════════════════════════════
+    print("\n=== Stage 3: Identifiability ===")
+    # TODO: Update to work with new DSEMModel - use structural.edges
+    identifiable = check_identifiability(dsem_model["structural"], target_effects)
 
+    # ══════════════════════════════════════════════════════════════════════════
     # Stage 4: Model specification
-    model_spec = specify_model(schema["dag"], schema)
+    # ══════════════════════════════════════════════════════════════════════════
+    print("\n=== Stage 4: Model Specification ===")
+    # TODO: Update to work with new DSEMModel
+    model_spec = specify_model(dsem_model["structural"], dsem_model)
     priors = elicit_priors(model_spec)
 
+    # ══════════════════════════════════════════════════════════════════════════
     # Stage 5: Fit and intervene
+    # ══════════════════════════════════════════════════════════════════════════
+    print("\n=== Stage 5: Inference ===")
     fitted = fit_model(model_spec, priors, worker_chunks)
     results = run_interventions(fitted, target_effects)
 
