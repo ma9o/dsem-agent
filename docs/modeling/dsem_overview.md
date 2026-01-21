@@ -1,36 +1,6 @@
 # DSEM Overview
 
-## Construct Taxonomy
-
-Constructs are classified along two dimensions:
-
-| Dimension | Values | Meaning |
-|-----------|--------|---------|
-| Role | Endogenous / Exogenous | Whether construct receives causal edges from other constructs |
-| Temporal status | Time-varying / Time-invariant | Whether construct changes within person over time |
-
-This yields four construct types:
-
-| Role | Temporal | AR Structure | Example |
-|------|----------|--------------|---------|
-| Exogenous | Time-varying | None (conditioned on) | Weather, day of week |
-| Exogenous | Time-invariant | None (conditioned on) | Age, gender, person intercept |
-| Endogenous | Time-varying | AR(1) | Mood, stress, sleep quality |
-| Endogenous | Time-invariant | None | Single-occasion outcome |
-
----
-
-## Constructs and Indicators
-
-**Constructs** are theoretical entities in the causal model (stress, mood, cognitive load). They live in the latent model and represent what we're reasoning about causally.
-
-**Indicators** are observed measurements (HRV readings, self-report scores, cortisol levels). They live in the measurement model and reflect their parent construct.
-
-**Key insight:** Whether a construct has indicators is not a property of the construct itself. It's determined by the measurement model:
-- A construct with indicators can be identified through those measurements
-- A construct without indicators may still be valid in the DAG, but whether the target causal effect is identifiable depends on the graph structure
-
-Identification is checked by DoWhy in Stage 3, not enforced at the schema level.
+For construct taxonomy, ontology, and autoregressive structure, see scope.md.
 
 ---
 
@@ -45,30 +15,6 @@ Identification is checked by DoWhy in Stage 3, not enforced at the schema level.
 - `aggregation`: how to collapse to the construct's causal timescale
 
 A construct may have zero, one, or multiple indicators. Multiple indicators enable measurement error separation via factor models.
-
----
-
-## Autoregressive Structure
-
-### Rule
-
-All endogenous time-varying constructs receive AR(1) at their native timescale.
-
-### Justification (Markov Property)
-
-Under the Markov assumption, the state at t-1 is a sufficient statistic for all prior history. Conditioning on Y_{t-1} renders Y_{t-2}, Y_{t-3}, ... conditionally independent of Y_t. Therefore:
-
-- AR(1) captures the relevant temporal dependence
-- Higher-order lags add parameters without explanatory benefit under Markovian dynamics
-- If residual autocorrelation persists, this suggests missing cross-lags or unmeasured confounders—not higher-order AR
-
-### Cost Asymmetry
-
-Including unnecessary AR(1) wastes one parameter (coefficient ≈ 0, harmless). Omitting necessary AR(1) biases standard errors and inflates cross-lag estimates (harmful). Default inclusion is the conservative choice.
-
-### Exogenous Constructs
-
-No AR structure modeled. We condition on observed values; their temporal structure is irrelevant to the causal model.
 
 ---
 

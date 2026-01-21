@@ -15,9 +15,10 @@ docs/
 ## Quick Links by Task
 
 **Understanding the modeling approach:**
-- Start with `modeling/dsem_overview.md` for what DSEMs are
-- Read `modeling/assumptions.md` for constraints on what can be modeled
-- Check `modeling/scope.md` for supported/excluded variable types
+- Start with `modeling/scope.md` for construct taxonomy, ontology, and what's in/out of scope
+- Read `modeling/dsem_overview.md` for temporal granularity and cross-timescale rules
+- Check `modeling/assumptions.md` for specific technical assumptions (A1-A9)
+- See `modeling/theory.md` for theoretical foundations (identification locality, correlated errors, SEM/Pearl bridge)
 
 **Implementing or modifying:**
 - `reference/schema.md` for Pydantic models and validation

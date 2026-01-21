@@ -28,7 +28,7 @@ The orchestrator LLM translates these informal queries into formal causal struct
 
 See [`docs/index.md`](docs/index.md) for the full documentation structure.
 
-- **[Modeling](docs/modeling/)** - Theoretical foundations: DSEM overview, assumptions, scope
+- **[Modeling](docs/modeling/)** - Theoretical foundations: scope, DSEM overview, assumptions, theory
 - **[Reference](docs/reference/)** - Technical specifications: schemas, pipeline stages
 - **[Guides](docs/guides/)** - Practical usage: quickstart, data workflow, running evals
 
@@ -42,7 +42,7 @@ causal-agent/
 │   ├── queries/       # Test queries for pipeline
 │   └── eval/          # Example DAGs for evals
 ├── docs/
-│   ├── modeling/      # Theoretical foundations (DSEM, assumptions, scope)
+│   ├── modeling/      # Theoretical foundations (scope, DSEM, assumptions, theory)
 │   ├── reference/     # Technical specs (schemas, pipeline)
 │   └── guides/        # Practical usage (quickstart, data, evals)
 ├── evals/             # Inspect AI evals (eval{N}_{name}.py) + scripts/
