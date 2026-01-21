@@ -91,7 +91,7 @@ def _get_indicator_info(dsem_model: dict) -> dict[str, dict]:
     """Extract indicator info from a DSEMModel dict.
 
     Args:
-        dsem_model: DSEMModel dict with structural.constructs and measurement.indicators
+        dsem_model: DSEMModel dict with latent.constructs and measurement.indicators
 
     Returns:
         Dict mapping indicator name to {dtype, construct_name}
@@ -108,7 +108,7 @@ def _get_indicator_info(dsem_model: dict) -> dict[str, dict]:
 
 def _get_all_construct_names(dsem_model: dict) -> set[str]:
     """Get all construct names from a DSEMModel dict."""
-    constructs = dsem_model.get("structural", {}).get("constructs", [])
+    constructs = dsem_model.get("latent", {}).get("constructs", [])
     return {c.get("name") for c in constructs}
 
 

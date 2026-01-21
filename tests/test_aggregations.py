@@ -175,7 +175,7 @@ class TestAggregateWorkerMeasurements:
     def daily_schema(self):
         """DSEMModel schema with daily causal_granularity constructs."""
         return {
-            "structural": {
+            "latent": {
                 "constructs": [
                     {"name": "body_temp", "causal_granularity": "daily"},
                     {"name": "activity", "causal_granularity": "daily"},
@@ -257,7 +257,7 @@ class TestAggregateWorkerMeasurements:
     def test_separates_different_granularities(self):
         """Indicators with different construct granularities go to separate DataFrames."""
         schema = {
-            "structural": {
+            "latent": {
                 "constructs": [
                     {"name": "hourly_construct", "causal_granularity": "hourly"},
                     {"name": "daily_construct", "causal_granularity": "daily"},
@@ -328,7 +328,7 @@ class TestAggregateWorkerMeasurements:
     def test_time_invariant_in_separate_key(self):
         """Time-invariant indicators go to 'time_invariant' key."""
         schema = {
-            "structural": {
+            "latent": {
                 "constructs": [
                     {"name": "demographics", "causal_granularity": None},  # time-invariant
                     {"name": "wellbeing", "causal_granularity": "daily"},
@@ -385,7 +385,7 @@ class TestAggregateWorkerMeasurements:
     def test_handles_boolean_values(self):
         """Boolean values are converted to 0/1 for aggregation."""
         schema = {
-            "structural": {
+            "latent": {
                 "constructs": [
                     {"name": "activity", "causal_granularity": "daily"},
                 ],
@@ -413,7 +413,7 @@ class TestAggregateWorkerMeasurements:
     def test_outer_join_fills_missing_indicators(self):
         """Indicators with no data for a time bucket get null values."""
         schema = {
-            "structural": {
+            "latent": {
                 "constructs": [
                     {"name": "metric_a", "causal_granularity": "daily"},
                     {"name": "metric_b", "causal_granularity": "daily"},

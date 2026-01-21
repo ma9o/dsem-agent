@@ -294,7 +294,7 @@ with col_input:
     json_input = st.text_area(
         "Paste DAG JSON",
         height=350,
-        placeholder='{\n  "structural": {\n    "constructs": [...],\n    "edges": [...]\n  },\n  "measurement": {\n    "indicators": [...]\n  }\n}',
+        placeholder='{\n  "latent": {\n    "constructs": [...],\n    "edges": [...]\n  },\n  "measurement": {\n    "indicators": [...]\n  }\n}',
     )
 
     st.markdown("---")

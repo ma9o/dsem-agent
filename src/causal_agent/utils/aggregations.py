@@ -168,13 +168,13 @@ def _get_indicator_metadata(dsem_model: dict) -> dict[str, dict]:
     """Extract indicator metadata from a DSEMModel dict.
 
     Args:
-        dsem_model: DSEMModel dict with structural.constructs and measurement.indicators
+        dsem_model: DSEMModel dict with latent.constructs and measurement.indicators
 
     Returns:
         Dict mapping indicator name to {causal_granularity, aggregation}
     """
     indicators = dsem_model.get("measurement", {}).get("indicators", [])
-    constructs = dsem_model.get("structural", {}).get("constructs", [])
+    constructs = dsem_model.get("latent", {}).get("constructs", [])
 
     # Build construct name -> causal_granularity map
     construct_granularity = {
@@ -215,7 +215,7 @@ def aggregate_worker_measurements(
     Args:
         dataframes: List of DataFrames from workers, each with columns
                    (indicator, value, timestamp).
-        dsem_model: DSEMModel dict with structural.constructs and measurement.indicators
+        dsem_model: DSEMModel dict with latent.constructs and measurement.indicators
 
     Returns:
         Dict mapping granularity -> DataFrame. Each DataFrame has 'time_bucket'

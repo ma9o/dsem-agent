@@ -2,7 +2,7 @@
 # Shared settings for all evals
 
 # Evaluation questions and their reference models
-# Each question maps to structural and dsem model files for staged evaluation.
+# Each question maps to latent and dsem model files for staged evaluation.
 questions:
   - id: 1
     question: "I want to resolve errors faster"

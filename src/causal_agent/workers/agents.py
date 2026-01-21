@@ -54,7 +54,7 @@ def _format_indicators(dsem_model: dict) -> str:
 
 def _get_outcome_description(dsem_model: dict) -> str:
     """Get the description of the outcome variable."""
-    constructs = dsem_model.get("structural", {}).get("constructs", [])
+    constructs = dsem_model.get("latent", {}).get("constructs", [])
     for c in constructs:
         if c.get("is_outcome"):
             return c.get("description", c.get("name", "outcome"))
