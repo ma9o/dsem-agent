@@ -85,9 +85,9 @@ Variables have an associated time granularity: `hourly`, `daily`, `weekly`, `mon
 
 The model operates at the finest endogenous outcome granularity. If the finest endogenous variable is daily, the model's time index is daily.
 
-### Aggregation at Dimension Level
+### Aggregation at Indicator Level
 
-Raw data may be finer-grained than the dimension's specified granularity. The orchestrator specifies an aggregation function defining how raw observations collapse to the dimension's timescale. Different aggregations encode different substantive meanings:
+Raw data may be finer-grained than the indicator's target granularity. The measurement model specifies an aggregation function for each indicator, defining how raw observations collapse to the construct's causal timescale. Different aggregations encode different substantive meanings:
 
 - Mean: average level matters
 - Sum: cumulative amount matters

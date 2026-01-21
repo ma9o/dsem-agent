@@ -51,7 +51,7 @@ causal-agent/
 │   │   ├── agents.py  # Stage 1a: structural model, Stage 1b: measurement model
 │   │   ├── prompts.py # LLM prompts for both stages
 │   │   └── schemas.py # Construct, Indicator, StructuralModel, MeasurementModel, DSEMModel
-│   ├── workers/       # Dimension extraction LLMs
+│   ├── workers/       # Indicator extraction LLMs
 │   ├── causal/        # DoWhy identifiability, sensitivity analysis
 │   ├── models/        # PyMC GLM specification
 │   ├── flows/         # Prefect pipeline + stages/
