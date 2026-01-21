@@ -1,69 +1,98 @@
 # Scope
 
-This framework models dynamics of time-varying constructs with optional time-invariant covariates and random effects. Time-varying constructs may be **latent** provided they have observed indicators (reflective measurement model). The framework does not support latent state-space models where latent states have no indicators (see Exclusions).
+<!--
+TODO: MASSIVE REFACTOR NEEDED
+
+Previous versions of this document had a confused understanding of scope. Here's the history:
+
+1. ORIGINAL SIN: We had an "Observability" dimension (Observed/Latent) in the construct taxonomy,
+   leading to 8 "types" (2 roles × 2 observabilities × 2 temporal statuses).
+
+2. THE CONFUSION: We excluded Types 3, 6, 7, 8 based on "identification concerns." But 
+   identification is DoWhy's job in Stage 3, not a schema-level exclusion. We were doing 
+   DoWhy's job at the wrong layer.
+
+3. THE REALIZATION: "Observed" just means "has ≥1 indicator." But whether a construct has 
+   indicators doesn't affect what the schema should accept—it affects whether DoWhy can 
+   identify your causal effect. That's a Stage 3 concern.
+
+4. THE FIX: Observability is not a schema-level concern. The schema accepts any DAG. 
+   DoWhy checks identification. The only dimensions that matter for the framework's 
+   behavior are Role (exogenous/endogenous) and Temporal (time-varying/time-invariant), 
+   because these determine AR structure.
+
+5. STATE-SPACE CONCERN: We worried about "unobserved + time-varying + AR" being a state-space
+   problem requiring Kalman filters. But this never arises because:
+   - If the unobserved construct blocks identification → DoWhy rejects, never reaches PyMC
+   - If it doesn't block identification → we estimate effects through observed paths, 
+     we don't estimate the latent state itself
+   - If someone wants latent state values → wrong tool, use dynamax/pykalman
+
+The refactor needs to touch:
+1. orchestrator/schemas.py - Remove any validation based on observability. Remove the 
+   Observability enum if it exists. Constructs just have role + temporal_status.
+2. orchestrator/prompts.py - Remove language about what constructs can/cannot be proposed.
+   The LLM can propose any DAG including unobserved confounders.
+3. Stage 3 (identifiability) - This is the gatekeeper now. DoWhy checks if target 
+   causal effect is identified given DAG structure and which constructs have indicators.
+4. dsem_overview.md - Remove observability discussion from variable taxonomy.
+5. Tests - Remove any tests asserting construct type rejections based on observability.
+6. MeasurementModel - The indicator→construct mapping is what makes a construct "observed."
+   This is data for DoWhy, not a schema constraint.
+-->
+
+This framework models dynamics of time-varying constructs with optional time-invariant covariates. This is a **causal effect estimation** framework.
 
 ---
 
-## Supported Combinations
+## Ontology
 
-| Type | Role | Observability | Temporal | Example | Use |
-|------|------|---------------|----------|---------|-----|
-| 1 | Exogenous | Observed | Time-varying | Weather, day of week, market index | External time-varying inputs |
-| 2 | Exogenous | Observed | Time-invariant | Age, gender, treatment arm | Between-person covariates |
-| 4 | Exogenous | Latent | Time-invariant | Person-specific intercept | Random effects for heterogeneity |
-| 5 | Endogenous | Observed | Time-varying | Daily mood, sleep quality | Core dynamic system |
-| 7* | Endogenous | Latent | Time-varying | Stress (with indicators: HRV, cortisol) | Latent constructs with reflective indicators |
+**Constructs** are theoretical entities in the causal model (stress, mood, cognitive load). They live in the structural model.
 
-*Type 7 requires observed indicators via a reflective measurement model. See dsem_overview.md for details.
+**Indicators** are observed data (HRV readings, self-report scores, cortisol levels). They live in the measurement model and reflect their parent construct via factor loadings.
 
 ---
 
-## Justifications for Supported Types
+## Construct Dimensions
 
-### Type 1: Exogenous, Observed, Time-varying
+Constructs are classified along two dimensions:
 
-External inputs affecting but not affected by the system. No autoregressive structure needed—we condition on observed values. Autocorrelation in exogenous variables exists but is irrelevant since we are not modeling their causes.
+| Dimension | Values | Meaning |
+|-----------|--------|---------|
+| **Role** | Exogenous / Endogenous | Whether construct receives causal edges from other constructs |
+| **Temporal** | Time-varying / Time-invariant | Whether construct changes within person over time |
 
-### Type 2: Exogenous, Observed, Time-invariant
+This yields four construct types:
 
-Between-person covariates. Can predict level-2 intercepts (e.g., "older participants have lower average sleep quality") or moderate within-person dynamics (e.g., "the stress→sleep coefficient is stronger for high-neuroticism individuals").
-
-### Type 4: Exogenous, Latent, Time-invariant
-
-Random effects capturing stable between-person heterogeneity. Identified by repeated observations within person—no indicators required. Partitions variance into between-person and within-person components. Not a causal node; a variance decomposition device that prevents conflation of between and within effects.
-
-### Type 5: Endogenous, Observed, Time-varying
-
-The core use case. Variables with dynamic structure: autoregressive inertia, cross-lagged effects, contemporaneous correlations. Directly observed, well-identified.
+| Role | Temporal | AR Structure | Example |
+|------|----------|--------------|---------|
+| Exogenous | Time-varying | None (conditioned on) | Weather, day of week |
+| Exogenous | Time-invariant | None (conditioned on) | Age, gender, person intercept |
+| Endogenous | Time-varying | AR(1) | Mood, stress, sleep quality |
+| Endogenous | Time-invariant | None | Single-occasion outcome |
 
 ---
 
-## Exclusions and Justifications
+## Autoregressive Structure
 
-The excluded latent types (Types 3, 8, and state-space Type 7) require strong structural assumptions for identification. Type 7 with reflective indicators IS supported—see above.
+**Endogenous time-varying constructs** receive AR(1). See assumptions.md A3.
 
-### Type 3: Exogenous, Latent, Time-varying
+**Indicators** do not receive AR structure. All temporal dependence in indicator series is attributed to the construct's dynamics. Indicator residuals are assumed iid (A8).
 
-An unobserved external shock varying over time. Excluded because identification requires either indicators (making it a factor) or strong structural assumptions. If such a variable is theorized, model it via observed proxy with acknowledged measurement error.
+**Exogenous constructs** do not receive AR structure—we condition on their values.
 
-### Type 6: Endogenous, Observed, Time-invariant
+---
 
-A single-occasion outcome. Not a dynamic modeling problem—use standard SEM. Mixing paradigms adds complexity without benefit.
+## Identification
 
-### Type 7 (State-Space): Endogenous, Latent, Time-varying WITHOUT Indicators
+Whether a causal effect is identified depends on the DAG structure and which constructs have indicators. This is checked by DoWhy in Stage 3, not enforced at the schema level.
 
-A latent state with its own dynamics but NO observed indicators (pure state-space / Kalman filter territory). Excluded because proper specification requires:
+The schema accepts any valid DAG. DoWhy determines if your target effect can be estimated.
 
-- Prior on initial state distribution
-- Prior on process variance (latent state evolution noise)
-- Prior on measurement variance (observation noise)
+---
 
-These parameters interact non-trivially. Process and measurement variance are notoriously difficult to disentangle without multiple indicators or strong domain-informed priors. An automated framework cannot reliably specify these.
+## Out of Scope
 
-**Note:** Type 7 WITH reflective indicators IS supported—see "Latent Time-Varying Constructs" section in dsem_overview.md. The distinction is:
-- **Supported:** Latent "stress" → observed indicators [HRV, cortisol, self-report]. Identified via factor model.
-- **Excluded:** Latent "true_mood" with no indicators, identified only through temporal dynamics. Requires state-space machinery.
+**Latent state filtering/smoothing.** If you want to estimate the values of a construct that has no indicators, that's a state-space problem. Use `dynamax`, `pykalman`, or similar tools.
 
-### Type 8: Endogenous, Latent, Time-invariant
-
-A person-level latent outcome caused by system dynamics. Double identification problem: latent and single observation per person. Not identified without indicators.
+This framework estimates **causal effects between constructs**, not latent state trajectories.
