@@ -23,7 +23,8 @@ from dataclasses import dataclass
 from inspect_ai import Task, task
 from inspect_ai.dataset import MemoryDataset, Sample
 from inspect_ai.scorer import Score, Target, mean, scorer, stderr
-from inspect_ai.solver import TaskState, system_message
+from inspect_ai.model import get_model
+from inspect_ai.solver import Generate, TaskState, solver, system_message
 
 from causal_agent.orchestrator.prompts import (
     MEASUREMENT_MODEL_SYSTEM,
@@ -33,6 +34,8 @@ from causal_agent.orchestrator.prompts import (
 from causal_agent.orchestrator.schemas import MeasurementModel, StructuralModel
 from causal_agent.utils.llm import make_validate_measurement_model_tool
 
+from causal_agent.utils.llm import get_generate_config, multi_turn_generate
+
 from evals.common import (
     extract_json_from_response,
     format_chunks,
@@ -40,7 +43,6 @@ from evals.common import (
     get_sample_chunks_orchestrator,
     load_eval_config,
     load_structural_model_by_question_id,
-    tool_assisted_generate,
 )
 
 # Load config for models
@@ -274,6 +276,43 @@ def measurement_model_scorer():
     return score
 
 
+def measurement_model_solver():
+    """Custom solver that creates the validation tool dynamically per-sample.
+
+    This is needed because each sample has a different structural model,
+    and the validation tool must check against the correct one.
+    """
+
+    @solver
+    def _solver():
+        async def solve(state: TaskState, generate: Generate) -> TaskState:
+            model = get_model()
+            config = get_generate_config()
+
+            # Get the structural model from this sample's metadata
+            structural_data = state.metadata.get("structural_model", {})
+            structural = StructuralModel(**structural_data)
+
+            # Create validation tool bound to this sample's structural model
+            tool = make_validate_measurement_model_tool(structural)
+
+            # Run multi-turn generation with tools
+            completion = await multi_turn_generate(
+                messages=list(state.messages),
+                model=model,
+                follow_ups=[MEASUREMENT_MODEL_REVIEW],
+                tools=[tool],
+                config=config,
+            )
+
+            state.output.completion = completion
+            return state
+
+        return solve
+
+    return _solver()
+
+
 @task
 def measurement_model_eval(
     n_chunks: int = 5,
@@ -295,20 +334,11 @@ def measurement_model_eval(
         seed: Random seed for chunk sampling (reproducibility)
         input_file: Specific preprocessed file name, or None for latest
     """
-    # Load a structural model to create the validation tool
-    # (We use the first question's structural model as representative)
-    questions = get_eval_questions()
-    structural_data = load_structural_model_by_question_id(questions[0]["id"])
-    structural = StructuralModel(**structural_data)
-
     return Task(
         dataset=create_eval_dataset(n_chunks=n_chunks, seed=seed, input_file=input_file),
         solver=[
             system_message(MEASUREMENT_MODEL_SYSTEM),
-            tool_assisted_generate(
-                tools=[make_validate_measurement_model_tool(structural)],
-                follow_ups=[MEASUREMENT_MODEL_REVIEW],
-            ),
+            measurement_model_solver(),
         ],
         scorer=measurement_model_scorer(),
     )
