@@ -30,9 +30,25 @@ In a formative model, indicators cause the construct (e.g., SES is "formed" by i
 
 ---
 
-## A2. Latent Time-Varying Constructs Require Indicators
+<!--
+## A2. Latent Time-Varying Constructs Require Indicators [COMMENTED OUT]
 
-**Assumption:** Latent time-varying constructs must have at least one observed indicator. Pure state-space models (latent dynamics with no indicators) are not supported.
+TODO: This assumption is too strict. Whether a latent construct without indicators is
+problematic depends on the DAG structure, not just whether it's time-varying.
+
+Specifically:
+- A latent confounder on a backdoor path IS problematic (blocks identification)
+- A latent mediator or collider may NOT be problematic (depending on query)
+
+This should be checked by DoWhy in Stage 3 using Pearl's identification rules
+(backdoor criterion, front-door criterion, do-calculus), not enforced unconditionally
+at schema validation time.
+
+The separate concern about state-space models (SSMs) and latent dynamics without
+indicators is valid but orthogonal - that's about temporal dynamics identification,
+not causal identification from DAG structure.
+
+**Original Assumption:** Latent time-varying constructs must have at least one observed indicator. Pure state-space models (latent dynamics with no indicators) are not supported.
 
 **Definition:**
 - **Supported:** Latent "stress" (time-varying) with indicators [HRV, cortisol, self-report]
@@ -44,6 +60,7 @@ In a formative model, indicators cause the construct (e.g., SES is "formed" by i
 - We avoid the process-vs-measurement variance disentanglement problem inherent in state-space models
 
 **Justification:** State-space models require specifying priors on initial state distribution, process variance, and measurement variance. These interact non-trivially and are difficult to disentangle without strong domain knowledge. By requiring indicators, we use the well-understood factor-analytic identification strategy instead.
+-->
 
 ---
 
@@ -126,7 +143,7 @@ The framework implements a two-stage workflow grounded in the structural equatio
 
 1. **Stage 1a (Latent Causal Structure):** The orchestrator LLM proposes a theoretical causal DAG over latent constructs based on domain knowledge alone—no data. This separates theoretical reasoning from operationalization.
 
-2. **Stage 1b (Measurement Model):** Given data, the orchestrator proposes observed indicators for each latent construct. Each latent must have ≥1 indicator satisfying the reflective measurement model (A1).
+2. **Stage 1b (Measurement Model):** Given data, the orchestrator proposes observed indicators for constructs that can be operationalized from the data. Indicators follow the reflective measurement model (A1). Constructs without indicators remain latent; DoWhy checks in Stage 3 whether this blocks causal identification.
 
 3. **Stage 3 (CFA Validation):** Confirmatory factor analysis validates that proposed indicators load on their intended latents and that the measurement model is identified.
 

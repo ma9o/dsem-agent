@@ -368,8 +368,8 @@ class TestDSEMModel:
         with pytest.raises(ValueError, match="references unknown construct 'unknown'"):
             DSEMModel(structural=structural, measurement=measurement)
 
-    def test_invalid_time_varying_without_indicator(self):
-        """Time-varying construct must have at least one indicator (A2)."""
+    def test_latent_construct_without_indicator_is_valid(self):
+        """Latent constructs without indicators are allowed (A2 deferred to DoWhy)."""
         structural = StructuralModel(
             constructs=[
                 self._make_construct("stress", "daily", Role.EXOGENOUS),
@@ -380,11 +380,13 @@ class TestDSEMModel:
         measurement = MeasurementModel(
             indicators=[
                 self._make_indicator("mood_rating", "mood"),
-                # Missing indicator for stress!
+                # stress has no indicator - it's a latent construct
             ]
         )
-        with pytest.raises(ValueError, match="Time-varying construct 'stress' has no indicators"):
-            DSEMModel(structural=structural, measurement=measurement)
+        # This should now be valid - DoWhy will check identification in Stage 3
+        dsem = DSEMModel(structural=structural, measurement=measurement)
+        assert len(dsem.structural.constructs) == 2
+        assert len(dsem.measurement.indicators) == 1
 
     def test_invalid_measurement_granularity_coarser_than_causal(self):
         """Indicator measurement_granularity must be finer than construct's causal_granularity."""
