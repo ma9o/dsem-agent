@@ -9,9 +9,8 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "dowhy>=0.14",
-    "dspy>=3.0.4",
     "google-genai>=1.56.0",
-    "inspect-ai>=0.3.153",
+    "inspect-ai>=0.3.162",
     "networkx>=3.6",
     "openai>=2.9.0",
     "polars>=1.35.2",
@@ -31,4 +30,5 @@ dev = [
     "streamlit>=1.52.2",
     "streamlit-agraph>=0.0.45",
     "watchdog>=6.0.0",
+    "dspy>=3.0.4",
 ]

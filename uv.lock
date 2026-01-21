@@ -454,7 +454,6 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "dowhy" },
-    { name = "dspy" },
     { name = "google-genai" },
     { name = "inspect-ai" },
     { name = "networkx" },
@@ -467,6 +466,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "dspy" },
     { name = "ipykernel" },
     { name = "pytest" },
     { name = "streamlit" },
@@ -477,9 +477,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "dowhy", specifier = ">=0.14" },
-    { name = "dspy", specifier = ">=3.0.4" },
     { name = "google-genai", specifier = ">=1.56.0" },
-    { name = "inspect-ai", specifier = ">=0.3.153" },
+    { name = "inspect-ai", specifier = ">=0.3.162" },
     { name = "networkx", specifier = ">=3.6" },
     { name = "openai", specifier = ">=2.9.0" },
     { name = "polars", specifier = ">=1.35.2" },
@@ -490,6 +489,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "dspy", specifier = ">=3.0.4" },
     { name = "ipykernel", specifier = ">=7.1.0" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "streamlit", specifier = ">=1.52.2" },
@@ -1765,7 +1765,7 @@ wheels = [
 
 [[package]]
 name = "inspect-ai"
-version = "0.3.153"
+version = "0.3.162"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aioboto3" },
@@ -1800,13 +1800,14 @@ dependencies = [
     { name = "sniffio" },
     { name = "tenacity" },
     { name = "textual" },
+    { name = "tiktoken" },
     { name = "typing-extensions" },
     { name = "universal-pathlib" },
     { name = "zipp" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/24/17/a0e0fcac481b1b708534ed819aa102fcf67a4a7d5b737dfc3ed2a6a5fa13/inspect_ai-0.3.153.tar.gz", hash = "sha256:fbb0a94c6b8efe6e9d6e5b5be5f6d9fb7adc44caf29416132d18a623b4bc2eee", size = 43383964, upload-time = "2025-12-06T03:36:29.095Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/75/39/67625dd34a93d12f0b365a2b64e1b03c47b5f13aee04531c72d8e028d1a8/inspect_ai-0.3.162.tar.gz", hash = "sha256:396486d9059a014e71bbfc7b6634529c8ec8921fb17e896fdc8f35753e192bf2", size = 43278635, upload-time = "2026-01-18T15:40:31.511Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c2/71/88b1eb51fd4b94b5dedac8c78b7b253dd68d4ee732231d8a430a8e58c073/inspect_ai-0.3.153-py3-none-any.whl", hash = "sha256:ec734c89809ef7934f66730388523cca052252a866533e97e83ad680155e9094", size = 34678469, upload-time = "2025-12-06T03:36:14.125Z" },
+    { url = "https://files.pythonhosted.org/packages/5a/eb/3ed4bdcdaba16faaa3c7e3425add4de2922672576afdd000e120206d8e71/inspect_ai-0.3.162-py3-none-any.whl", hash = "sha256:24a73d3b5288d8a05f8439907324be078b44bc945a1acf18aa7bd511851ae746", size = 34478286, upload-time = "2026-01-18T15:40:23.049Z" },
 ]
 
 [[package]]
