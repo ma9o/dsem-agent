@@ -2,381 +2,429 @@
   "latent": {
     "constructs": [
       {
-        "name": "compulsive_context_switching",
-        "description": "Frequency and intensity of involuntary shifting attention between tasks, apps, or activities despite intention to focus",
+        "name": "Novelty_Seeking_Trait",
+        "description": "Stable personality tendency to seek stimulation, variety, and new experiences",
+        "role": "exogenous",
+        "is_outcome": false,
+        "temporal_status": "time_invariant",
+        "causal_granularity": null
+      },
+      {
+        "name": "Work_Role_Fragmentation",
+        "description": "Degree to which job/role requires attending to multiple distinct responsibilities and domains",
+        "role": "exogenous",
+        "is_outcome": false,
+        "temporal_status": "time_invariant",
+        "causal_granularity": null
+      },
+      {
+        "name": "Context_Switching_Frequency",
+        "description": "How often one makes unplanned switches between tasks, apps, or attentional targets",
         "role": "endogenous",
         "is_outcome": true,
         "temporal_status": "time_varying",
-        "causal_granularity": "hourly"
+        "causal_granularity": "daily"
       },
       {
-        "name": "urge_to_switch",
-        "description": "Momentary craving or impulse to check something else, shift tasks, or seek new stimuli",
-        "role": "endogenous",
-        "is_outcome": false,
-        "temporal_status": "time_varying",
-        "causal_granularity": "hourly"
-      },
-      {
-        "name": "task_engagement",
-        "description": "Degree of absorption, flow, and sustained attention in current task",
-        "role": "endogenous",
-        "is_outcome": false,
-        "temporal_status": "time_varying",
-        "causal_granularity": "hourly"
-      },
-      {
-        "name": "current_emotional_state",
-        "description": "Present mood valence and arousal, including stress, anxiety, boredom, or frustration",
-        "role": "endogenous",
-        "is_outcome": false,
-        "temporal_status": "time_varying",
-        "causal_granularity": "hourly"
-      },
-      {
-        "name": "physical_state",
-        "description": "Bodily sensations including hunger, caffeine level, physical comfort, and restlessness",
-        "role": "endogenous",
-        "is_outcome": false,
-        "temporal_status": "time_varying",
-        "causal_granularity": "hourly"
-      },
-      {
-        "name": "metacognitive_awareness",
-        "description": "Real-time awareness of one's own attention state and switching behavior; mindfulness of when urges arise",
-        "role": "endogenous",
-        "is_outcome": false,
-        "temporal_status": "time_varying",
-        "causal_granularity": "hourly"
-      },
-      {
-        "name": "impulse_control_capacity",
-        "description": "Available self-regulation resources to resist impulses; executive function capacity that depletes through the day",
+        "name": "Sleep_Quality",
+        "description": "Restorative quality of sleep the previous night",
         "role": "endogenous",
         "is_outcome": false,
         "temporal_status": "time_varying",
         "causal_granularity": "daily"
       },
       {
-        "name": "cognitive_fatigue",
-        "description": "Mental exhaustion and reduced cognitive resources from sustained effort or poor recovery",
+        "name": "General_Stress_Level",
+        "description": "Overall psychological stress and pressure experienced",
         "role": "endogenous",
         "is_outcome": false,
         "temporal_status": "time_varying",
         "causal_granularity": "daily"
       },
       {
-        "name": "overall_stress_level",
-        "description": "Background level of perceived stress from work, life demands, and unfinished tasks",
+        "name": "Cognitive_Fatigue",
+        "description": "Mental tiredness and depleted cognitive resources",
         "role": "endogenous",
         "is_outcome": false,
         "temporal_status": "time_varying",
         "causal_granularity": "daily"
       },
       {
-        "name": "social_connection_need",
-        "description": "Craving for social interaction, validation, or fear of missing out on social information",
+        "name": "Self_Regulation_Capacity",
+        "description": "Available capacity to control impulses and regulate behavior",
         "role": "endogenous",
         "is_outcome": false,
         "temporal_status": "time_varying",
         "causal_granularity": "daily"
       },
       {
-        "name": "habit_strength",
-        "description": "Automaticity and entrenchment of context-switching as a behavioral pattern; reinforced through repetition",
+        "name": "Perceived_Task_Overwhelm",
+        "description": "Feeling of having too much to do and being unable to manage it all",
         "role": "endogenous",
         "is_outcome": false,
         "temporal_status": "time_varying",
-        "causal_granularity": "weekly"
+        "causal_granularity": "daily"
       },
       {
-        "name": "sleep_quality",
-        "description": "Quality and quantity of sleep from the previous night",
-        "role": "exogenous",
+        "name": "Physical_Energy",
+        "description": "Bodily energy and vitality level",
+        "role": "endogenous",
         "is_outcome": false,
         "temporal_status": "time_varying",
         "causal_granularity": "daily"
       },
       {
-        "name": "notification_exposure",
-        "description": "Frequency and intrusiveness of external interruptions from devices, apps, and alerts",
-        "role": "exogenous",
-        "is_outcome": false,
-        "temporal_status": "time_varying",
-        "causal_granularity": "hourly"
-      },
-      {
-        "name": "environmental_cues",
-        "description": "Visual presence and accessibility of distracting devices, browser tabs, or applications",
-        "role": "exogenous",
-        "is_outcome": false,
-        "temporal_status": "time_varying",
-        "causal_granularity": "hourly"
-      },
-      {
-        "name": "task_difficulty_skill_match",
-        "description": "Whether current task difficulty matches skill level - optimal creates flow, mismatch causes boredom or overwhelm",
-        "role": "exogenous",
-        "is_outcome": false,
-        "temporal_status": "time_varying",
-        "causal_granularity": "hourly"
-      },
-      {
-        "name": "task_intrinsic_interest",
-        "description": "Inherent appeal and engaging qualities of the current task independent of external rewards",
-        "role": "exogenous",
-        "is_outcome": false,
-        "temporal_status": "time_varying",
-        "causal_granularity": "hourly"
-      },
-      {
-        "name": "time_pressure",
-        "description": "Perceived urgency and deadline pressure from pending commitments and obligations",
-        "role": "exogenous",
+        "name": "Switching_Habit_Strength",
+        "description": "Automaticity and strength of habitual context-switching behavior patterns",
+        "role": "endogenous",
         "is_outcome": false,
         "temporal_status": "time_varying",
         "causal_granularity": "daily"
       },
       {
-        "name": "trait_impulsivity",
-        "description": "Dispositional tendency toward impulsive behavior and difficulty delaying gratification",
-        "role": "exogenous",
+        "name": "Task_Engagement_Level",
+        "description": "Degree of absorption, focus, and involvement in the current task",
+        "role": "endogenous",
         "is_outcome": false,
-        "temporal_status": "time_invariant",
-        "causal_granularity": null
+        "temporal_status": "time_varying",
+        "causal_granularity": "daily"
       },
       {
-        "name": "novelty_seeking_tendency",
-        "description": "Trait preference for new stimuli, variety, and stimulation",
-        "role": "exogenous",
+        "name": "Task_Aversiveness",
+        "description": "How unpleasant, difficult, or unappealing current tasks feel",
+        "role": "endogenous",
         "is_outcome": false,
-        "temporal_status": "time_invariant",
-        "causal_granularity": null
+        "temporal_status": "time_varying",
+        "causal_granularity": "daily"
       },
       {
-        "name": "frustration_tolerance",
-        "description": "Dispositional ability to persist through difficulty, boredom, and discomfort without escaping",
-        "role": "exogenous",
+        "name": "Boredom_Understimulation",
+        "description": "Feeling understimulated, lacking interest, or insufficiently engaged",
+        "role": "endogenous",
         "is_outcome": false,
-        "temporal_status": "time_invariant",
-        "causal_granularity": null
+        "temporal_status": "time_varying",
+        "causal_granularity": "daily"
+      },
+      {
+        "name": "Anxious_Restlessness",
+        "description": "Jittery anxiety, inability to sit still, urge to do something else",
+        "role": "endogenous",
+        "is_outcome": false,
+        "temporal_status": "time_varying",
+        "causal_granularity": "daily"
+      },
+      {
+        "name": "Task_Clarity",
+        "description": "Knowing clearly what to do next and how to proceed with work",
+        "role": "endogenous",
+        "is_outcome": false,
+        "temporal_status": "time_varying",
+        "causal_granularity": "daily"
+      },
+      {
+        "name": "Notification_Interruption_Load",
+        "description": "Amount of external notifications, pings, and interruptions received",
+        "role": "endogenous",
+        "is_outcome": false,
+        "temporal_status": "time_varying",
+        "causal_granularity": "daily"
+      },
+      {
+        "name": "Digital_Environment_Friction",
+        "description": "Barriers and friction built into digital environment that make switching harder",
+        "role": "endogenous",
+        "is_outcome": false,
+        "temporal_status": "time_varying",
+        "causal_granularity": "daily"
       }
     ],
     "edges": [
       {
-        "cause": "urge_to_switch",
-        "effect": "compulsive_context_switching",
-        "description": "Strong urges to switch directly precipitate switching behavior when not inhibited",
+        "cause": "Task_Engagement_Level",
+        "effect": "Context_Switching_Frequency",
+        "description": "Higher task engagement reduces the pull toward switching contexts",
         "lagged": false
       },
       {
-        "cause": "task_engagement",
-        "effect": "compulsive_context_switching",
-        "description": "High engagement and flow states protect against switching; low engagement creates vulnerability",
+        "cause": "Self_Regulation_Capacity",
+        "effect": "Context_Switching_Frequency",
+        "description": "Greater self-regulation allows resisting impulses to switch",
         "lagged": false
       },
       {
-        "cause": "metacognitive_awareness",
-        "effect": "compulsive_context_switching",
-        "description": "Awareness of urges and attention state enables conscious choice rather than automatic switching",
+        "cause": "Switching_Habit_Strength",
+        "effect": "Context_Switching_Frequency",
+        "description": "Stronger habits make switching more automatic and frequent",
         "lagged": false
       },
       {
-        "cause": "notification_exposure",
-        "effect": "compulsive_context_switching",
-        "description": "Notifications can trigger automatic reflexive attention shifts bypassing deliberation",
+        "cause": "Anxious_Restlessness",
+        "effect": "Context_Switching_Frequency",
+        "description": "Restless anxiety drives seeking relief through switching",
         "lagged": false
       },
       {
-        "cause": "current_emotional_state",
-        "effect": "urge_to_switch",
-        "description": "Negative emotions like anxiety, boredom, and frustration increase urge to escape into distraction",
+        "cause": "Boredom_Understimulation",
+        "effect": "Context_Switching_Frequency",
+        "description": "Boredom drives seeking novelty through switching",
         "lagged": false
       },
       {
-        "cause": "current_emotional_state",
-        "effect": "task_engagement",
-        "description": "Negative emotional states impair concentration and reduce task absorption",
+        "cause": "Notification_Interruption_Load",
+        "effect": "Context_Switching_Frequency",
+        "description": "More notifications trigger more context switches",
         "lagged": false
       },
       {
-        "cause": "task_difficulty_skill_match",
-        "effect": "task_engagement",
-        "description": "Optimal challenge-skill balance creates flow; mismatch causes boredom or overwhelm",
+        "cause": "Digital_Environment_Friction",
+        "effect": "Context_Switching_Frequency",
+        "description": "Higher friction makes switching more effortful and less frequent",
         "lagged": false
       },
       {
-        "cause": "task_intrinsic_interest",
-        "effect": "task_engagement",
-        "description": "Inherently interesting tasks naturally capture and sustain attention",
-        "lagged": false
-      },
-      {
-        "cause": "task_intrinsic_interest",
-        "effect": "urge_to_switch",
-        "description": "Boring tasks increase craving for more stimulating alternatives",
-        "lagged": false
-      },
-      {
-        "cause": "notification_exposure",
-        "effect": "urge_to_switch",
-        "description": "Each notification creates a curiosity-driven urge to check and respond",
-        "lagged": false
-      },
-      {
-        "cause": "environmental_cues",
-        "effect": "urge_to_switch",
-        "description": "Visible distractors like open tabs and nearby phone cue conditioned switching urges",
-        "lagged": false
-      },
-      {
-        "cause": "physical_state",
-        "effect": "current_emotional_state",
-        "description": "Hunger, caffeine crashes, and discomfort worsen mood and increase irritability",
-        "lagged": false
-      },
-      {
-        "cause": "physical_state",
-        "effect": "metacognitive_awareness",
-        "description": "Physical discomfort and restlessness reduce capacity for mindful attention",
-        "lagged": false
-      },
-      {
-        "cause": "cognitive_fatigue",
-        "effect": "impulse_control_capacity",
-        "description": "Mental exhaustion depletes self-regulation resources needed to resist urges",
-        "lagged": false
-      },
-      {
-        "cause": "overall_stress_level",
-        "effect": "cognitive_fatigue",
-        "description": "Chronic stress accelerates mental exhaustion and depletes cognitive resources",
-        "lagged": false
-      },
-      {
-        "cause": "time_pressure",
-        "effect": "overall_stress_level",
-        "description": "Deadline pressure and urgency contribute to elevated stress levels",
-        "lagged": false
-      },
-      {
-        "cause": "overall_stress_level",
-        "effect": "social_connection_need",
-        "description": "Stress increases desire for social support and connection-seeking behavior",
-        "lagged": false
-      },
-      {
-        "cause": "sleep_quality",
-        "effect": "cognitive_fatigue",
-        "description": "Poor sleep leads to impaired cognitive recovery and daytime fatigue",
-        "lagged": false
-      },
-      {
-        "cause": "sleep_quality",
-        "effect": "impulse_control_capacity",
-        "description": "Sleep deprivation directly impairs prefrontal cortex function and self-control",
-        "lagged": false
-      },
-      {
-        "cause": "impulse_control_capacity",
-        "effect": "compulsive_context_switching",
-        "description": "Higher executive control capacity enables resisting switching urges",
+        "cause": "Novelty_Seeking_Trait",
+        "effect": "Context_Switching_Frequency",
+        "description": "Higher novelty-seeking increases baseline tendency toward switching",
         "lagged": true
       },
       {
-        "cause": "impulse_control_capacity",
-        "effect": "urge_to_switch",
-        "description": "Low self-control capacity amplifies experienced urge intensity",
+        "cause": "Task_Aversiveness",
+        "effect": "Context_Switching_Frequency",
+        "description": "More aversive tasks increase escape-motivated switching",
+        "lagged": false
+      },
+      {
+        "cause": "General_Stress_Level",
+        "effect": "Sleep_Quality",
+        "description": "Higher stress impairs sleep quality",
         "lagged": true
       },
       {
-        "cause": "cognitive_fatigue",
-        "effect": "task_engagement",
-        "description": "Mental exhaustion reduces ability to maintain focus and enter flow states",
+        "cause": "Context_Switching_Frequency",
+        "effect": "Sleep_Quality",
+        "description": "Overstimulation from switching disrupts sleep restoration",
         "lagged": true
       },
       {
-        "cause": "cognitive_fatigue",
-        "effect": "metacognitive_awareness",
-        "description": "Fatigue impairs meta-awareness and makes automatic behavior more likely",
+        "cause": "Sleep_Quality",
+        "effect": "General_Stress_Level",
+        "description": "Poor sleep increases stress reactivity and baseline stress",
+        "lagged": false
+      },
+      {
+        "cause": "Perceived_Task_Overwhelm",
+        "effect": "General_Stress_Level",
+        "description": "Feeling overwhelmed directly increases stress",
+        "lagged": false
+      },
+      {
+        "cause": "Work_Role_Fragmentation",
+        "effect": "General_Stress_Level",
+        "description": "Fragmented roles with multiple demands create ongoing stress",
         "lagged": true
       },
       {
-        "cause": "overall_stress_level",
-        "effect": "current_emotional_state",
-        "description": "High background stress creates anxious irritable emotional baseline",
+        "cause": "Sleep_Quality",
+        "effect": "Cognitive_Fatigue",
+        "description": "Poor sleep leads to starting the day already fatigued",
+        "lagged": false
+      },
+      {
+        "cause": "General_Stress_Level",
+        "effect": "Cognitive_Fatigue",
+        "description": "Chronic stress depletes cognitive resources",
+        "lagged": false
+      },
+      {
+        "cause": "Context_Switching_Frequency",
+        "effect": "Cognitive_Fatigue",
+        "description": "Frequent switching is cognitively expensive and depleting",
         "lagged": true
       },
       {
-        "cause": "sleep_quality",
-        "effect": "current_emotional_state",
-        "description": "Poor sleep increases negative affect, irritability, and emotional reactivity",
+        "cause": "Physical_Energy",
+        "effect": "Cognitive_Fatigue",
+        "description": "Low physical energy contributes to mental fatigue",
+        "lagged": false
+      },
+      {
+        "cause": "Sleep_Quality",
+        "effect": "Self_Regulation_Capacity",
+        "description": "Good sleep restores self-regulation resources",
+        "lagged": false
+      },
+      {
+        "cause": "Cognitive_Fatigue",
+        "effect": "Self_Regulation_Capacity",
+        "description": "Mental fatigue depletes self-regulation capacity",
+        "lagged": false
+      },
+      {
+        "cause": "Physical_Energy",
+        "effect": "Self_Regulation_Capacity",
+        "description": "Physical energy supports self-regulation efforts",
+        "lagged": false
+      },
+      {
+        "cause": "General_Stress_Level",
+        "effect": "Self_Regulation_Capacity",
+        "description": "Stress depletes self-regulation resources",
+        "lagged": false
+      },
+      {
+        "cause": "Work_Role_Fragmentation",
+        "effect": "Perceived_Task_Overwhelm",
+        "description": "Fragmented roles with many domains create overwhelm",
         "lagged": true
       },
       {
-        "cause": "sleep_quality",
-        "effect": "physical_state",
-        "description": "Sleep quality affects physical energy, alertness, and bodily comfort",
+        "cause": "Context_Switching_Frequency",
+        "effect": "Perceived_Task_Overwhelm",
+        "description": "Switching prevents task completion, accumulating unfinished work",
         "lagged": true
       },
       {
-        "cause": "social_connection_need",
-        "effect": "urge_to_switch",
-        "description": "Unmet social needs create urges to check social media and communications",
+        "cause": "Sleep_Quality",
+        "effect": "Physical_Energy",
+        "description": "Good sleep restores physical energy",
+        "lagged": false
+      },
+      {
+        "cause": "Context_Switching_Frequency",
+        "effect": "Switching_Habit_Strength",
+        "description": "Each switching episode reinforces and strengthens the habit",
         "lagged": true
       },
       {
-        "cause": "habit_strength",
-        "effect": "compulsive_context_switching",
-        "description": "Strong habits make switching automatic, bypassing conscious deliberation",
+        "cause": "Task_Clarity",
+        "effect": "Task_Engagement_Level",
+        "description": "Clear understanding of what to do enables deeper engagement",
+        "lagged": false
+      },
+      {
+        "cause": "Task_Aversiveness",
+        "effect": "Task_Engagement_Level",
+        "description": "Aversive tasks reduce willingness to engage",
+        "lagged": false
+      },
+      {
+        "cause": "Cognitive_Fatigue",
+        "effect": "Task_Engagement_Level",
+        "description": "Mental fatigue impairs ability to engage deeply",
+        "lagged": false
+      },
+      {
+        "cause": "Physical_Energy",
+        "effect": "Task_Engagement_Level",
+        "description": "Physical energy supports sustained engagement",
+        "lagged": false
+      },
+      {
+        "cause": "Boredom_Understimulation",
+        "effect": "Task_Engagement_Level",
+        "description": "Boredom reflects and causes disengagement from tasks",
+        "lagged": false
+      },
+      {
+        "cause": "Anxious_Restlessness",
+        "effect": "Task_Engagement_Level",
+        "description": "Restless state interferes with focused engagement",
+        "lagged": false
+      },
+      {
+        "cause": "Cognitive_Fatigue",
+        "effect": "Task_Aversiveness",
+        "description": "When tired, tasks feel more difficult and aversive",
+        "lagged": false
+      },
+      {
+        "cause": "General_Stress_Level",
+        "effect": "Task_Aversiveness",
+        "description": "Stress magnifies negative perception of tasks",
+        "lagged": false
+      },
+      {
+        "cause": "Perceived_Task_Overwhelm",
+        "effect": "Task_Aversiveness",
+        "description": "Overwhelm makes individual tasks feel more daunting",
+        "lagged": false
+      },
+      {
+        "cause": "Task_Clarity",
+        "effect": "Task_Aversiveness",
+        "description": "Unclear tasks feel more aversive due to uncertainty",
+        "lagged": false
+      },
+      {
+        "cause": "Novelty_Seeking_Trait",
+        "effect": "Boredom_Understimulation",
+        "description": "High novelty seekers are more prone to boredom",
         "lagged": true
       },
       {
-        "cause": "habit_strength",
-        "effect": "urge_to_switch",
-        "description": "Entrenched habits create conditioned urges in response to environmental cues",
-        "lagged": true
+        "cause": "Task_Clarity",
+        "effect": "Boredom_Understimulation",
+        "description": "Clear tasks provide direction that reduces boredom",
+        "lagged": false
       },
       {
-        "cause": "trait_impulsivity",
-        "effect": "impulse_control_capacity",
-        "description": "Higher trait impulsivity means lower baseline capacity for impulse control",
-        "lagged": true
+        "cause": "Task_Aversiveness",
+        "effect": "Boredom_Understimulation",
+        "description": "Tedious aversive tasks create boredom",
+        "lagged": false
       },
       {
-        "cause": "novelty_seeking_tendency",
-        "effect": "urge_to_switch",
-        "description": "High novelty seekers experience stronger urges for new stimulation",
-        "lagged": true
+        "cause": "General_Stress_Level",
+        "effect": "Anxious_Restlessness",
+        "description": "Stress manifests as anxious, restless state",
+        "lagged": false
       },
       {
-        "cause": "frustration_tolerance",
-        "effect": "task_engagement",
-        "description": "Higher frustration tolerance enables sustained engagement through difficult or boring periods",
-        "lagged": true
+        "cause": "Perceived_Task_Overwhelm",
+        "effect": "Anxious_Restlessness",
+        "description": "Overwhelm creates anxiety and restless urge to act",
+        "lagged": false
       },
       {
-        "cause": "compulsive_context_switching",
-        "effect": "current_emotional_state",
-        "description": "Excessive switching leads to guilt, frustration, and self-criticism",
-        "lagged": true
+        "cause": "Notification_Interruption_Load",
+        "effect": "Anxious_Restlessness",
+        "description": "Constant notifications create vigilant, restless state",
+        "lagged": false
       },
       {
-        "cause": "compulsive_context_switching",
-        "effect": "cognitive_fatigue",
-        "description": "Frequent switching depletes cognitive resources and accelerates fatigue",
-        "lagged": true
+        "cause": "Sleep_Quality",
+        "effect": "Anxious_Restlessness",
+        "description": "Poor sleep increases anxiety reactivity",
+        "lagged": false
       },
       {
-        "cause": "compulsive_context_switching",
-        "effect": "overall_stress_level",
-        "description": "Switching reduces productivity, creating accumulated work and deadline pressure",
-        "lagged": true
+        "cause": "Cognitive_Fatigue",
+        "effect": "Anxious_Restlessness",
+        "description": "Fatigue reduces emotional regulation, increasing restlessness",
+        "lagged": false
       },
       {
-        "cause": "compulsive_context_switching",
-        "effect": "habit_strength",
-        "description": "Each switch reinforces the habitual pattern through neural pathway strengthening",
+        "cause": "Cognitive_Fatigue",
+        "effect": "Task_Clarity",
+        "description": "Mental fatigue impairs clear thinking about tasks",
+        "lagged": false
+      },
+      {
+        "cause": "Perceived_Task_Overwhelm",
+        "effect": "Task_Clarity",
+        "description": "Overwhelm clouds judgment about what to prioritize",
+        "lagged": false
+      },
+      {
+        "cause": "Digital_Environment_Friction",
+        "effect": "Notification_Interruption_Load",
+        "description": "Higher friction environments reduce notification exposure",
+        "lagged": false
+      },
+      {
+        "cause": "Self_Regulation_Capacity",
+        "effect": "Digital_Environment_Friction",
+        "description": "Self-regulation enables proactive environment design",
         "lagged": true
       }
     ]
@@ -384,276 +432,244 @@
   "measurement": {
     "indicators": [
       {
-        "name": "topic_switches_count",
-        "construct": "compulsive_context_switching",
-        "how_to_measure": "Count the number of times the browsing topic changes to a clearly unrelated subject within this hour. A topic switch occurs when consecutive searches/visits shift to unrelated content (e.g., from 'haskell programming' to 'restaurants sicily'). Count each distinct topic transition as 1.",
-        "measurement_granularity": "hourly",
+        "name": "topic_switch_count",
+        "construct": "Context_Switching_Frequency",
+        "how_to_measure": "Count the number of times the browsing topic changes substantially. A topic switch occurs when a search or visit is about a clearly different subject from the previous 2-3 activities. Example: 'ketamine research' to 'mobile phone plans' = 1 switch. 'ketamine effects' to 'ketamine dosing' = NOT a switch (same topic). Count each distinct topic transition.",
+        "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "search_frequency",
-        "construct": "compulsive_context_switching",
-        "how_to_measure": "Count the total number of [search] entries within this hour. Each search query counts as 1 regardless of topic.",
-        "measurement_granularity": "hourly",
+        "name": "unique_topic_domains",
+        "construct": "Context_Switching_Frequency",
+        "how_to_measure": "Count distinct topical domains explored during the day. Categorize all activity into broad domains: programming/tech, health/medical, travel/planning, news/current-events, entertainment/music, shopping, food/restaurants, academic/research, social-media, personal-admin. Count how many distinct domains appear.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "max"
+      },
+      {
+        "name": "late_night_activity_count",
+        "construct": "Sleep_Quality",
+        "how_to_measure": "Count the number of browsing activities (searches + page visits) occurring between 11:00 PM and 5:00 AM. If no activity in this window, count is 0.",
+        "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "abandoned_visit_count",
-        "construct": "urge_to_switch",
-        "how_to_measure": "Count [visit] entries that are immediately followed by an unrelated action within 2 minutes (based on timestamps visible in this hour's data). These represent visits the user quickly abandoned. Each such visit counts as 1.",
-        "measurement_granularity": "hourly",
+        "name": "early_morning_activity_count",
+        "construct": "Sleep_Quality",
+        "how_to_measure": "Count browsing activities occurring between 5:00 AM and 7:00 AM. Very early activity may indicate sleep disturbance. If no activity in this window, count is 0.",
+        "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "curiosity_driven_searches",
-        "construct": "urge_to_switch",
-        "how_to_measure": "Count searches that appear exploratory or tangential - Wikipedia lookups on unrelated topics, random definition searches, curiosity questions that don't connect to the surrounding activity. Each such search counts as 1.",
-        "measurement_granularity": "hourly",
+        "name": "health_anxiety_searches",
+        "construct": "General_Stress_Level",
+        "how_to_measure": "Count searches and visits related to: health symptoms, medications, medical conditions, anxiety, stress management, mental health topics, drugs for mood/anxiety. Example: 'ketamine depression' or 'sleep problems' each count as 1.",
+        "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "coherent_session_duration",
-        "construct": "task_engagement",
-        "how_to_measure": "For each coherent topic cluster (consecutive entries on the same subject matter), calculate the duration in minutes from first to last entry timestamp. Record the duration for each cluster found in this hour.",
-        "measurement_granularity": "hourly",
+        "name": "erratic_browsing_episodes",
+        "construct": "General_Stress_Level",
+        "how_to_measure": "Count instances of very rapid topic switching: 3+ different topics explored within a 5-minute window with no apparent connection. Each such episode counts as 1.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum"
+      },
+      {
+        "name": "scattered_activity_count",
+        "construct": "Cognitive_Fatigue",
+        "how_to_measure": "Count activities that appear disconnected from surrounding context - single searches or visits on a topic with no follow-up, sandwiched between unrelated activities. Each isolated, unfocused activity = 1.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum"
+      },
+      {
+        "name": "search_refinement_count",
+        "construct": "Cognitive_Fatigue",
+        "how_to_measure": "Count instances where a search is immediately followed (within 2 minutes) by a modified version of the same query, indicating difficulty formulating clear searches. Example: 'haskell fold' then 'haskell foldr' then 'foldr foldl difference' = 2 refinements.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum"
+      },
+      {
+        "name": "distraction_site_visits",
+        "construct": "Self_Regulation_Capacity",
+        "how_to_measure": "Count visits to entertainment and distraction sites: Reddit, YouTube (non-educational), Twitter/X, Instagram, Facebook, TikTok, entertainment news, gaming sites. Each page visit to these domains counts as 1. Note: Higher counts indicate LOWER self-regulation.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum"
+      },
+      {
+        "name": "sustained_focus_sessions",
+        "construct": "Self_Regulation_Capacity",
+        "how_to_measure": "Count sessions where 5+ consecutive activities remain on the same topic for 15+ minutes. Example: 8 consecutive Haskell searches/docs over 25 minutes = 1 sustained session. Higher counts indicate better self-regulation.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum"
+      },
+      {
+        "name": "topic_breadth_per_session",
+        "construct": "Perceived_Task_Overwhelm",
+        "how_to_measure": "For the main browsing session of the day, count how many distinct topics were explored. A topic is a coherent subject area (e.g., 'Haskell learning', 'travel planning Sicily', 'phone shopping'). High breadth indicates juggling many concerns.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "max"
+      },
+      {
+        "name": "incomplete_explorations",
+        "construct": "Perceived_Task_Overwhelm",
+        "how_to_measure": "Count topics that were briefly touched (1-2 activities only) then abandoned without apparent resolution. Example: single search about 'redis' with no follow-up = 1 incomplete exploration.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum"
+      },
+      {
+        "name": "active_hours_span",
+        "construct": "Physical_Energy",
+        "how_to_measure": "Record the number of hours between first and last browsing activity of the day as decimal hours (e.g., 10.5). If only one activity, record 0.",
+        "measurement_granularity": "daily",
         "measurement_dtype": "continuous",
         "aggregation": "max"
       },
       {
-        "name": "topic_depth_entries",
-        "construct": "task_engagement",
-        "how_to_measure": "For each coherent topic cluster (consecutive searches/visits on same subject), count the number of entries in that cluster. Record the count for each cluster found in this hour.",
-        "measurement_granularity": "hourly",
+        "name": "total_activity_count",
+        "construct": "Physical_Energy",
+        "how_to_measure": "Count the total number of browsing activities (searches + page visits) for the day. Each search query and each page visit counts as 1.",
+        "measurement_granularity": "daily",
         "measurement_dtype": "count",
+        "aggregation": "sum"
+      },
+      {
+        "name": "habitual_site_returns",
+        "construct": "Switching_Habit_Strength",
+        "how_to_measure": "Count sites visited 3+ separate times during the day with gaps (30+ minutes) between visits. For each site meeting this criterion (e.g., Reddit visited at 9am, 11am, 3pm), add 1 to the count.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum"
+      },
+      {
+        "name": "topic_return_cycles",
+        "construct": "Switching_Habit_Strength",
+        "how_to_measure": "Count instances where a topic is visited, abandoned for a different topic, then returned to later. Example: ketamine research then phone plans then ketamine again = 1 return cycle. Each return to a previously-abandoned topic counts as 1.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum"
+      },
+      {
+        "name": "deep_exploration_count",
+        "construct": "Task_Engagement_Level",
+        "how_to_measure": "Count instances of sustained topic exploration: 6+ consecutive related activities spanning 20+ minutes on one subject. Example: extended Haskell learning session with multiple documentation pages and code examples = 1 deep exploration.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum"
+      },
+      {
+        "name": "longest_topic_duration_minutes",
+        "construct": "Task_Engagement_Level",
+        "how_to_measure": "Identify the longest continuous exploration of a single topic and record its duration in minutes. Measure from first to last activity on that topic before switching away. Report the maximum duration observed for any topic.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "continuous",
         "aggregation": "max"
       },
       {
-        "name": "escape_behavior_presence",
-        "construct": "current_emotional_state",
-        "how_to_measure": "Binary: 1 if there are visits to entertainment/escape content (YouTube music/videos, Reddit browsing, games, memes) that interrupt work patterns. 0 if all activity appears purposeful or work-related.",
-        "measurement_granularity": "hourly",
-        "measurement_dtype": "binary",
-        "aggregation": "max"
-      },
-      {
-        "name": "restless_search_count",
-        "construct": "current_emotional_state",
-        "how_to_measure": "Count searches that appear restless or mood-driven - isolated searches that don't lead anywhere, entertainment lookups, music searches, or apparent procrastination searches. Each such search counts as 1.",
-        "measurement_granularity": "hourly",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "food_drink_searches",
-        "construct": "physical_state",
-        "how_to_measure": "Count searches or visits related to food, restaurants, cafes, coffee, snacks, hunger, meal planning, or food delivery. Each relevant entry counts as 1.",
-        "measurement_granularity": "hourly",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "physical_need_indicator",
-        "construct": "physical_state",
-        "how_to_measure": "Binary: 1 if any searches/visits relate to physical needs or discomfort (caffeine, stretching, health symptoms, tiredness, exercise, physical complaints). 0 otherwise.",
-        "measurement_granularity": "hourly",
-        "measurement_dtype": "binary",
-        "aggregation": "max"
-      },
-      {
-        "name": "productivity_tool_searches",
-        "construct": "metacognitive_awareness",
-        "how_to_measure": "Count searches or visits related to productivity, focus, attention management, or self-improvement (e.g., 'focus app', 'pomodoro', 'time management', 'stop procrastinating'). Each relevant entry counts as 1.",
-        "measurement_granularity": "hourly",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "intentional_learning_depth",
-        "construct": "metacognitive_awareness",
-        "how_to_measure": "Rate browsing intentionality on a 0-2 scale for this hour: 0 = reactive scattered browsing with no apparent purpose; 1 = mixed purposeful and distracted; 2 = clearly deliberate systematic learning (progression through documentation, tutorials, papers on same topic).",
-        "measurement_granularity": "hourly",
-        "measurement_dtype": "ordinal",
-        "aggregation": "mean"
-      },
-      {
-        "name": "focused_entry_flag",
-        "construct": "impulse_control_capacity",
-        "how_to_measure": "For each browsing entry in today's data, mark 1 if it is part of a coherent topic sequence (connected to adjacent entries on same topic), or 0 if it is isolated/scattered (unrelated to surrounding entries).",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "binary",
-        "aggregation": "mean"
-      },
-      {
-        "name": "distraction_resistance_count",
-        "construct": "impulse_control_capacity",
-        "how_to_measure": "Count instances where a distraction site (Reddit, YouTube, social media) is visited briefly (1-2 entries) and the user returns to focused work-related activity. Each instance of resisted distraction counts as 1.",
+        "name": "escape_behavior_count",
+        "construct": "Task_Aversiveness",
+        "how_to_measure": "Count instances where work/technical browsing (documentation, code, professional tools) is abruptly interrupted (within 3 minutes) by entertainment or unrelated content (Reddit, YouTube, random browsing). Each work-to-escape transition = 1.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "late_night_browsing",
-        "construct": "cognitive_fatigue",
-        "how_to_measure": "Binary: 1 if there is any browsing activity between 11pm and 5am in this day's data. 0 otherwise.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "binary",
-        "aggregation": "max"
-      },
-      {
-        "name": "fragmented_excursion_count",
-        "construct": "cognitive_fatigue",
-        "how_to_measure": "Count single-entry topic excursions (visiting a topic for just one entry before switching away). These 'touch and go' patterns indicate scattered attention. Each such excursion counts as 1.",
+        "name": "work_to_distraction_switches",
+        "construct": "Task_Aversiveness",
+        "how_to_measure": "Count transitions from work-related content (documentation, code, professional searches) directly to distraction content (social media, entertainment, unrelated browsing). Each work-to-distraction transition = 1.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "work_pressure_searches",
-        "construct": "overall_stress_level",
-        "how_to_measure": "Count searches or visits explicitly related to work stress, deadlines, burnout, stress management, or anxiety (e.g., 'deadline', 'burnout', 'stress relief'). Each relevant entry counts as 1.",
+        "name": "curiosity_tangent_count",
+        "construct": "Boredom_Understimulation",
+        "how_to_measure": "Count searches/visits that appear to be pure curiosity with no practical purpose: Wikipedia rabbit holes, 'what is [random topic]' queries, exploring unrelated interesting subjects (e.g., 'williams syndrome', 'Occia gens', random historical topics). Each tangent = 1.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "parallel_work_streams",
-        "construct": "overall_stress_level",
-        "how_to_measure": "Count the number of distinct work-related topic clusters addressed in this day (e.g., 'cryptography project', 'Haskell learning', 'debugging issue' as 3 separate streams). Count distinct work topics.",
+        "name": "entertainment_seeking_visits",
+        "construct": "Boredom_Understimulation",
+        "how_to_measure": "Count visits seeking entertainment/stimulation: YouTube music videos, streaming content, music searches (artist names, song titles), social media browsing for fun, game-related content. Each entertainment-seeking visit = 1.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum"
+      },
+      {
+        "name": "sub_minute_switches",
+        "construct": "Anxious_Restlessness",
+        "how_to_measure": "Count topic switches occurring within 60 seconds of the previous activity. Check timestamps: if activity at 10:01 is a different topic than activity at 10:00, count as 1. Each sub-minute topic switch = 1.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum"
+      },
+      {
+        "name": "micro_exploration_count",
+        "construct": "Anxious_Restlessness",
+        "how_to_measure": "Count topics explored for less than 2 minutes before abandonment. If a topic appears at 10:00 and a different topic appears at 10:01, the first topic was a micro-exploration. Each such abandoned topic = 1.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum"
+      },
+      {
+        "name": "question_based_searches",
+        "construct": "Task_Clarity",
+        "how_to_measure": "Count searches phrased as questions or seeking basic understanding: queries containing 'what is', 'how to', 'why', 'tutorial', 'guide', 'explained', 'vs', or 'difference between'. Each qualifying search = 1.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum"
+      },
+      {
+        "name": "search_variation_sequences",
+        "construct": "Task_Clarity",
+        "how_to_measure": "Count sequences where the same concept is searched 3+ times with variations within 10 minutes, indicating uncertainty. Example: 'auth0' then 'auth0 vs okta' then 'auth0 pricing' then 'auth0 alternatives' = 1 sequence.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
         "name": "social_platform_visits",
-        "construct": "social_connection_need",
-        "how_to_measure": "Count visits to social platforms: Reddit, Twitter/X, Facebook, Instagram, LinkedIn, Hacker News, or discussion forums. Each [visit] to a social site counts as 1.",
+        "construct": "Notification_Interruption_Load",
+        "how_to_measure": "Count visits to notification-driven social/communication platforms: Twitter/X, Facebook, Instagram, LinkedIn, Slack, Discord, WhatsApp Web, Telegram, email services (Gmail, Outlook). Each visit = 1. Do NOT count Reddit or HackerNews here.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "people_lookup_searches",
-        "construct": "social_connection_need",
-        "how_to_measure": "Count searches looking up specific people by name, or visits to individual LinkedIn/social profiles. Each person-related lookup counts as 1.",
+        "name": "news_aggregator_visits",
+        "construct": "Notification_Interruption_Load",
+        "how_to_measure": "Count visits to news and content aggregators: HackerNews, Reddit (front page or any subreddit), Google News, tech news sites (Techmeme, Ars Technica), general news websites (CNN, BBC, NYT). Each visit = 1.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "habitual_distraction_sites",
-        "construct": "habit_strength",
-        "how_to_measure": "Count how many distinct distraction domains (e.g., reddit.com, youtube.com, twitter.com) appear on at least 4 different days within this week. These represent ingrained habits.",
-        "measurement_granularity": "weekly",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "pattern_regularity_score",
-        "construct": "habit_strength",
-        "how_to_measure": "Rate the consistency of distraction patterns across this week on a 0-2 scale: 0 = highly variable (different sites/times each day); 1 = some recurring patterns; 2 = very consistent habits (same sites, similar times of day).",
-        "measurement_granularity": "weekly",
-        "measurement_dtype": "ordinal",
-        "aggregation": "mean"
-      },
-      {
-        "name": "sleep_related_searches",
-        "construct": "sleep_quality",
-        "how_to_measure": "Count searches or visits related to sleep, insomnia, tiredness, sleep tracking, melatonin, or sleep problems. Each relevant entry counts as 1.",
+        "name": "focused_work_sessions",
+        "construct": "Digital_Environment_Friction",
+        "how_to_measure": "Count browsing sessions (separated by 30+ minute gaps) where NO distraction sites (Reddit, Twitter, YouTube entertainment, Instagram, Facebook, news sites) were visited throughout the session. Each distraction-free session = 1.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "unusual_hours_activity",
-        "construct": "sleep_quality",
-        "how_to_measure": "Binary: 1 if there is browsing activity before 6am or after midnight in this day's data (indicating unusual sleep schedule). 0 if all activity falls within 6am-midnight.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "binary",
-        "aggregation": "max"
-      },
-      {
-        "name": "interruption_pattern_count",
-        "construct": "notification_exposure",
-        "how_to_measure": "Count instances where a focused topic sequence is suddenly interrupted by an unrelated single action before returning to the original topic. These suggest external notification triggers. Each interruption counts as 1.",
-        "measurement_granularity": "hourly",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "messaging_email_checks",
-        "construct": "notification_exposure",
-        "how_to_measure": "Count visits to email (Gmail, Outlook), messaging platforms (Slack, Discord), or communication tools. Each relevant visit counts as 1.",
-        "measurement_granularity": "hourly",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "domain_diversity_count",
-        "construct": "environmental_cues",
-        "how_to_measure": "Count the number of distinct website domains visited within this hour. Extract the domain from each [visit] URL and count unique domains.",
-        "measurement_granularity": "hourly",
-        "measurement_dtype": "count",
-        "aggregation": "max"
-      },
-      {
-        "name": "distraction_site_present",
-        "construct": "environmental_cues",
-        "how_to_measure": "Binary: 1 if any known distraction sites (Reddit, YouTube, social media, news aggregators, entertainment sites) are visited this hour. 0 if only work-focused sites visited.",
-        "measurement_granularity": "hourly",
-        "measurement_dtype": "binary",
-        "aggregation": "max"
-      },
-      {
-        "name": "repeated_search_attempts",
-        "construct": "task_difficulty_skill_match",
-        "how_to_measure": "Count instances of multiple similar searches on the same problem with different wording (e.g., 'haskell monad error' then 'haskell monad tutorial' then 'monad example'). Each retry beyond the first counts as 1.",
-        "measurement_granularity": "hourly",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "help_resource_visits",
-        "construct": "task_difficulty_skill_match",
-        "how_to_measure": "Count visits to help resources: Stack Overflow, official documentation, tutorials, API references, or 'how to' guides. Each relevant visit counts as 1.",
-        "measurement_granularity": "hourly",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "intrinsic_interest_rating",
-        "construct": "task_intrinsic_interest",
-        "how_to_measure": "Rate apparent intrinsic interest for this hour on a 0-2 scale: 0 = clearly obligatory/routine work; 1 = neutral tasks; 2 = passionate personal exploration (visible through depth, hobby topics, enthusiastic learning).",
-        "measurement_granularity": "hourly",
-        "measurement_dtype": "ordinal",
-        "aggregation": "mean"
-      },
-      {
-        "name": "personal_interest_content",
-        "construct": "task_intrinsic_interest",
-        "how_to_measure": "Binary: 1 if browsing this hour includes clearly personally interesting content (travel planning, hobbies, music exploration, topics explored with visible depth/enthusiasm). 0 if all content appears work-obligatory.",
-        "measurement_granularity": "hourly",
-        "measurement_dtype": "binary",
-        "aggregation": "max"
-      },
-      {
-        "name": "deadline_urgency_searches",
-        "construct": "time_pressure",
-        "how_to_measure": "Count searches or visits related to deadlines, calendars, scheduling, time-sensitive queries, or urgency indicators. Each relevant entry counts as 1.",
+        "name": "documentation_focused_periods",
+        "construct": "Digital_Environment_Friction",
+        "how_to_measure": "Count periods of 30+ minutes where browsing stayed primarily on documentation sites, reference materials, or focused work tools (GitHub, Stack Overflow for research, official docs) without visiting entertainment/social sites. Each such period = 1.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
-      },
-      {
-        "name": "off_hours_work_activity",
-        "construct": "time_pressure",
-        "how_to_measure": "Binary: 1 if there is clearly work-related browsing outside typical hours (before 8am, after 7pm, or on weekends), suggesting deadline pressure. 0 if work activity stays within normal hours.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "binary",
-        "aggregation": "max"
       }
     ]
   }

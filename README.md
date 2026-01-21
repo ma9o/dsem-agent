@@ -46,6 +46,7 @@ causal-agent/
 │   ├── reference/     # Technical specs (schemas, pipeline)
 │   └── guides/        # Practical usage (quickstart, data, evals)
 ├── evals/             # Inspect AI evals (eval{N}_{name}.py) + scripts/
+│   └── deprecated/    # Deprecated evals
 ├── src/causal_agent/
 │   ├── orchestrator/  # Two-stage model specification (latent + measurement)
 │   │   ├── agents.py  # Stage 1a: latent model, Stage 1b: measurement model

@@ -1,381 +1,429 @@
 {
   "constructs": [
     {
-      "name": "compulsive_context_switching",
-      "description": "Frequency and intensity of involuntary shifting attention between tasks, apps, or activities despite intention to focus",
+      "name": "Novelty_Seeking_Trait",
+      "description": "Stable personality tendency to seek stimulation, variety, and new experiences",
+      "role": "exogenous",
+      "is_outcome": false,
+      "temporal_status": "time_invariant",
+      "causal_granularity": null
+    },
+    {
+      "name": "Work_Role_Fragmentation",
+      "description": "Degree to which job/role requires attending to multiple distinct responsibilities and domains",
+      "role": "exogenous",
+      "is_outcome": false,
+      "temporal_status": "time_invariant",
+      "causal_granularity": null
+    },
+    {
+      "name": "Context_Switching_Frequency",
+      "description": "How often one makes unplanned switches between tasks, apps, or attentional targets",
       "role": "endogenous",
       "is_outcome": true,
       "temporal_status": "time_varying",
-      "causal_granularity": "hourly"
+      "causal_granularity": "daily"
     },
     {
-      "name": "urge_to_switch",
-      "description": "Momentary craving or impulse to check something else, shift tasks, or seek new stimuli",
-      "role": "endogenous",
-      "is_outcome": false,
-      "temporal_status": "time_varying",
-      "causal_granularity": "hourly"
-    },
-    {
-      "name": "task_engagement",
-      "description": "Degree of absorption, flow, and sustained attention in current task",
-      "role": "endogenous",
-      "is_outcome": false,
-      "temporal_status": "time_varying",
-      "causal_granularity": "hourly"
-    },
-    {
-      "name": "current_emotional_state",
-      "description": "Present mood valence and arousal, including stress, anxiety, boredom, or frustration",
-      "role": "endogenous",
-      "is_outcome": false,
-      "temporal_status": "time_varying",
-      "causal_granularity": "hourly"
-    },
-    {
-      "name": "physical_state",
-      "description": "Bodily sensations including hunger, caffeine level, physical comfort, and restlessness",
-      "role": "endogenous",
-      "is_outcome": false,
-      "temporal_status": "time_varying",
-      "causal_granularity": "hourly"
-    },
-    {
-      "name": "metacognitive_awareness",
-      "description": "Real-time awareness of one's own attention state and switching behavior; mindfulness of when urges arise",
-      "role": "endogenous",
-      "is_outcome": false,
-      "temporal_status": "time_varying",
-      "causal_granularity": "hourly"
-    },
-    {
-      "name": "impulse_control_capacity",
-      "description": "Available self-regulation resources to resist impulses; executive function capacity that depletes through the day",
+      "name": "Sleep_Quality",
+      "description": "Restorative quality of sleep the previous night",
       "role": "endogenous",
       "is_outcome": false,
       "temporal_status": "time_varying",
       "causal_granularity": "daily"
     },
     {
-      "name": "cognitive_fatigue",
-      "description": "Mental exhaustion and reduced cognitive resources from sustained effort or poor recovery",
+      "name": "General_Stress_Level",
+      "description": "Overall psychological stress and pressure experienced",
       "role": "endogenous",
       "is_outcome": false,
       "temporal_status": "time_varying",
       "causal_granularity": "daily"
     },
     {
-      "name": "overall_stress_level",
-      "description": "Background level of perceived stress from work, life demands, and unfinished tasks",
+      "name": "Cognitive_Fatigue",
+      "description": "Mental tiredness and depleted cognitive resources",
       "role": "endogenous",
       "is_outcome": false,
       "temporal_status": "time_varying",
       "causal_granularity": "daily"
     },
     {
-      "name": "social_connection_need",
-      "description": "Craving for social interaction, validation, or fear of missing out on social information",
+      "name": "Self_Regulation_Capacity",
+      "description": "Available capacity to control impulses and regulate behavior",
       "role": "endogenous",
       "is_outcome": false,
       "temporal_status": "time_varying",
       "causal_granularity": "daily"
     },
     {
-      "name": "habit_strength",
-      "description": "Automaticity and entrenchment of context-switching as a behavioral pattern; reinforced through repetition",
+      "name": "Perceived_Task_Overwhelm",
+      "description": "Feeling of having too much to do and being unable to manage it all",
       "role": "endogenous",
       "is_outcome": false,
       "temporal_status": "time_varying",
-      "causal_granularity": "weekly"
+      "causal_granularity": "daily"
     },
     {
-      "name": "sleep_quality",
-      "description": "Quality and quantity of sleep from the previous night",
-      "role": "exogenous",
+      "name": "Physical_Energy",
+      "description": "Bodily energy and vitality level",
+      "role": "endogenous",
       "is_outcome": false,
       "temporal_status": "time_varying",
       "causal_granularity": "daily"
     },
     {
-      "name": "notification_exposure",
-      "description": "Frequency and intrusiveness of external interruptions from devices, apps, and alerts",
-      "role": "exogenous",
-      "is_outcome": false,
-      "temporal_status": "time_varying",
-      "causal_granularity": "hourly"
-    },
-    {
-      "name": "environmental_cues",
-      "description": "Visual presence and accessibility of distracting devices, browser tabs, or applications",
-      "role": "exogenous",
-      "is_outcome": false,
-      "temporal_status": "time_varying",
-      "causal_granularity": "hourly"
-    },
-    {
-      "name": "task_difficulty_skill_match",
-      "description": "Whether current task difficulty matches skill level - optimal creates flow, mismatch causes boredom or overwhelm",
-      "role": "exogenous",
-      "is_outcome": false,
-      "temporal_status": "time_varying",
-      "causal_granularity": "hourly"
-    },
-    {
-      "name": "task_intrinsic_interest",
-      "description": "Inherent appeal and engaging qualities of the current task independent of external rewards",
-      "role": "exogenous",
-      "is_outcome": false,
-      "temporal_status": "time_varying",
-      "causal_granularity": "hourly"
-    },
-    {
-      "name": "time_pressure",
-      "description": "Perceived urgency and deadline pressure from pending commitments and obligations",
-      "role": "exogenous",
+      "name": "Switching_Habit_Strength",
+      "description": "Automaticity and strength of habitual context-switching behavior patterns",
+      "role": "endogenous",
       "is_outcome": false,
       "temporal_status": "time_varying",
       "causal_granularity": "daily"
     },
     {
-      "name": "trait_impulsivity",
-      "description": "Dispositional tendency toward impulsive behavior and difficulty delaying gratification",
-      "role": "exogenous",
+      "name": "Task_Engagement_Level",
+      "description": "Degree of absorption, focus, and involvement in the current task",
+      "role": "endogenous",
       "is_outcome": false,
-      "temporal_status": "time_invariant",
-      "causal_granularity": null
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
     },
     {
-      "name": "novelty_seeking_tendency",
-      "description": "Trait preference for new stimuli, variety, and stimulation",
-      "role": "exogenous",
+      "name": "Task_Aversiveness",
+      "description": "How unpleasant, difficult, or unappealing current tasks feel",
+      "role": "endogenous",
       "is_outcome": false,
-      "temporal_status": "time_invariant",
-      "causal_granularity": null
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
     },
     {
-      "name": "frustration_tolerance",
-      "description": "Dispositional ability to persist through difficulty, boredom, and discomfort without escaping",
-      "role": "exogenous",
+      "name": "Boredom_Understimulation",
+      "description": "Feeling understimulated, lacking interest, or insufficiently engaged",
+      "role": "endogenous",
       "is_outcome": false,
-      "temporal_status": "time_invariant",
-      "causal_granularity": null
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
+    },
+    {
+      "name": "Anxious_Restlessness",
+      "description": "Jittery anxiety, inability to sit still, urge to do something else",
+      "role": "endogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
+    },
+    {
+      "name": "Task_Clarity",
+      "description": "Knowing clearly what to do next and how to proceed with work",
+      "role": "endogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
+    },
+    {
+      "name": "Notification_Interruption_Load",
+      "description": "Amount of external notifications, pings, and interruptions received",
+      "role": "endogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
+    },
+    {
+      "name": "Digital_Environment_Friction",
+      "description": "Barriers and friction built into digital environment that make switching harder",
+      "role": "endogenous",
+      "is_outcome": false,
+      "temporal_status": "time_varying",
+      "causal_granularity": "daily"
     }
   ],
   "edges": [
     {
-      "cause": "urge_to_switch",
-      "effect": "compulsive_context_switching",
-      "description": "Strong urges to switch directly precipitate switching behavior when not inhibited",
+      "cause": "Task_Engagement_Level",
+      "effect": "Context_Switching_Frequency",
+      "description": "Higher task engagement reduces the pull toward switching contexts",
       "lagged": false
     },
     {
-      "cause": "task_engagement",
-      "effect": "compulsive_context_switching",
-      "description": "High engagement and flow states protect against switching; low engagement creates vulnerability",
+      "cause": "Self_Regulation_Capacity",
+      "effect": "Context_Switching_Frequency",
+      "description": "Greater self-regulation allows resisting impulses to switch",
       "lagged": false
     },
     {
-      "cause": "metacognitive_awareness",
-      "effect": "compulsive_context_switching",
-      "description": "Awareness of urges and attention state enables conscious choice rather than automatic switching",
+      "cause": "Switching_Habit_Strength",
+      "effect": "Context_Switching_Frequency",
+      "description": "Stronger habits make switching more automatic and frequent",
       "lagged": false
     },
     {
-      "cause": "notification_exposure",
-      "effect": "compulsive_context_switching",
-      "description": "Notifications can trigger automatic reflexive attention shifts bypassing deliberation",
+      "cause": "Anxious_Restlessness",
+      "effect": "Context_Switching_Frequency",
+      "description": "Restless anxiety drives seeking relief through switching",
       "lagged": false
     },
     {
-      "cause": "current_emotional_state",
-      "effect": "urge_to_switch",
-      "description": "Negative emotions like anxiety, boredom, and frustration increase urge to escape into distraction",
+      "cause": "Boredom_Understimulation",
+      "effect": "Context_Switching_Frequency",
+      "description": "Boredom drives seeking novelty through switching",
       "lagged": false
     },
     {
-      "cause": "current_emotional_state",
-      "effect": "task_engagement",
-      "description": "Negative emotional states impair concentration and reduce task absorption",
+      "cause": "Notification_Interruption_Load",
+      "effect": "Context_Switching_Frequency",
+      "description": "More notifications trigger more context switches",
       "lagged": false
     },
     {
-      "cause": "task_difficulty_skill_match",
-      "effect": "task_engagement",
-      "description": "Optimal challenge-skill balance creates flow; mismatch causes boredom or overwhelm",
+      "cause": "Digital_Environment_Friction",
+      "effect": "Context_Switching_Frequency",
+      "description": "Higher friction makes switching more effortful and less frequent",
       "lagged": false
     },
     {
-      "cause": "task_intrinsic_interest",
-      "effect": "task_engagement",
-      "description": "Inherently interesting tasks naturally capture and sustain attention",
-      "lagged": false
-    },
-    {
-      "cause": "task_intrinsic_interest",
-      "effect": "urge_to_switch",
-      "description": "Boring tasks increase craving for more stimulating alternatives",
-      "lagged": false
-    },
-    {
-      "cause": "notification_exposure",
-      "effect": "urge_to_switch",
-      "description": "Each notification creates a curiosity-driven urge to check and respond",
-      "lagged": false
-    },
-    {
-      "cause": "environmental_cues",
-      "effect": "urge_to_switch",
-      "description": "Visible distractors like open tabs and nearby phone cue conditioned switching urges",
-      "lagged": false
-    },
-    {
-      "cause": "physical_state",
-      "effect": "current_emotional_state",
-      "description": "Hunger, caffeine crashes, and discomfort worsen mood and increase irritability",
-      "lagged": false
-    },
-    {
-      "cause": "physical_state",
-      "effect": "metacognitive_awareness",
-      "description": "Physical discomfort and restlessness reduce capacity for mindful attention",
-      "lagged": false
-    },
-    {
-      "cause": "cognitive_fatigue",
-      "effect": "impulse_control_capacity",
-      "description": "Mental exhaustion depletes self-regulation resources needed to resist urges",
-      "lagged": false
-    },
-    {
-      "cause": "overall_stress_level",
-      "effect": "cognitive_fatigue",
-      "description": "Chronic stress accelerates mental exhaustion and depletes cognitive resources",
-      "lagged": false
-    },
-    {
-      "cause": "time_pressure",
-      "effect": "overall_stress_level",
-      "description": "Deadline pressure and urgency contribute to elevated stress levels",
-      "lagged": false
-    },
-    {
-      "cause": "overall_stress_level",
-      "effect": "social_connection_need",
-      "description": "Stress increases desire for social support and connection-seeking behavior",
-      "lagged": false
-    },
-    {
-      "cause": "sleep_quality",
-      "effect": "cognitive_fatigue",
-      "description": "Poor sleep leads to impaired cognitive recovery and daytime fatigue",
-      "lagged": false
-    },
-    {
-      "cause": "sleep_quality",
-      "effect": "impulse_control_capacity",
-      "description": "Sleep deprivation directly impairs prefrontal cortex function and self-control",
-      "lagged": false
-    },
-    {
-      "cause": "impulse_control_capacity",
-      "effect": "compulsive_context_switching",
-      "description": "Higher executive control capacity enables resisting switching urges",
+      "cause": "Novelty_Seeking_Trait",
+      "effect": "Context_Switching_Frequency",
+      "description": "Higher novelty-seeking increases baseline tendency toward switching",
       "lagged": true
     },
     {
-      "cause": "impulse_control_capacity",
-      "effect": "urge_to_switch",
-      "description": "Low self-control capacity amplifies experienced urge intensity",
+      "cause": "Task_Aversiveness",
+      "effect": "Context_Switching_Frequency",
+      "description": "More aversive tasks increase escape-motivated switching",
+      "lagged": false
+    },
+    {
+      "cause": "General_Stress_Level",
+      "effect": "Sleep_Quality",
+      "description": "Higher stress impairs sleep quality",
       "lagged": true
     },
     {
-      "cause": "cognitive_fatigue",
-      "effect": "task_engagement",
-      "description": "Mental exhaustion reduces ability to maintain focus and enter flow states",
+      "cause": "Context_Switching_Frequency",
+      "effect": "Sleep_Quality",
+      "description": "Overstimulation from switching disrupts sleep restoration",
       "lagged": true
     },
     {
-      "cause": "cognitive_fatigue",
-      "effect": "metacognitive_awareness",
-      "description": "Fatigue impairs meta-awareness and makes automatic behavior more likely",
+      "cause": "Sleep_Quality",
+      "effect": "General_Stress_Level",
+      "description": "Poor sleep increases stress reactivity and baseline stress",
+      "lagged": false
+    },
+    {
+      "cause": "Perceived_Task_Overwhelm",
+      "effect": "General_Stress_Level",
+      "description": "Feeling overwhelmed directly increases stress",
+      "lagged": false
+    },
+    {
+      "cause": "Work_Role_Fragmentation",
+      "effect": "General_Stress_Level",
+      "description": "Fragmented roles with multiple demands create ongoing stress",
       "lagged": true
     },
     {
-      "cause": "overall_stress_level",
-      "effect": "current_emotional_state",
-      "description": "High background stress creates anxious irritable emotional baseline",
+      "cause": "Sleep_Quality",
+      "effect": "Cognitive_Fatigue",
+      "description": "Poor sleep leads to starting the day already fatigued",
+      "lagged": false
+    },
+    {
+      "cause": "General_Stress_Level",
+      "effect": "Cognitive_Fatigue",
+      "description": "Chronic stress depletes cognitive resources",
+      "lagged": false
+    },
+    {
+      "cause": "Context_Switching_Frequency",
+      "effect": "Cognitive_Fatigue",
+      "description": "Frequent switching is cognitively expensive and depleting",
       "lagged": true
     },
     {
-      "cause": "sleep_quality",
-      "effect": "current_emotional_state",
-      "description": "Poor sleep increases negative affect, irritability, and emotional reactivity",
+      "cause": "Physical_Energy",
+      "effect": "Cognitive_Fatigue",
+      "description": "Low physical energy contributes to mental fatigue",
+      "lagged": false
+    },
+    {
+      "cause": "Sleep_Quality",
+      "effect": "Self_Regulation_Capacity",
+      "description": "Good sleep restores self-regulation resources",
+      "lagged": false
+    },
+    {
+      "cause": "Cognitive_Fatigue",
+      "effect": "Self_Regulation_Capacity",
+      "description": "Mental fatigue depletes self-regulation capacity",
+      "lagged": false
+    },
+    {
+      "cause": "Physical_Energy",
+      "effect": "Self_Regulation_Capacity",
+      "description": "Physical energy supports self-regulation efforts",
+      "lagged": false
+    },
+    {
+      "cause": "General_Stress_Level",
+      "effect": "Self_Regulation_Capacity",
+      "description": "Stress depletes self-regulation resources",
+      "lagged": false
+    },
+    {
+      "cause": "Work_Role_Fragmentation",
+      "effect": "Perceived_Task_Overwhelm",
+      "description": "Fragmented roles with many domains create overwhelm",
       "lagged": true
     },
     {
-      "cause": "sleep_quality",
-      "effect": "physical_state",
-      "description": "Sleep quality affects physical energy, alertness, and bodily comfort",
+      "cause": "Context_Switching_Frequency",
+      "effect": "Perceived_Task_Overwhelm",
+      "description": "Switching prevents task completion, accumulating unfinished work",
       "lagged": true
     },
     {
-      "cause": "social_connection_need",
-      "effect": "urge_to_switch",
-      "description": "Unmet social needs create urges to check social media and communications",
+      "cause": "Sleep_Quality",
+      "effect": "Physical_Energy",
+      "description": "Good sleep restores physical energy",
+      "lagged": false
+    },
+    {
+      "cause": "Context_Switching_Frequency",
+      "effect": "Switching_Habit_Strength",
+      "description": "Each switching episode reinforces and strengthens the habit",
       "lagged": true
     },
     {
-      "cause": "habit_strength",
-      "effect": "compulsive_context_switching",
-      "description": "Strong habits make switching automatic, bypassing conscious deliberation",
+      "cause": "Task_Clarity",
+      "effect": "Task_Engagement_Level",
+      "description": "Clear understanding of what to do enables deeper engagement",
+      "lagged": false
+    },
+    {
+      "cause": "Task_Aversiveness",
+      "effect": "Task_Engagement_Level",
+      "description": "Aversive tasks reduce willingness to engage",
+      "lagged": false
+    },
+    {
+      "cause": "Cognitive_Fatigue",
+      "effect": "Task_Engagement_Level",
+      "description": "Mental fatigue impairs ability to engage deeply",
+      "lagged": false
+    },
+    {
+      "cause": "Physical_Energy",
+      "effect": "Task_Engagement_Level",
+      "description": "Physical energy supports sustained engagement",
+      "lagged": false
+    },
+    {
+      "cause": "Boredom_Understimulation",
+      "effect": "Task_Engagement_Level",
+      "description": "Boredom reflects and causes disengagement from tasks",
+      "lagged": false
+    },
+    {
+      "cause": "Anxious_Restlessness",
+      "effect": "Task_Engagement_Level",
+      "description": "Restless state interferes with focused engagement",
+      "lagged": false
+    },
+    {
+      "cause": "Cognitive_Fatigue",
+      "effect": "Task_Aversiveness",
+      "description": "When tired, tasks feel more difficult and aversive",
+      "lagged": false
+    },
+    {
+      "cause": "General_Stress_Level",
+      "effect": "Task_Aversiveness",
+      "description": "Stress magnifies negative perception of tasks",
+      "lagged": false
+    },
+    {
+      "cause": "Perceived_Task_Overwhelm",
+      "effect": "Task_Aversiveness",
+      "description": "Overwhelm makes individual tasks feel more daunting",
+      "lagged": false
+    },
+    {
+      "cause": "Task_Clarity",
+      "effect": "Task_Aversiveness",
+      "description": "Unclear tasks feel more aversive due to uncertainty",
+      "lagged": false
+    },
+    {
+      "cause": "Novelty_Seeking_Trait",
+      "effect": "Boredom_Understimulation",
+      "description": "High novelty seekers are more prone to boredom",
       "lagged": true
     },
     {
-      "cause": "habit_strength",
-      "effect": "urge_to_switch",
-      "description": "Entrenched habits create conditioned urges in response to environmental cues",
-      "lagged": true
+      "cause": "Task_Clarity",
+      "effect": "Boredom_Understimulation",
+      "description": "Clear tasks provide direction that reduces boredom",
+      "lagged": false
     },
     {
-      "cause": "trait_impulsivity",
-      "effect": "impulse_control_capacity",
-      "description": "Higher trait impulsivity means lower baseline capacity for impulse control",
-      "lagged": true
+      "cause": "Task_Aversiveness",
+      "effect": "Boredom_Understimulation",
+      "description": "Tedious aversive tasks create boredom",
+      "lagged": false
     },
     {
-      "cause": "novelty_seeking_tendency",
-      "effect": "urge_to_switch",
-      "description": "High novelty seekers experience stronger urges for new stimulation",
-      "lagged": true
+      "cause": "General_Stress_Level",
+      "effect": "Anxious_Restlessness",
+      "description": "Stress manifests as anxious, restless state",
+      "lagged": false
     },
     {
-      "cause": "frustration_tolerance",
-      "effect": "task_engagement",
-      "description": "Higher frustration tolerance enables sustained engagement through difficult or boring periods",
-      "lagged": true
+      "cause": "Perceived_Task_Overwhelm",
+      "effect": "Anxious_Restlessness",
+      "description": "Overwhelm creates anxiety and restless urge to act",
+      "lagged": false
     },
     {
-      "cause": "compulsive_context_switching",
-      "effect": "current_emotional_state",
-      "description": "Excessive switching leads to guilt, frustration, and self-criticism",
-      "lagged": true
+      "cause": "Notification_Interruption_Load",
+      "effect": "Anxious_Restlessness",
+      "description": "Constant notifications create vigilant, restless state",
+      "lagged": false
     },
     {
-      "cause": "compulsive_context_switching",
-      "effect": "cognitive_fatigue",
-      "description": "Frequent switching depletes cognitive resources and accelerates fatigue",
-      "lagged": true
+      "cause": "Sleep_Quality",
+      "effect": "Anxious_Restlessness",
+      "description": "Poor sleep increases anxiety reactivity",
+      "lagged": false
     },
     {
-      "cause": "compulsive_context_switching",
-      "effect": "overall_stress_level",
-      "description": "Switching reduces productivity, creating accumulated work and deadline pressure",
-      "lagged": true
+      "cause": "Cognitive_Fatigue",
+      "effect": "Anxious_Restlessness",
+      "description": "Fatigue reduces emotional regulation, increasing restlessness",
+      "lagged": false
     },
     {
-      "cause": "compulsive_context_switching",
-      "effect": "habit_strength",
-      "description": "Each switch reinforces the habitual pattern through neural pathway strengthening",
+      "cause": "Cognitive_Fatigue",
+      "effect": "Task_Clarity",
+      "description": "Mental fatigue impairs clear thinking about tasks",
+      "lagged": false
+    },
+    {
+      "cause": "Perceived_Task_Overwhelm",
+      "effect": "Task_Clarity",
+      "description": "Overwhelm clouds judgment about what to prioritize",
+      "lagged": false
+    },
+    {
+      "cause": "Digital_Environment_Friction",
+      "effect": "Notification_Interruption_Load",
+      "description": "Higher friction environments reduce notification exposure",
+      "lagged": false
+    },
+    {
+      "cause": "Self_Regulation_Capacity",
+      "effect": "Digital_Environment_Friction",
+      "description": "Self-regulation enables proactive environment design",
       "lagged": true
     }
   ]

@@ -2,136 +2,8 @@
   "latent": {
     "constructs": [
       {
-        "name": "sleep_quality",
-        "description": "Overall subjective and objective quality of sleep including restfulness, depth, and restorative value",
-        "role": "endogenous",
-        "is_outcome": true,
-        "temporal_status": "time_varying",
-        "causal_granularity": "daily"
-      },
-      {
-        "name": "sleep_onset_latency",
-        "description": "Time required to fall asleep after intending to sleep - longer latency indicates difficulty initiating sleep",
-        "role": "endogenous",
-        "is_outcome": false,
-        "temporal_status": "time_varying",
-        "causal_granularity": "daily"
-      },
-      {
-        "name": "sleep_continuity",
-        "description": "Degree to which sleep is uninterrupted throughout the night, absence of awakenings",
-        "role": "endogenous",
-        "is_outcome": false,
-        "temporal_status": "time_varying",
-        "causal_granularity": "daily"
-      },
-      {
-        "name": "circadian_alignment",
-        "description": "Degree to which sleep timing aligns with internal biological clock and natural light-dark cycle",
-        "role": "endogenous",
-        "is_outcome": false,
-        "temporal_status": "time_varying",
-        "causal_granularity": "daily"
-      },
-      {
-        "name": "pre_sleep_cognitive_arousal",
-        "description": "Mental activation before bed including racing thoughts, rumination, worry, and inability to quiet the mind",
-        "role": "endogenous",
-        "is_outcome": false,
-        "temporal_status": "time_varying",
-        "causal_granularity": "daily"
-      },
-      {
-        "name": "pre_sleep_physical_arousal",
-        "description": "Physical activation state before bed including muscle tension, elevated heart rate, and bodily restlessness",
-        "role": "endogenous",
-        "is_outcome": false,
-        "temporal_status": "time_varying",
-        "causal_granularity": "daily"
-      },
-      {
-        "name": "evening_screen_exposure",
-        "description": "Exposure to electronic screens and blue light in the 2-3 hours before intended sleep",
-        "role": "endogenous",
-        "is_outcome": false,
-        "temporal_status": "time_varying",
-        "causal_granularity": "daily"
-      },
-      {
-        "name": "morning_light_exposure",
-        "description": "Exposure to bright light, especially natural sunlight, in the first few hours after waking",
-        "role": "endogenous",
-        "is_outcome": false,
-        "temporal_status": "time_varying",
-        "causal_granularity": "daily"
-      },
-      {
-        "name": "physical_activity_level",
-        "description": "Amount and intensity of physical exercise and movement during the day",
-        "role": "endogenous",
-        "is_outcome": false,
-        "temporal_status": "time_varying",
-        "causal_granularity": "daily"
-      },
-      {
-        "name": "caffeine_intake",
-        "description": "Consumption of caffeine from coffee, tea, energy drinks, or other sources throughout the day",
-        "role": "endogenous",
-        "is_outcome": false,
-        "temporal_status": "time_varying",
-        "causal_granularity": "daily"
-      },
-      {
-        "name": "alcohol_consumption",
-        "description": "Consumption of alcoholic beverages, especially in evening hours",
-        "role": "endogenous",
-        "is_outcome": false,
-        "temporal_status": "time_varying",
-        "causal_granularity": "daily"
-      },
-      {
-        "name": "daily_stress_level",
-        "description": "Overall psychological stress, pressure, and emotional burden experienced during the day",
-        "role": "endogenous",
-        "is_outcome": false,
-        "temporal_status": "time_varying",
-        "causal_granularity": "daily"
-      },
-      {
-        "name": "sleep_schedule_consistency",
-        "description": "Regularity of sleep and wake times compared to recent patterns and intended schedule",
-        "role": "endogenous",
-        "is_outcome": false,
-        "temporal_status": "time_varying",
-        "causal_granularity": "daily"
-      },
-      {
-        "name": "bedroom_environment_quality",
-        "description": "Quality of sleep environment including temperature, darkness, noise level, mattress comfort, and air quality",
-        "role": "endogenous",
-        "is_outcome": false,
-        "temporal_status": "time_varying",
-        "causal_granularity": "daily"
-      },
-      {
-        "name": "daytime_napping",
-        "description": "Sleep episodes taken during daytime hours that reduce homeostatic sleep pressure",
-        "role": "endogenous",
-        "is_outcome": false,
-        "temporal_status": "time_varying",
-        "causal_granularity": "daily"
-      },
-      {
-        "name": "evening_meal_timing",
-        "description": "Timing of last meal relative to bedtime and heaviness of evening food consumption",
-        "role": "endogenous",
-        "is_outcome": false,
-        "temporal_status": "time_varying",
-        "causal_granularity": "daily"
-      },
-      {
         "name": "chronotype",
-        "description": "Biological predisposition toward morningness or eveningness affecting preferred sleep timing",
+        "description": "Genetic/stable tendency toward morning (lark) or evening (owl) preference, affecting circadian rhythm alignment with daily schedule",
         "role": "exogenous",
         "is_outcome": false,
         "temporal_status": "time_invariant",
@@ -139,442 +11,412 @@
       },
       {
         "name": "trait_anxiety",
-        "description": "Stable individual tendency toward anxiety, worry, and hypervigilance",
+        "description": "Stable personality trait reflecting baseline anxiety proneness and tendency to experience worry and apprehension",
         "role": "exogenous",
         "is_outcome": false,
         "temporal_status": "time_invariant",
         "causal_granularity": null
       },
       {
-        "name": "age",
-        "description": "Chronological age affecting sleep architecture, duration needs, and sleep maintenance",
+        "name": "medical_sleep_conditions",
+        "description": "Presence of sleep disorders such as sleep apnea, restless leg syndrome, or chronic insomnia that directly impair sleep",
         "role": "exogenous",
         "is_outcome": false,
         "temporal_status": "time_invariant",
         "causal_granularity": null
+      },
+      {
+        "name": "external_life_demands",
+        "description": "Daily external obligations including work deadlines, caregiving responsibilities, and life events that place demands on time and mental resources",
+        "role": "exogenous",
+        "is_outcome": false,
+        "temporal_status": "time_varying",
+        "causal_granularity": "daily"
+      },
+      {
+        "name": "sleep_quality",
+        "description": "Overall quality of sleep including ease of falling asleep, sleep continuity, perceived depth, and feeling rested upon waking",
+        "role": "endogenous",
+        "is_outcome": true,
+        "temporal_status": "time_varying",
+        "causal_granularity": "daily"
+      },
+      {
+        "name": "presleep_arousal",
+        "description": "Mental and physical activation state in the period before sleep, including racing thoughts, worry, rumination, and physical tension",
+        "role": "endogenous",
+        "is_outcome": false,
+        "temporal_status": "time_varying",
+        "causal_granularity": "daily"
+      },
+      {
+        "name": "daytime_stress",
+        "description": "Perceived stress and psychological pressure experienced during waking hours from work, relationships, and life circumstances",
+        "role": "endogenous",
+        "is_outcome": false,
+        "temporal_status": "time_varying",
+        "causal_granularity": "daily"
+      },
+      {
+        "name": "caffeine_consumption",
+        "description": "Amount and timing of caffeine intake from coffee, tea, energy drinks, and other sources throughout the day",
+        "role": "endogenous",
+        "is_outcome": false,
+        "temporal_status": "time_varying",
+        "causal_granularity": "daily"
+      },
+      {
+        "name": "alcohol_consumption",
+        "description": "Amount of alcohol consumed, particularly in evening hours, which affects sleep architecture and continuity",
+        "role": "endogenous",
+        "is_outcome": false,
+        "temporal_status": "time_varying",
+        "causal_granularity": "daily"
+      },
+      {
+        "name": "physical_activity",
+        "description": "Exercise and bodily movement during the day, affecting homeostatic sleep pressure and physiological readiness for sleep",
+        "role": "endogenous",
+        "is_outcome": false,
+        "temporal_status": "time_varying",
+        "causal_granularity": "daily"
+      },
+      {
+        "name": "evening_screen_exposure",
+        "description": "Exposure to blue light from phones, computers, tablets and TVs in the hours before bed, affecting melatonin production and cognitive arousal",
+        "role": "endogenous",
+        "is_outcome": false,
+        "temporal_status": "time_varying",
+        "causal_granularity": "daily"
+      },
+      {
+        "name": "daytime_energy",
+        "description": "Subjective energy level, alertness, and vitality during waking hours, reflecting sleep quality and recovery",
+        "role": "endogenous",
+        "is_outcome": false,
+        "temporal_status": "time_varying",
+        "causal_granularity": "daily"
+      },
+      {
+        "name": "mood_state",
+        "description": "Daily emotional state including positive and negative affect, influenced by sleep, stress, and daily experiences",
+        "role": "endogenous",
+        "is_outcome": false,
+        "temporal_status": "time_varying",
+        "causal_granularity": "daily"
+      },
+      {
+        "name": "daytime_napping",
+        "description": "Napping behavior during the day including frequency and duration, which reduces homeostatic sleep pressure",
+        "role": "endogenous",
+        "is_outcome": false,
+        "temporal_status": "time_varying",
+        "causal_granularity": "daily"
+      },
+      {
+        "name": "pain_discomfort",
+        "description": "Physical pain, aches, or bodily discomfort experienced, which can interfere with falling asleep and maintaining sleep",
+        "role": "endogenous",
+        "is_outcome": false,
+        "temporal_status": "time_varying",
+        "causal_granularity": "daily"
       }
     ],
     "edges": [
       {
-        "cause": "sleep_onset_latency",
+        "cause": "trait_anxiety",
+        "effect": "daytime_stress",
+        "description": "Higher trait anxiety amplifies perception of and emotional reactivity to daily stressors",
+        "lagged": true
+      },
+      {
+        "cause": "trait_anxiety",
+        "effect": "presleep_arousal",
+        "description": "Trait anxiety predisposes individuals to racing thoughts, worry, and cognitive hyperarousal at bedtime",
+        "lagged": true
+      },
+      {
+        "cause": "chronotype",
+        "effect": "daytime_energy",
+        "description": "Mismatch between innate chronotype and imposed schedule (social jetlag) affects daytime energy levels",
+        "lagged": true
+      },
+      {
+        "cause": "medical_sleep_conditions",
         "effect": "sleep_quality",
-        "description": "Longer time to fall asleep reduces overall sleep quality and sleep satisfaction",
+        "description": "Sleep disorders directly impair sleep quality through physiological mechanisms like airway obstruction or periodic limb movements",
+        "lagged": true
+      },
+      {
+        "cause": "external_life_demands",
+        "effect": "daytime_stress",
+        "description": "External obligations, deadlines, and responsibilities create psychological stress and pressure",
         "lagged": false
       },
       {
-        "cause": "sleep_continuity",
+        "cause": "external_life_demands",
+        "effect": "physical_activity",
+        "description": "High external demands reduce available time and energy for exercise and physical activity",
+        "lagged": false
+      },
+      {
+        "cause": "daytime_stress",
+        "effect": "presleep_arousal",
+        "description": "Daily stress carries over into the pre-sleep period as rumination, worry, and physical tension",
+        "lagged": false
+      },
+      {
+        "cause": "daytime_stress",
+        "effect": "caffeine_consumption",
+        "description": "Stress leads to increased caffeine use to maintain alertness and cognitive performance under pressure",
+        "lagged": false
+      },
+      {
+        "cause": "daytime_stress",
+        "effect": "alcohol_consumption",
+        "description": "Stress drives evening alcohol consumption as a maladaptive coping mechanism to unwind and relax",
+        "lagged": false
+      },
+      {
+        "cause": "daytime_stress",
+        "effect": "evening_screen_exposure",
+        "description": "Stress leads to distraction-seeking and avoidance behaviors through evening screen use",
+        "lagged": false
+      },
+      {
+        "cause": "daytime_stress",
+        "effect": "mood_state",
+        "description": "High daily stress leads to more negative emotional states including irritability and low mood",
+        "lagged": false
+      },
+      {
+        "cause": "daytime_stress",
+        "effect": "pain_discomfort",
+        "description": "Stress increases muscle tension and pain perception through psychophysiological pathways",
+        "lagged": false
+      },
+      {
+        "cause": "daytime_energy",
+        "effect": "physical_activity",
+        "description": "Higher energy enables and motivates physical activity; low energy reduces exercise engagement",
+        "lagged": false
+      },
+      {
+        "cause": "daytime_energy",
+        "effect": "caffeine_consumption",
+        "description": "Low energy drives compensatory caffeine consumption to combat fatigue and maintain function",
+        "lagged": false
+      },
+      {
+        "cause": "daytime_energy",
+        "effect": "daytime_napping",
+        "description": "Low energy increases the likelihood, frequency, and duration of daytime naps",
+        "lagged": false
+      },
+      {
+        "cause": "daytime_energy",
+        "effect": "mood_state",
+        "description": "Energy levels affect emotional state; fatigue and tiredness lead to worse mood and reduced positive affect",
+        "lagged": false
+      },
+      {
+        "cause": "mood_state",
+        "effect": "presleep_arousal",
+        "description": "Negative mood leads to rumination, negative thought patterns, and difficulty quieting the mind before sleep",
+        "lagged": false
+      },
+      {
+        "cause": "pain_discomfort",
         "effect": "sleep_quality",
-        "description": "Better sleep continuity with fewer awakenings leads to more restorative and deeper sleep",
+        "description": "Physical pain directly interferes with sleep onset, maintenance, and depth through nociceptive arousal",
         "lagged": false
       },
       {
-        "cause": "circadian_alignment",
+        "cause": "pain_discomfort",
+        "effect": "mood_state",
+        "description": "Pain negatively affects emotional state, increasing negative affect and reducing well-being",
+        "lagged": false
+      },
+      {
+        "cause": "pain_discomfort",
+        "effect": "physical_activity",
+        "description": "Pain reduces ability, willingness, and motivation to engage in physical activity and exercise",
+        "lagged": false
+      },
+      {
+        "cause": "physical_activity",
+        "effect": "mood_state",
+        "description": "Exercise improves mood through endorphin release, stress reduction, and sense of accomplishment",
+        "lagged": false
+      },
+      {
+        "cause": "presleep_arousal",
         "effect": "sleep_quality",
-        "description": "Sleeping in alignment with circadian rhythm optimizes sleep architecture and hormonal processes",
+        "description": "High mental and physical arousal before bed impairs the ability to fall asleep and reduces sleep quality",
         "lagged": false
       },
       {
-        "cause": "bedroom_environment_quality",
+        "cause": "caffeine_consumption",
         "effect": "sleep_quality",
-        "description": "Optimal bedroom conditions directly enhance subjective and objective sleep quality",
+        "description": "Caffeine blocks adenosine receptors, interfering with sleep onset, reducing deep sleep, and fragmenting sleep",
         "lagged": false
       },
       {
-        "cause": "pre_sleep_cognitive_arousal",
-        "effect": "sleep_onset_latency",
-        "description": "Racing thoughts, worry, and mental activation make it harder to transition to sleep",
+        "cause": "alcohol_consumption",
+        "effect": "sleep_quality",
+        "description": "Alcohol disrupts sleep architecture, suppresses REM sleep, causes rebound arousal, and fragments sleep continuity",
         "lagged": false
       },
       {
-        "cause": "pre_sleep_physical_arousal",
-        "effect": "sleep_onset_latency",
-        "description": "Physical tension and sympathetic activation delay the onset of sleep",
+        "cause": "physical_activity",
+        "effect": "sleep_quality",
+        "description": "Physical activity improves sleep through adenosine accumulation, thermoregulation, and anxiety reduction",
         "lagged": false
       },
       {
-        "cause": "caffeine_intake",
-        "effect": "sleep_onset_latency",
-        "description": "Caffeine blocks adenosine receptors, directly interfering with sleep initiation",
+        "cause": "evening_screen_exposure",
+        "effect": "sleep_quality",
+        "description": "Blue light from screens suppresses melatonin production and delays circadian phase, impairing sleep onset",
         "lagged": false
       },
       {
-        "cause": "circadian_alignment",
-        "effect": "sleep_onset_latency",
-        "description": "When sleep timing matches circadian phase, melatonin facilitates easier sleep onset",
+        "cause": "evening_screen_exposure",
+        "effect": "presleep_arousal",
+        "description": "Screen content and interaction increases cognitive and emotional arousal in the pre-sleep period",
         "lagged": false
       },
       {
         "cause": "daytime_napping",
-        "effect": "sleep_onset_latency",
-        "description": "Daytime naps discharge homeostatic sleep pressure, making nighttime sleep onset harder",
+        "effect": "sleep_quality",
+        "description": "Daytime naps reduce homeostatic sleep pressure, potentially impairing nighttime sleep onset and reducing sleep depth",
         "lagged": false
       },
       {
-        "cause": "alcohol_consumption",
-        "effect": "sleep_continuity",
-        "description": "Alcohol disrupts REM sleep and causes rebound awakenings as it metabolizes",
-        "lagged": false
-      },
-      {
-        "cause": "pre_sleep_physical_arousal",
-        "effect": "sleep_continuity",
-        "description": "Elevated physical arousal leads to more fragmented and lighter sleep throughout the night",
-        "lagged": false
-      },
-      {
-        "cause": "bedroom_environment_quality",
-        "effect": "sleep_continuity",
-        "description": "Environmental disturbances like noise, light intrusion, and temperature cause awakenings",
-        "lagged": false
-      },
-      {
-        "cause": "evening_meal_timing",
-        "effect": "sleep_continuity",
-        "description": "Heavy late meals cause digestive discomfort and acid reflux disrupting sleep",
-        "lagged": false
-      },
-      {
-        "cause": "age",
-        "effect": "sleep_continuity",
-        "description": "Aging is associated with lighter sleep stages and increased nighttime awakenings",
-        "lagged": true
-      },
-      {
-        "cause": "morning_light_exposure",
-        "effect": "circadian_alignment",
-        "description": "Bright morning light is the primary zeitgeber that entrains the circadian clock",
-        "lagged": false
-      },
-      {
-        "cause": "evening_screen_exposure",
-        "effect": "circadian_alignment",
-        "description": "Blue light from screens suppresses melatonin production and delays circadian phase",
-        "lagged": false
-      },
-      {
-        "cause": "sleep_schedule_consistency",
-        "effect": "circadian_alignment",
-        "description": "Regular sleep-wake times strengthen and stabilize circadian entrainment",
-        "lagged": false
-      },
-      {
-        "cause": "chronotype",
-        "effect": "circadian_alignment",
-        "description": "Individual chronotype determines natural sleep timing preferences and ease of alignment",
-        "lagged": true
-      },
-      {
-        "cause": "daily_stress_level",
-        "effect": "pre_sleep_cognitive_arousal",
-        "description": "Stressful days generate worry and rumination that persists into bedtime",
-        "lagged": false
-      },
-      {
-        "cause": "evening_screen_exposure",
-        "effect": "pre_sleep_cognitive_arousal",
-        "description": "Stimulating screen content and social media increase mental activation before bed",
-        "lagged": false
-      },
-      {
-        "cause": "trait_anxiety",
-        "effect": "pre_sleep_cognitive_arousal",
-        "description": "High trait anxiety amplifies nightly rumination and worry about the next day",
-        "lagged": true
-      },
-      {
-        "cause": "sleep_quality",
-        "effect": "pre_sleep_cognitive_arousal",
-        "description": "Poor sleep creates worry about sleep itself perpetuating the problem",
-        "lagged": true
-      },
-      {
-        "cause": "physical_activity_level",
-        "effect": "pre_sleep_physical_arousal",
-        "description": "Regular exercise promotes parasympathetic tone and physical relaxation by evening",
-        "lagged": false
-      },
-      {
-        "cause": "caffeine_intake",
-        "effect": "pre_sleep_physical_arousal",
-        "description": "Caffeine increases physiological arousal, heart rate, and muscle tension",
-        "lagged": false
-      },
-      {
-        "cause": "daily_stress_level",
-        "effect": "pre_sleep_physical_arousal",
-        "description": "Chronic stress activates the HPA axis maintaining elevated physical arousal",
-        "lagged": false
-      },
-      {
-        "cause": "evening_meal_timing",
-        "effect": "pre_sleep_physical_arousal",
-        "description": "Heavy late meals increase metabolic activity and physical discomfort",
-        "lagged": false
-      },
-      {
-        "cause": "alcohol_consumption",
-        "effect": "pre_sleep_physical_arousal",
-        "description": "While initially sedating, alcohol metabolism increases physical arousal and sweating",
-        "lagged": false
-      },
-      {
-        "cause": "pre_sleep_cognitive_arousal",
-        "effect": "pre_sleep_physical_arousal",
-        "description": "Mental worry triggers the stress response, increasing physical tension and activation",
-        "lagged": false
-      },
-      {
-        "cause": "daily_stress_level",
-        "effect": "evening_screen_exposure",
-        "description": "Stress drives escapism and coping through screen-based distraction and entertainment",
+        "cause": "mood_state",
+        "effect": "sleep_quality",
+        "description": "Negative mood impairs sleep through heightened physiological arousal and ruminative cognitive processes",
         "lagged": false
       },
       {
         "cause": "sleep_quality",
-        "effect": "daily_stress_level",
-        "description": "Poor sleep depletes emotional regulation resources and amplifies stress reactivity",
-        "lagged": true
-      },
-      {
-        "cause": "trait_anxiety",
-        "effect": "daily_stress_level",
-        "description": "High trait anxiety magnifies perception of daily stressors and threat",
-        "lagged": true
-      },
-      {
-        "cause": "morning_light_exposure",
-        "effect": "daily_stress_level",
-        "description": "Morning light exposure improves mood regulation and reduces cortisol reactivity throughout the day",
-        "lagged": false
-      },
-      {
-        "cause": "sleep_quality",
-        "effect": "physical_activity_level",
-        "description": "Poor sleep reduces energy, motivation, and capacity for physical exercise",
-        "lagged": true
-      },
-      {
-        "cause": "age",
-        "effect": "physical_activity_level",
-        "description": "Age affects baseline physical activity capacity and exercise patterns",
+        "effect": "daytime_energy",
+        "description": "Poor sleep leads to reduced energy, alertness, and vitality the following day",
         "lagged": true
       },
       {
         "cause": "sleep_quality",
-        "effect": "caffeine_intake",
-        "description": "Poor sleep drives compensatory caffeine use to maintain daytime alertness",
+        "effect": "mood_state",
+        "description": "Sleep deprivation impairs emotional regulation, increases negative reactivity, and worsens mood the next day",
         "lagged": true
       },
       {
         "cause": "sleep_quality",
-        "effect": "daytime_napping",
-        "description": "Poor nighttime sleep creates daytime sleepiness prompting naps",
+        "effect": "daytime_stress",
+        "description": "Poor sleep increases stress reactivity, reduces coping capacity, and amplifies perceived stress",
         "lagged": true
       },
       {
         "cause": "sleep_quality",
-        "effect": "sleep_schedule_consistency",
-        "description": "Poor sleep may lead to sleeping in, irregular schedules, or social jet lag",
+        "effect": "pain_discomfort",
+        "description": "Poor sleep increases pain sensitivity and lowers pain thresholds through neuroinflammatory pathways",
         "lagged": true
-      },
-      {
-        "cause": "chronotype",
-        "effect": "sleep_schedule_consistency",
-        "description": "Extreme chronotypes may struggle to maintain schedules aligned with social demands",
-        "lagged": true
-      },
-      {
-        "cause": "sleep_quality",
-        "effect": "alcohol_consumption",
-        "description": "Poor sleep may lead to self-medicating with alcohol to aid sleep initiation",
-        "lagged": true
-      },
-      {
-        "cause": "daily_stress_level",
-        "effect": "alcohol_consumption",
-        "description": "High stress increases likelihood of evening alcohol use for relaxation",
-        "lagged": false
-      },
-      {
-        "cause": "sleep_quality",
-        "effect": "morning_light_exposure",
-        "description": "Poor sleep leads to sleeping in and reduced morning outdoor activity, limiting light exposure",
-        "lagged": true
-      },
-      {
-        "cause": "daily_stress_level",
-        "effect": "evening_meal_timing",
-        "description": "High stress leads to irregular eating patterns, stress eating, or late meals due to work demands",
-        "lagged": false
       }
     ]
   },
   "measurement": {
     "indicators": [
       {
-        "name": "sleep_complaint_searches",
-        "construct": "sleep_quality",
-        "how_to_measure": "Count searches or visits containing: 'insomnia', 'can't sleep', 'sleep better', 'tired', 'fatigue', 'exhausted', 'sleep quality', 'sleep tracker', 'oura'.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "very_late_activity_occurred",
-        "construct": "sleep_quality",
-        "how_to_measure": "Report 1 if any browser activity occurred after 01:00 (1am), otherwise report 0. Very late activity suggests poor sleep.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "binary",
-        "aggregation": "max"
-      },
-      {
-        "name": "morning_start_hour",
-        "construct": "sleep_onset_latency",
-        "how_to_measure": "Extract the decimal hour of the first browser activity after 04:00 (e.g., 7.5 for 7:30am, 10.25 for 10:15am). Late starts suggest difficulty falling asleep.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "continuous",
-        "aggregation": "first"
-      },
-      {
-        "name": "pre_midnight_activity_count",
-        "construct": "sleep_onset_latency",
-        "how_to_measure": "Count all browser activities between 22:00 and 23:59. High counts indicate prolonged wakefulness before sleep.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "overnight_activity_count",
-        "construct": "sleep_continuity",
-        "how_to_measure": "Count browser activities between 00:00 and 05:00. Each activity indicates a sleep interruption.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "overnight_awakening_occurred",
-        "construct": "sleep_continuity",
-        "how_to_measure": "Report 1 if any browser activity occurred between 00:00 and 05:00, otherwise report 0.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "binary",
-        "aggregation": "max"
-      },
-      {
-        "name": "wake_time_hour",
-        "construct": "circadian_alignment",
-        "how_to_measure": "Extract decimal hour of first browser activity after 04:00 (e.g., 6.5 for 6:30am, 9.75 for 9:45am).",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "continuous",
-        "aggregation": "first"
-      },
-      {
-        "name": "bedtime_hour",
-        "construct": "circadian_alignment",
-        "how_to_measure": "Extract decimal hour of last browser activity. For times after midnight, add 24 (e.g., 1:30am = 25.5, 2:15am = 26.25).",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "continuous",
-        "aggregation": "last"
-      },
-      {
-        "name": "late_evening_search_count",
-        "construct": "pre_sleep_cognitive_arousal",
-        "how_to_measure": "Count all search queries made between 21:00 and 23:59.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "evening_stimulating_content",
-        "construct": "pre_sleep_cognitive_arousal",
-        "how_to_measure": "Count visits or searches after 20:00 containing: stackoverflow, github, programming, hackernews, reddit, twitter, news, technical, documentation, code.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "late_night_activity_count",
-        "construct": "pre_sleep_physical_arousal",
-        "how_to_measure": "Count all browser activities between 22:00 and 23:59. High counts indicate elevated physical arousal.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "evening_stimulant_searches",
-        "construct": "pre_sleep_physical_arousal",
-        "how_to_measure": "Count searches after 18:00 containing: coffee, caffeine, energy drink, alcohol, wine, beer, bar, club, cocktail.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "evening_activity_count",
+        "name": "evening_browser_activity_count",
         "construct": "evening_screen_exposure",
-        "how_to_measure": "Count total browser activities (searches, visits, views) between 20:00 and 23:59.",
+        "how_to_measure": "Count all browser activities (searches and visits) occurring after 8:00 PM (20:00) for this day",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "last_screen_hour",
+        "name": "last_activity_hour",
         "construct": "evening_screen_exposure",
-        "how_to_measure": "Extract decimal hour of last browser activity. For post-midnight, add 24 (e.g., 0:30am = 24.5). Indicates when screen exposure ended.",
+        "how_to_measure": "Record the hour (0-23) of the final browser activity for this day. Example: if last activity is at 23:45, record 23",
         "measurement_granularity": "daily",
         "measurement_dtype": "continuous",
-        "aggregation": "last"
+        "aggregation": "max"
       },
       {
-        "name": "early_morning_screen_use",
-        "construct": "morning_light_exposure",
-        "how_to_measure": "Report 1 if any browser activity occurred before 08:00, otherwise report 0. Early screen use reduces morning outdoor light exposure.",
+        "name": "late_night_browsing_count",
+        "construct": "presleep_arousal",
+        "how_to_measure": "Count browser activities occurring after 10:00 PM (22:00) until midnight",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum"
+      },
+      {
+        "name": "late_night_activity_present",
+        "construct": "presleep_arousal",
+        "how_to_measure": "Binary: 1 if any browser activity occurs after 11:00 PM (23:00); 0 otherwise",
         "measurement_granularity": "daily",
         "measurement_dtype": "binary",
         "aggregation": "max"
       },
       {
-        "name": "morning_outdoor_searches",
-        "construct": "morning_light_exposure",
-        "how_to_measure": "Count searches between 06:00-12:00 containing: weather, walking, running, park, hiking, outdoor, sunlight, sunrise, nature, outside.",
+        "name": "work_technical_searches",
+        "construct": "external_life_demands",
+        "how_to_measure": "Count searches and visits related to work/technical tasks: programming languages (haskell, python, rust), developer tools (github, stackoverflow, gitlab), technical documentation, or professional research",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "exercise_searches",
-        "construct": "physical_activity_level",
-        "how_to_measure": "Count searches containing: exercise, workout, gym, fitness, running, jogging, swimming, cycling, hiking, sports, yoga, training, marathon.",
+        "name": "planning_obligation_activity",
+        "construct": "external_life_demands",
+        "how_to_measure": "Binary: 1 if browsing includes planning/logistical activities like travel booking, flights, hotels, visa applications, appointments, or administrative tasks; 0 otherwise",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "binary",
+        "aggregation": "max"
+      },
+      {
+        "name": "first_activity_hour",
+        "construct": "sleep_quality",
+        "how_to_measure": "Record the hour (0-23) of the first browser activity for this day, considering 4:00 AM onwards as day start. Example: if first activity is at 7:30 AM, record 7",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "continuous",
+        "aggregation": "min"
+      },
+      {
+        "name": "sleep_related_searches",
+        "construct": "sleep_quality",
+        "how_to_measure": "Count searches containing sleep-related terms: 'sleep', 'insomnia', 'tired', 'fatigue', 'melatonin', 'sleep quality', 'can't sleep', 'sleep problems'",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "active_recreation_searches",
-        "construct": "physical_activity_level",
-        "how_to_measure": "Count searches containing: scuba, diving, kitesurf, surfing, climbing, skiing, beach activities, snorkeling, kayak, paddle.",
+        "name": "stress_anxiety_searches",
+        "construct": "daytime_stress",
+        "how_to_measure": "Count searches containing stress or coping terms: 'stress', 'anxiety', 'overwhelmed', 'burnout', 'deadline', 'meditation', 'relaxation', 'calm app'",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "caffeine_searches",
-        "construct": "caffeine_intake",
-        "how_to_measure": "Count searches containing: coffee, caffeine, espresso, latte, cappuccino, energy drink, Red Bull, Monster, cafe, Starbucks, coffeeshop.",
+        "name": "work_hours_activity_count",
+        "construct": "daytime_stress",
+        "how_to_measure": "Count total browser activities occurring during work hours (9:00 AM to 6:00 PM)",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "afternoon_caffeine_searches",
-        "construct": "caffeine_intake",
-        "how_to_measure": "Count searches after 14:00 containing: coffee, caffeine, espresso, energy drink, cafe. Afternoon caffeine disrupts sleep.",
+        "name": "caffeine_related_searches",
+        "construct": "caffeine_consumption",
+        "how_to_measure": "Count searches or visits mentioning: 'coffee', 'caffeine', 'espresso', 'cafe', 'starbucks', 'energy drink', 'red bull', or coffee shop names/locations",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "alcohol_searches",
+        "name": "alcohol_venue_searches",
         "construct": "alcohol_consumption",
-        "how_to_measure": "Count searches containing: alcohol, beer, wine, cocktail, whiskey, vodka, spirits, brewery, winery, liquor, drunk.",
+        "how_to_measure": "Count searches or visits mentioning: bars, pubs, wineries, breweries, cocktails, wine, beer, whiskey, or alcoholic beverages",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
@@ -582,90 +424,90 @@
       {
         "name": "nightlife_searches",
         "construct": "alcohol_consumption",
-        "how_to_measure": "Count searches containing: bar, pub, nightclub, disco, nightlife, club, party, discoteca, festa.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "stress_anxiety_searches",
-        "construct": "daily_stress_level",
-        "how_to_measure": "Count searches containing: stress, anxiety, worried, overwhelmed, burnout, mental health, depression, therapy, meditation, calm, relax, panic.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "work_technical_searches",
-        "construct": "daily_stress_level",
-        "how_to_measure": "Count searches containing: stackoverflow, github, error, bug, sentry, debugging, documentation, programming, exception, crash, fix.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "is_weekend",
-        "construct": "sleep_schedule_consistency",
-        "how_to_measure": "Report 1 if the date is Saturday or Sunday, otherwise report 0. Weekend schedules often differ from weekdays.",
+        "how_to_measure": "Binary: 1 if any searches for 'nightlife', 'nightclub', 'disco', 'discoteca', 'party venue', or evening entertainment venues; 0 otherwise",
         "measurement_granularity": "daily",
         "measurement_dtype": "binary",
-        "aggregation": "first"
+        "aggregation": "max"
       },
       {
-        "name": "activity_time_span_hours",
-        "construct": "sleep_schedule_consistency",
-        "how_to_measure": "Report the number of hours between first and last browser activity of the day. Extract first activity hour and last activity hour, then subtract.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "continuous",
-        "aggregation": "mean"
-      },
-      {
-        "name": "sleep_environment_searches",
-        "construct": "bedroom_environment_quality",
-        "how_to_measure": "Count searches containing: mattress, pillow, bedroom, blackout, white noise, sleep temperature, air quality, fan, AC, comfortable bed, sheets.",
+        "name": "exercise_fitness_searches",
+        "construct": "physical_activity",
+        "how_to_measure": "Count searches related to exercise: 'gym', 'workout', 'exercise', 'running', 'fitness', 'sports', 'hiking', 'cycling', 'swimming', 'yoga', 'crossfit'",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "environmental_discomfort_searches",
-        "construct": "bedroom_environment_quality",
-        "how_to_measure": "Count searches containing: too hot, too cold, noisy neighbor, light pollution, uncomfortable bed, can't sleep noise, stuffy room.",
+        "name": "outdoor_recreation_searches",
+        "construct": "physical_activity",
+        "how_to_measure": "Binary: 1 if any searches for outdoor activities: 'scuba diving', 'kitesurf', 'snorkeling', 'hiking trail', 'beach activities', 'surfing'; 0 otherwise",
         "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
+        "measurement_dtype": "binary",
+        "aggregation": "max"
+      },
+      {
+        "name": "afternoon_inactivity_gap",
+        "construct": "daytime_napping",
+        "how_to_measure": "Binary: 1 if there is a gap of 2 or more hours with no browser activity between 12:00 PM and 5:00 PM; 0 otherwise",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "binary",
+        "aggregation": "max"
       },
       {
         "name": "afternoon_activity_count",
         "construct": "daytime_napping",
-        "how_to_measure": "Count browser activities between 12:00 and 17:00. Very low counts (0-2) may indicate napping during this window.",
+        "how_to_measure": "Count browser activities occurring between 1:00 PM and 4:00 PM. Low counts may indicate napping or rest periods.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "nap_related_searches",
-        "construct": "daytime_napping",
-        "how_to_measure": "Count searches containing: nap, napping, power nap, siesta, afternoon sleep, tired afternoon, drowsy, sleepy, fatigue.",
+        "name": "entertainment_content_count",
+        "construct": "mood_state",
+        "how_to_measure": "Count visits to entertainment/leisure content: YouTube videos, music streaming (spotify, songs, artists), games, comedy, or recreational browsing",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "late_evening_food_searches",
-        "construct": "evening_meal_timing",
-        "how_to_measure": "Count searches after 20:00 containing: restaurant, dinner, food, meal, recipe, delivery, takeout, eating, ristorante, menu.",
+        "name": "negative_news_searches",
+        "construct": "mood_state",
+        "how_to_measure": "Count searches about distressing news topics: accidents, crashes, deaths, disasters, shootings, tragedies, or violent events",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "last_food_search_hour",
-        "construct": "evening_meal_timing",
-        "how_to_measure": "Extract decimal hour of the latest food-related search (containing: restaurant, food, meal, dinner, recipe, delivery) occurring after 17:00. If none found, report 17.0.",
+        "name": "health_symptom_searches",
+        "construct": "pain_discomfort",
+        "how_to_measure": "Count searches about physical symptoms or pain: 'pain', 'ache', 'headache', 'hurt', 'sore', 'medication', 'painkiller', 'ibuprofen', 'symptoms'",
         "measurement_granularity": "daily",
-        "measurement_dtype": "continuous",
-        "aggregation": "last"
+        "measurement_dtype": "count",
+        "aggregation": "sum"
+      },
+      {
+        "name": "medical_information_seeking",
+        "construct": "pain_discomfort",
+        "how_to_measure": "Binary: 1 if any searches for medical conditions, treatments, doctor visits, pharmacy, or health symptoms; 0 otherwise",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "binary",
+        "aggregation": "max"
+      },
+      {
+        "name": "morning_activity_count",
+        "construct": "daytime_energy",
+        "how_to_measure": "Count browser activities occurring between 6:00 AM and 10:00 AM",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum"
+      },
+      {
+        "name": "total_daily_activity",
+        "construct": "daytime_energy",
+        "how_to_measure": "Count total browser activities (all searches and visits) for the entire day",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum"
       }
     ]
   }
