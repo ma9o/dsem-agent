@@ -136,9 +136,10 @@ def build_projected_admg(
 
     In the projected ADMG:
     - Only observed constructs are nodes
-    - Directed edges between observed constructs are preserved
-    - Unobserved constructs with multiple children create bidirected edges
-      (representing confounding)
+    - Only CONTEMPORANEOUS edges are included (lagged edges are identified by
+      construction since we observe lagged values)
+    - Unobserved constructs with multiple contemporaneous children create
+      bidirected edges (representing confounding)
 
     Args:
         latent_model: Dict with 'constructs' and 'edges'
@@ -150,20 +151,28 @@ def build_projected_admg(
     # Create Variable objects for observed constructs
     var_map = {name: Variable(name) for name in observed_constructs}
 
-    # Collect directed edges (only between observed constructs)
+    # Collect directed edges (only contemporaneous edges between observed constructs)
+    # Lagged edges are excluded because they represent cross-time effects (t-1 → t)
+    # which don't create cycles - causality flows forward through time.
+    # See Asparouhov, Hamaker & Muthén (2018) "Dynamic structural equation models"
+    # for the theoretical foundation of separating contemporaneous vs lagged effects.
     directed_edges = []
     for edge in latent_model.get('edges', []):
+        if edge.get('lagged', False):
+            continue  # Skip lagged edges
         cause, effect = edge['cause'], edge['effect']
         if cause in observed_constructs and effect in observed_constructs:
             directed_edges.append((var_map[cause], var_map[effect]))
 
-    # Find unobserved constructs and their children
+    # Find unobserved constructs and their contemporaneous children
     all_constructs = {c['name'] for c in latent_model['constructs']}
     unobserved = all_constructs - observed_constructs
 
-    # Build child map for unobserved constructs
+    # Build child map for unobserved constructs (contemporaneous edges only)
     unobserved_children: dict[str, set[str]] = {u: set() for u in unobserved}
     for edge in latent_model.get('edges', []):
+        if edge.get('lagged', False):
+            continue  # Skip lagged edges
         cause, effect = edge['cause'], edge['effect']
         if cause in unobserved and effect in observed_constructs:
             unobserved_children[cause].add(effect)

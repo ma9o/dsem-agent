@@ -182,6 +182,33 @@ def test_build_projected_admg():
     assert len(list(admg.undirected.edges())) == 1
 
 
+def test_build_projected_admg_excludes_lagged_edges():
+    """Test that lagged edges are excluded from ADMG (they're identified by construction)."""
+    latent_model = {
+        'constructs': [
+            {'name': 'A'},
+            {'name': 'B'},
+        ],
+        'edges': [
+            # Contemporaneous edge: should be included
+            {'cause': 'A', 'effect': 'B', 'description': 'test', 'lagged': False},
+            # Lagged feedback edge: should be excluded (would create cycle otherwise)
+            {'cause': 'B', 'effect': 'A', 'description': 'test', 'lagged': True},
+        ],
+    }
+
+    observed = {'A', 'B'}
+    admg, confounders = build_projected_admg(latent_model, observed)
+
+    # Only contemporaneous edge should be in the ADMG
+    directed_edges = list(admg.directed.edges())
+    assert len(directed_edges) == 1
+    # The edge should be A -> B (contemporaneous), not B -> A (lagged)
+    edge_names = [(str(e[0]), str(e[1])) for e in directed_edges]
+    assert ('A', 'B') in edge_names
+    assert ('B', 'A') not in edge_names
+
+
 def test_format_identifiability_report():
     """Test formatting of identifiability report."""
     result = {
