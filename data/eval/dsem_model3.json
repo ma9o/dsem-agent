@@ -434,242 +434,274 @@
       {
         "name": "topic_switch_count",
         "construct": "Context_Switching_Frequency",
-        "how_to_measure": "Count the number of times the browsing topic changes substantially. A topic switch occurs when a search or visit is about a clearly different subject from the previous 2-3 activities. Example: 'ketamine research' to 'mobile phone plans' = 1 switch. 'ketamine effects' to 'ketamine dosing' = NOT a switch (same topic). Count each distinct topic transition.",
+        "how_to_measure": "Count each time the user moves from one browsing subject to a clearly unrelated subject. Examples: programming to travel, health to music, work to entertainment. Each transition between unrelated topics counts as 1.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "unique_topic_domains",
+        "name": "single_page_topic_count",
         "construct": "Context_Switching_Frequency",
-        "how_to_measure": "Count distinct topical domains explored during the day. Categorize all activity into broad domains: programming/tech, health/medical, travel/planning, news/current-events, entertainment/music, shopping, food/restaurants, academic/research, social-media, personal-admin. Count how many distinct domains appear.",
+        "how_to_measure": "Count topics where the user visited only 1 page before switching to a different topic. Each topic abandoned after a single page/search counts as 1.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
+        "aggregation": "sum"
+      },
+      {
+        "name": "late_night_activity",
+        "construct": "Sleep_Quality",
+        "how_to_measure": "Check if any entry has a timestamp between 11:00 PM and 5:00 AM. Record 1 if any such entries exist, 0 if none.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "binary",
         "aggregation": "max"
       },
       {
-        "name": "late_night_activity_count",
+        "name": "sleep_related_searches",
         "construct": "Sleep_Quality",
-        "how_to_measure": "Count the number of browsing activities (searches + page visits) occurring between 11:00 PM and 5:00 AM. If no activity in this window, count is 0.",
+        "how_to_measure": "Count searches or page titles containing: sleep, insomnia, tired, fatigue, melatonin, nap, rest, 'waking up', 'can't sleep', or sleep tracker products.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "early_morning_activity_count",
-        "construct": "Sleep_Quality",
-        "how_to_measure": "Count browsing activities occurring between 5:00 AM and 7:00 AM. Very early activity may indicate sleep disturbance. If no activity in this window, count is 0.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "health_anxiety_searches",
+        "name": "stress_anxiety_searches",
         "construct": "General_Stress_Level",
-        "how_to_measure": "Count searches and visits related to: health symptoms, medications, medical conditions, anxiety, stress management, mental health topics, drugs for mood/anxiety. Example: 'ketamine depression' or 'sleep problems' each count as 1.",
+        "how_to_measure": "Count searches or page titles containing: stress, anxiety, anxious, overwhelm, panic, mental health, calm, relax, meditation, breathing exercises, or therapy.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "erratic_browsing_episodes",
+        "name": "health_symptom_searches",
         "construct": "General_Stress_Level",
-        "how_to_measure": "Count instances of very rapid topic switching: 3+ different topics explored within a 5-minute window with no apparent connection. Each such episode counts as 1.",
+        "how_to_measure": "Count searches about symptoms, side effects, drug safety, 'is X dangerous', disease names, or medical conditions that suggest health-related worry.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "scattered_activity_count",
+        "name": "typo_search_count",
         "construct": "Cognitive_Fatigue",
-        "how_to_measure": "Count activities that appear disconnected from surrounding context - single searches or visits on a topic with no follow-up, sandwiched between unrelated activities. Each isolated, unfocused activity = 1.",
+        "how_to_measure": "Count search queries with obvious spelling errors, misspellings, jumbled letters, or missing letters that suggest reduced attention.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "search_refinement_count",
+        "name": "entertainment_site_visits",
         "construct": "Cognitive_Fatigue",
-        "how_to_measure": "Count instances where a search is immediately followed (within 2 minutes) by a modified version of the same query, indicating difficulty formulating clear searches. Example: 'haskell fold' then 'haskell foldr' then 'foldr foldl difference' = 2 refinements.",
+        "how_to_measure": "Count visits to entertainment sites: YouTube non-tutorial videos, Netflix, Spotify, gaming sites, streaming platforms, or leisure subreddits like r/videos or r/funny.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "distraction_site_visits",
+        "name": "focus_tool_searches",
         "construct": "Self_Regulation_Capacity",
-        "how_to_measure": "Count visits to entertainment and distraction sites: Reddit, YouTube (non-educational), Twitter/X, Instagram, Facebook, TikTok, entertainment news, gaming sites. Each page visit to these domains counts as 1. Note: Higher counts indicate LOWER self-regulation.",
+        "how_to_measure": "Count searches containing: focus app, website blocker, pomodoro, productivity tool, 'how to concentrate', distraction blocker, or self-control app.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "sustained_focus_sessions",
+        "name": "work_topic_returns",
         "construct": "Self_Regulation_Capacity",
-        "how_to_measure": "Count sessions where 5+ consecutive activities remain on the same topic for 15+ minutes. Example: 8 consecutive Haskell searches/docs over 25 minutes = 1 sustained session. Higher counts indicate better self-regulation.",
+        "how_to_measure": "Count instances where a work/technical topic appears, then unrelated leisure content appears, then the SAME work topic reappears. Each such return pattern counts as 1.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "topic_breadth_per_session",
+        "name": "brief_topic_touches",
         "construct": "Perceived_Task_Overwhelm",
-        "how_to_measure": "For the main browsing session of the day, count how many distinct topics were explored. A topic is a coherent subject area (e.g., 'Haskell learning', 'travel planning Sicily', 'phone shopping'). High breadth indicates juggling many concerns.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "max"
-      },
-      {
-        "name": "incomplete_explorations",
-        "construct": "Perceived_Task_Overwhelm",
-        "how_to_measure": "Count topics that were briefly touched (1-2 activities only) then abandoned without apparent resolution. Example: single search about 'redis' with no follow-up = 1 incomplete exploration.",
+        "how_to_measure": "Count distinct topics explored with only 1-2 page visits before switching away. Each topic briefly touched but not explored in depth counts as 1.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "active_hours_span",
+        "name": "organization_tool_searches",
+        "construct": "Perceived_Task_Overwhelm",
+        "how_to_measure": "Count searches for: todo list, task manager, Trello, Notion, Asana, 'how to organize', project management, time management, or getting things done.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum"
+      },
+      {
+        "name": "exercise_fitness_searches",
         "construct": "Physical_Energy",
-        "how_to_measure": "Record the number of hours between first and last browsing activity of the day as decimal hours (e.g., 10.5). If only one activity, record 0.",
+        "how_to_measure": "Count searches or visits about: exercise, workout, gym, running, fitness, sports, health tracker, Oura ring, Fitbit, Whoop, or physical activity.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum"
+      },
+      {
+        "name": "first_activity_hour",
+        "construct": "Physical_Energy",
+        "how_to_measure": "Find the first browsing entry of the day and record its hour as a number 0-23. Example: 7:45 AM = 7, 2:15 PM = 14.",
         "measurement_granularity": "daily",
         "measurement_dtype": "continuous",
-        "aggregation": "max"
+        "aggregation": "mean"
       },
       {
-        "name": "total_activity_count",
-        "construct": "Physical_Energy",
-        "how_to_measure": "Count the total number of browsing activities (searches + page visits) for the day. Each search query and each page visit counts as 1.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "habitual_site_returns",
+        "name": "habitual_site_visits",
         "construct": "Switching_Habit_Strength",
-        "how_to_measure": "Count sites visited 3+ separate times during the day with gaps (30+ minutes) between visits. For each site meeting this criterion (e.g., Reddit visited at 9am, 11am, 3pm), add 1 to the count.",
+        "how_to_measure": "Count total visits to common habit-forming sites: Reddit.com, news.ycombinator.com, Twitter/X, YouTube homepage, Facebook, or Instagram. Each page visit counts as 1.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "topic_return_cycles",
+        "name": "adjacent_topic_switches",
         "construct": "Switching_Habit_Strength",
-        "how_to_measure": "Count instances where a topic is visited, abandoned for a different topic, then returned to later. Example: ketamine research then phone plans then ketamine again = 1 return cycle. Each return to a previously-abandoned topic counts as 1.",
+        "how_to_measure": "Count pairs of consecutive entries that are on completely unrelated topics. For each pair of adjacent entries (row N and row N+1) about different subjects, count 1.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "deep_exploration_count",
+        "name": "deep_topic_sessions",
         "construct": "Task_Engagement_Level",
-        "how_to_measure": "Count instances of sustained topic exploration: 6+ consecutive related activities spanning 20+ minutes on one subject. Example: extended Haskell learning session with multiple documentation pages and code examples = 1 deep exploration.",
+        "how_to_measure": "Count topic sessions with 5 or more consecutive related pages/searches on the same subject. Each extended focused session counts as 1.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "longest_topic_duration_minutes",
+        "name": "progressive_search_chains",
         "construct": "Task_Engagement_Level",
-        "how_to_measure": "Identify the longest continuous exploration of a single topic and record its duration in minutes. Measure from first to last activity on that topic before switching away. Report the maximum duration observed for any topic.",
+        "how_to_measure": "Count research chains that build progressively deeper: searches that refine or extend prior searches on the same topic. Example: 'Haskell' then 'Haskell monads' then 'Haskell monad tutorial'. Each such chain counts as 1.",
         "measurement_granularity": "daily",
-        "measurement_dtype": "continuous",
-        "aggregation": "max"
+        "measurement_dtype": "count",
+        "aggregation": "sum"
       },
       {
-        "name": "escape_behavior_count",
+        "name": "workday_leisure_visits",
         "construct": "Task_Aversiveness",
-        "how_to_measure": "Count instances where work/technical browsing (documentation, code, professional tools) is abruptly interrupted (within 3 minutes) by entertainment or unrelated content (Reddit, YouTube, random browsing). Each work-to-escape transition = 1.",
+        "how_to_measure": "For entries timestamped Monday-Friday 9AM-5PM: count visits to entertainment, social media, travel planning, shopping, or non-work leisure content.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "work_to_distraction_switches",
+        "name": "procrastination_searches",
         "construct": "Task_Aversiveness",
-        "how_to_measure": "Count transitions from work-related content (documentation, code, professional searches) directly to distraction content (social media, entertainment, unrelated browsing). Each work-to-distraction transition = 1.",
+        "how_to_measure": "Count searches containing: procrastination, motivation, 'how to start', 'can't focus', productivity tips, or explicit references to avoiding or delaying work.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "curiosity_tangent_count",
+        "name": "curiosity_exploration_searches",
         "construct": "Boredom_Understimulation",
-        "how_to_measure": "Count searches/visits that appear to be pure curiosity with no practical purpose: Wikipedia rabbit holes, 'what is [random topic]' queries, exploring unrelated interesting subjects (e.g., 'williams syndrome', 'Occia gens', random historical topics). Each tangent = 1.",
+        "how_to_measure": "Count searches driven by idle curiosity with no practical purpose: random Wikipedia browsing, 'what is X' questions, trivia, definitions, or exploring random interesting topics.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "entertainment_seeking_visits",
+        "name": "distinct_category_count",
         "construct": "Boredom_Understimulation",
-        "how_to_measure": "Count visits seeking entertainment/stimulation: YouTube music videos, streaming content, music searches (artist names, song titles), social media browsing for fun, game-related content. Each entertainment-seeking visit = 1.",
+        "how_to_measure": "Count how many distinct topic categories appear. Categories include: programming, health, travel, food, music, news, shopping, entertainment, finance, sports. Each unique category present counts as 1.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "sub_minute_switches",
+        "name": "rapid_search_clusters",
         "construct": "Anxious_Restlessness",
-        "how_to_measure": "Count topic switches occurring within 60 seconds of the previous activity. Check timestamps: if activity at 10:01 is a different topic than activity at 10:00, count as 1. Each sub-minute topic switch = 1.",
+        "how_to_measure": "Count clusters of 3 or more searches with timestamps in rapid succession (within a few minutes of each other). Each such burst cluster counts as 1.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "micro_exploration_count",
+        "name": "news_current_event_searches",
         "construct": "Anxious_Restlessness",
-        "how_to_measure": "Count topics explored for less than 2 minutes before abandonment. If a topic appears at 10:00 and a different topic appears at 10:01, the first topic was a micro-exploration. Each such abandoned topic = 1.",
+        "how_to_measure": "Count searches or visits about current events, breaking news, recent incidents, news sites, or trending topics. Examples: 'nepal plane crash', 'latest news', news.google.com.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "question_based_searches",
+        "name": "repeated_query_count",
         "construct": "Task_Clarity",
-        "how_to_measure": "Count searches phrased as questions or seeking basic understanding: queries containing 'what is', 'how to', 'why', 'tutorial', 'guide', 'explained', 'vs', or 'difference between'. Each qualifying search = 1.",
+        "how_to_measure": "Count search queries that repeat or closely resemble earlier searches from the same day. Same keywords or rephrased versions of same question each count as 1.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "search_variation_sequences",
+        "name": "tutorial_how_to_searches",
         "construct": "Task_Clarity",
-        "how_to_measure": "Count sequences where the same concept is searched 3+ times with variations within 10 minutes, indicating uncertainty. Example: 'auth0' then 'auth0 vs okta' then 'auth0 pricing' then 'auth0 alternatives' = 1 sequence.",
+        "how_to_measure": "Count searches containing: 'how to', tutorial, guide, 'step by step', 'getting started', 'for beginners', or learn followed by a topic.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "social_platform_visits",
+        "name": "social_media_visits",
         "construct": "Notification_Interruption_Load",
-        "how_to_measure": "Count visits to notification-driven social/communication platforms: Twitter/X, Facebook, Instagram, LinkedIn, Slack, Discord, WhatsApp Web, Telegram, email services (Gmail, Outlook). Each visit = 1. Do NOT count Reddit or HackerNews here.",
+        "how_to_measure": "Count visits to social media platforms: Reddit, Twitter/X, Facebook, Instagram, LinkedIn, TikTok, or Mastodon. Each page visit to these domains counts as 1.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "news_aggregator_visits",
+        "name": "email_messaging_visits",
         "construct": "Notification_Interruption_Load",
-        "how_to_measure": "Count visits to news and content aggregators: HackerNews, Reddit (front page or any subreddit), Google News, tech news sites (Techmeme, Ars Technica), general news websites (CNN, BBC, NYT). Each visit = 1.",
+        "how_to_measure": "Count visits to email or messaging services: Gmail, Outlook, Yahoo Mail, Slack, Discord, Microsoft Teams, or URLs containing 'mail'. Each visit counts as 1.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "focused_work_sessions",
+        "name": "blocker_app_searches",
         "construct": "Digital_Environment_Friction",
-        "how_to_measure": "Count browsing sessions (separated by 30+ minute gaps) where NO distraction sites (Reddit, Twitter, YouTube entertainment, Instagram, Facebook, news sites) were visited throughout the session. Each distraction-free session = 1.",
+        "how_to_measure": "Count searches for: website blocker, Cold Turkey, Freedom app, StayFocusd, LeechBlock, app blocker, site blocker, or blocking specific distracting sites.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "documentation_focused_periods",
+        "name": "digital_minimalism_searches",
         "construct": "Digital_Environment_Friction",
-        "how_to_measure": "Count periods of 30+ minutes where browsing stayed primarily on documentation sites, reference materials, or focused work tools (GitHub, Stack Overflow for research, official docs) without visiting entertainment/social sites. Each such period = 1.",
+        "how_to_measure": "Count searches about: digital minimalism, dopamine detox, attention management, reducing screen time, digital wellbeing, or decluttering digital environment.",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
+      },
+      {
+        "name": "sensation_seeking_searches",
+        "how_to_measure": "Proxy for Novelty_Seeking_Trait: Count searches or visits related to novel sensory experiences: psychedelics, ketamine, microdosing, LSD, psilocybin, 'what does X feel like', extreme sports, skydiving, bungee, or experimental substances. Each search/visit counts as 1.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum",
+        "construct": "Novelty_Seeking_Trait"
+      },
+      {
+        "name": "travel_destination_variety",
+        "how_to_measure": "Proxy for Novelty_Seeking_Trait: Count distinct geographic destinations researched: cities, countries, islands, beaches, or regions being explored for travel. Examples from data: Sicily, Crete, Peru, Villach. Each unique destination counts as 1.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum",
+        "construct": "Novelty_Seeking_Trait"
+      },
+      {
+        "name": "distinct_technical_stack_count",
+        "how_to_measure": "Proxy for Work_Role_Fragmentation: Count distinct programming languages, frameworks, or technical platforms appearing in searches/visits that suggest active work: Ruby, Haskell, Python, Scala, authentication systems (auth0, okta), cryptography (TLS, AES), infrastructure (Linux, Docker). Each distinct technology stack counts as 1.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum",
+        "construct": "Work_Role_Fragmentation"
+      },
+      {
+        "name": "professional_domain_categories",
+        "how_to_measure": "Proxy for Work_Role_Fragmentation: Count distinct professional/work domain categories appearing: software development, security/cryptography, system administration, academic research, product/business. Categorize work-related searches and count unique categories present. Example: Ruby debugging (dev) + TLS research (security) + auth0 comparison (product) = 3.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum",
+        "construct": "Work_Role_Fragmentation"
       }
     ]
   }

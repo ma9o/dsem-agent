@@ -408,33 +408,33 @@
   "measurement": {
     "indicators": [
       {
-        "name": "late_night_browsing",
+        "name": "late_night_activity_count",
         "construct": "Sleep Quality",
-        "how_to_measure": "Binary: 1 if any browsing activity (search, visit, or view) occurs between 00:00 and 05:00, 0 otherwise.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "binary",
-        "aggregation": "max"
-      },
-      {
-        "name": "morning_start_hour",
-        "construct": "Sleep Quality",
-        "how_to_measure": "Record the hour (0-23) of the first browsing activity after 05:00. Example: if first activity is at 10:17, record 10. If no activity after 05:00, mark as missing.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "continuous",
-        "aggregation": "first"
-      },
-      {
-        "name": "total_daily_activities",
-        "construct": "Workload Volume",
-        "how_to_measure": "Count all logged activities (entries tagged as search, visit, view, or other) in the time period.",
+        "how_to_measure": "Count the number of browsing activities (search or visit entries) with timestamps between 11:00 PM and 5:00 AM",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "technical_search_count",
+        "name": "first_activity_hour",
+        "construct": "Sleep Quality",
+        "how_to_measure": "Extract the hour (0-23) from the timestamp of the earliest browsing activity of the day. Mark as missing if no activity exists.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "continuous",
+        "aggregation": "first"
+      },
+      {
+        "name": "total_activity_count",
         "construct": "Workload Volume",
-        "how_to_measure": "Count searches related to programming, development, or technical documentation. Include: programming languages, frameworks, libraries, error messages, stack traces, APIs, debugging tools. Exclude: travel, food, entertainment, personal topics.",
+        "how_to_measure": "Count the total number of [search] and [visit] entries for the day",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum"
+      },
+      {
+        "name": "distinct_topic_count",
+        "construct": "Workload Volume",
+        "how_to_measure": "Count semantically distinct search topics for the day. Group related searches as one topic (e.g., 'haskell monad' and 'monad tutorial' = 1 topic).",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
@@ -442,178 +442,210 @@
       {
         "name": "topic_switch_count",
         "construct": "Interruption Frequency",
-        "how_to_measure": "Count topic changes from one subject to an unrelated area. A switch occurs when consecutive activities (within 30 min) are on completely unrelated subjects (e.g., from 'haskell monads' to 'sicily travel'). Do not count evolution within same domain.",
+        "how_to_measure": "Count transitions where consecutive browsing entries are on substantially different topics (e.g., 'ruby stacktrace' to 'travel japan' = 1 switch)",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "short_session_count",
+        "name": "work_personal_transitions",
         "construct": "Interruption Frequency",
-        "how_to_measure": "Count micro-sessions: sequences of fewer than 5 related activities on a topic before switching to a different topic. Each such short sequence counts as 1.",
+        "how_to_measure": "Count transitions between work content (programming, debugging, technical docs) and personal content (travel, entertainment, food, music, shopping, Reddit non-technical)",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "evening_work_activity",
+        "name": "after_hours_technical_count",
         "construct": "Deadline Pressure",
-        "how_to_measure": "Binary: 1 if any technical/work-related searches (programming, debugging, documentation) occur after 20:00. 0 if all technical activity ends before 20:00 or no technical activity that day.",
+        "how_to_measure": "Count technical/work-related browsing activities (coding, debugging, documentation searches) with timestamps after 7:00 PM or before 8:00 AM",
         "measurement_granularity": "daily",
-        "measurement_dtype": "binary",
-        "aggregation": "max"
+        "measurement_dtype": "count",
+        "aggregation": "sum"
       },
       {
-        "name": "weekend_work_activity",
+        "name": "rapid_search_burst",
         "construct": "Deadline Pressure",
-        "how_to_measure": "Binary: 1 if the day is Saturday or Sunday AND contains technical/work-related searches. 0 if weekday, or if weekend with no work-related activity.",
+        "how_to_measure": "Binary: Mark 1 if any 10-minute window contains 5+ search entries (check consecutive timestamps), mark 0 otherwise",
         "measurement_granularity": "daily",
         "measurement_dtype": "binary",
         "aggregation": "max"
       },
       {
-        "name": "complex_error_searches",
+        "name": "stackoverflow_visits",
         "construct": "Error Complexity",
-        "how_to_measure": "Count searches mentioning complex debugging scenarios. Look for terms: race condition, deadlock, memory leak, concurrency, threading, async error, stack trace, intermittent, flaky, edge case, integration error, timeout, null pointer, segfault, heap corruption.",
+        "how_to_measure": "Count entries visiting stackoverflow.com or with 'Stack Overflow' in the page title",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "debug_chain_length",
+        "name": "error_keyword_searches",
         "construct": "Error Complexity",
-        "how_to_measure": "For each sequence of consecutive related debugging searches addressing the same issue, count the number of searches in that chain. Report the count for each chain found.",
+        "how_to_measure": "Count searches containing any of: 'error', 'exception', 'bug', 'fix', 'issue', 'crash', 'fail', 'stacktrace', 'debug', 'not working', 'undefined'",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
-        "aggregation": "max"
+        "aggregation": "sum"
       },
       {
-        "name": "non_work_activity_count",
+        "name": "afternoon_distraction_count",
         "construct": "Cognitive Fatigue",
-        "how_to_measure": "Count activities that are NOT work-related. Non-work includes: entertainment, social media, news, personal shopping, travel planning, food/restaurant searches, general curiosity topics unrelated to programming.",
+        "how_to_measure": "Count non-work browsing entries (entertainment, social media, Wikipedia rabbit-holes, YouTube non-tutorial) with timestamps after 3:00 PM",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "midwork_break_count",
+        "name": "productivity_decline_flag",
         "construct": "Cognitive Fatigue",
-        "how_to_measure": "Count instances where a technical session (3+ consecutive technical searches) is interrupted by non-work browsing (entertainment, news, social media) before the technical task appears completed.",
+        "how_to_measure": "Binary: Mark 1 if work-related activity count after 12 PM is less than before 12 PM, mark 0 otherwise. Mark missing if fewer than 2 total activities.",
         "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
+        "measurement_dtype": "binary",
+        "aggregation": "max"
       },
       {
-        "name": "stress_related_searches",
+        "name": "workhour_distraction_count",
         "construct": "Stress Level",
-        "how_to_measure": "Count searches containing: stress, anxiety, mental health, relaxation, meditation, burnout, frustration, coping, overwhelmed, or health concerns appearing during work hours.",
+        "how_to_measure": "Count visits to non-work sites (Reddit casual, YouTube entertainment, news, shopping, social media) with timestamps between 9 AM and 6 PM",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "erratic_browsing_pattern",
+        "name": "health_related_searches",
         "construct": "Stress Level",
-        "how_to_measure": "Binary: 1 if 5 or more unrelated topic switches occur within any 30-minute window (rapid jumping between programming, travel, food, news). 0 otherwise.",
+        "how_to_measure": "Count searches containing any of: 'stress', 'anxiety', 'sleep', 'tired', 'headache', 'doctor', 'medication', 'health', 'insomnia', 'burnout'",
         "measurement_granularity": "daily",
-        "measurement_dtype": "binary",
-        "aggregation": "max"
+        "measurement_dtype": "count",
+        "aggregation": "sum"
       },
       {
-        "name": "focused_session_count",
+        "name": "uninterrupted_work_sessions",
         "construct": "Focus Quality",
-        "how_to_measure": "Count focused sessions: periods of 20+ minutes with consecutive related activities on the same topic without switching to unrelated content. A session ends when topic switches or there is a 30+ minute gap.",
+        "how_to_measure": "Count sequences of 5+ consecutive work-related browsing entries without any personal/entertainment interruption between them",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "focus_session_duration",
+        "name": "max_consecutive_work_entries",
         "construct": "Focus Quality",
-        "how_to_measure": "For each focused session identified, calculate duration in minutes from first to last activity using timestamps. Report the duration for each session found.",
+        "how_to_measure": "Find the longest unbroken sequence of consecutive work-related entries (technical searches, documentation, coding sites) and count those entries",
         "measurement_granularity": "daily",
-        "measurement_dtype": "continuous",
+        "measurement_dtype": "count",
         "aggregation": "max"
       },
       {
-        "name": "primary_tech_search_count",
+        "name": "documentation_visits",
         "construct": "Code Familiarity",
-        "how_to_measure": "Identify the main technology/language/framework from the day's searches (e.g., haskell, ruby, python, rails). Count all searches referencing this primary technology.",
+        "how_to_measure": "Count visits to official documentation (URLs/titles containing 'docs', 'documentation', 'reference', 'API', 'hackage', 'haskell.org', 'readthedocs')",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "beginner_learning_searches",
+        "name": "beginner_concept_searches",
         "construct": "Code Familiarity",
-        "how_to_measure": "Count searches indicating learning basics: 'what is X', 'X tutorial', 'learn X', 'X basics', 'how to X', 'getting started with X', 'X for beginners', 'introduction to X'.",
+        "how_to_measure": "Count searches containing introductory phrases: 'what is', 'introduction to', 'tutorial', 'basics', 'learn', 'beginner', 'getting started', 'for dummies'",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "collaboration_tool_visits",
+        "name": "max_solo_debugging_streak",
         "construct": "Team Support Availability",
-        "how_to_measure": "Count visits to collaboration platforms: Slack, Microsoft Teams, Discord, email services (gmail, outlook), calendar apps, GitHub pull requests, Jira, Confluence, code review tools.",
+        "how_to_measure": "Find the longest sequence of consecutive debugging/error-related entries without topic change and count those entries",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
-        "aggregation": "sum"
+        "aggregation": "max"
       },
       {
-        "name": "external_help_forum_visits",
+        "name": "extended_struggle_flag",
         "construct": "Team Support Availability",
-        "how_to_measure": "Count visits to external help sites: Stack Overflow, Reddit programming subs, GitHub issues, technical forums, programming Q&A sites.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "debugging_tool_searches",
-        "construct": "Debugging Confidence",
-        "how_to_measure": "Count searches for debugging tools and techniques: debugger, profiler, breakpoint, step through, memory profiler, CPU profiler, tracing, gdb, lldb, pdb, IDE debugging features, stack trace analysis.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "solution_verification_searches",
-        "construct": "Debugging Confidence",
-        "how_to_measure": "Binary: 1 if any searches suggest verification: 'test if', 'verify fix', 'how to test', 'unit test', 'check that', 'validate', 'confirm working'. 0 if no verification-related searches.",
+        "how_to_measure": "Binary: Mark 1 if there exists a sequence of 10+ consecutive debugging-related entries on the same error/problem topic, mark 0 otherwise",
         "measurement_granularity": "daily",
         "measurement_dtype": "binary",
         "aggregation": "max"
       },
       {
-        "name": "systematic_search_progression",
+        "name": "uncertain_query_count",
+        "construct": "Debugging Confidence",
+        "how_to_measure": "Count searches phrased uncertainly, containing: 'how to', 'why does', 'what is', 'why isn't', 'how do I', 'what causes', 'help with'",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum"
+      },
+      {
+        "name": "retry_search_count",
+        "construct": "Debugging Confidence",
+        "how_to_measure": "Count instances where the same technical question is searched multiple times with different phrasing within the day (e.g., 'haskell monad error' then 'monad type mismatch')",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum"
+      },
+      {
+        "name": "systematic_progression_flag",
         "construct": "Systematic Debugging Behavior",
-        "how_to_measure": "Binary: 1 if any debugging sequence shows progressive narrowing (general error to specific cause to solution). Example: 'app crashes' then 'null pointer in module X' then 'fix null check'. 0 if searches stay at same level or are scattered.",
+        "how_to_measure": "Binary: Mark 1 if debugging searches show logical narrowing (general concept -> specific implementation -> targeted fix), mark 0 if scattered/random order",
         "measurement_granularity": "daily",
         "measurement_dtype": "binary",
         "aggregation": "max"
       },
       {
-        "name": "isolation_technique_searches",
+        "name": "authoritative_source_count",
         "construct": "Systematic Debugging Behavior",
-        "how_to_measure": "Count searches indicating systematic debugging: 'reproduce error', 'minimal example', 'isolate issue', 'narrow down', 'root cause', 'why does X happen', 'bisect', 'git bisect', 'binary search debug'.",
+        "how_to_measure": "Count visits to authoritative technical sources: official docs, GitHub repos, academic papers (.edu, arxiv), official language/framework sites",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "resolved_error_count",
+        "name": "debugging_session_count",
         "construct": "Error Resolution Speed",
-        "how_to_measure": "Count debugging sessions that appear resolved: error search sequences ending with (a) topic switch to different work, (b) verification searches, or (c) session end without returning to same error.",
+        "how_to_measure": "Count distinct debugging sessions, where each session is a cluster of error-related searches that ends when browsing shifts to non-debugging content",
         "measurement_granularity": "daily",
         "measurement_dtype": "count",
         "aggregation": "sum"
       },
       {
-        "name": "debug_session_duration",
+        "name": "quick_resolution_count",
         "construct": "Error Resolution Speed",
-        "how_to_measure": "For each debugging session (error-related search sequence), calculate minutes from first error search to resolution or topic change using timestamps. Report duration for each session.",
+        "how_to_measure": "Count debugging sessions resolved quickly: sessions with 3 or fewer error-related searches before topic changes to different work",
         "measurement_granularity": "daily",
-        "measurement_dtype": "continuous",
-        "aggregation": "mean"
+        "measurement_dtype": "count",
+        "aggregation": "sum"
+      },
+      {
+        "name": "academic_research_visits",
+        "how_to_measure": "Proxy for Developer Experience Level: Count visits to academic/research sources: URLs containing arxiv.org, researchgate.net, semanticscholar.org, sci-hub, scholar.google.com, dblp, acm.org, ieee.org, or university research paths (csail.mit, eecs.berkeley, /papers/, /thesis/, /publications/)",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum",
+        "construct": "Developer Experience Level"
+      },
+      {
+        "name": "programming_language_diversity",
+        "how_to_measure": "Proxy for Developer Experience Level: Count distinct programming languages/major frameworks appearing in searches per day: haskell, ruby, scala, ocaml, python, javascript, java, rust, go, erlang, clojure, lisp, elixir, typescript, etc.",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum",
+        "construct": "Developer Experience Level"
+      },
+      {
+        "name": "dev_environment_setup_searches",
+        "how_to_measure": "Proxy for Tooling Quality: Count searches/visits about development environment configuration: mentions of Linux dev setup, OS for development, IDE configuration, editor setup, terminal configuration, or laptop/workstation development compatibility",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum",
+        "construct": "Tooling Quality"
+      },
+      {
+        "name": "monitoring_tool_references",
+        "how_to_measure": "Proxy for Tooling Quality: Count searches/visits mentioning development/monitoring tools by name: Sentry, DataDog, New Relic, Splunk, Grafana, Prometheus, logging infrastructure, APM tools",
+        "measurement_granularity": "daily",
+        "measurement_dtype": "count",
+        "aggregation": "sum",
+        "construct": "Tooling Quality"
       }
     ]
   }

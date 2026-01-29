@@ -458,260 +458,292 @@
   "measurement": {
     "indicators": [
       {
-        "name": "weekend_work_browsing_count",
+        "name": "weekend_work_visit",
         "construct": "weekend_work_hours",
-        "how_to_measure": "Count work-related website visits and searches occurring on Saturday or Sunday only. Work-related includes: programming/technical documentation, work tools (Slack, GitHub, Jira, email clients), professional research, code-related searches. If reviewing a weekday, record 0.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
+        "how_to_measure": "Binary: 1 if this is a visit to a work-related website (programming docs, GitHub, Stack Overflow, technical sites) occurring on Saturday or Sunday, 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
         "aggregation": "sum"
       },
       {
-        "name": "weekend_work_active_hours",
+        "name": "weekend_work_search",
         "construct": "weekend_work_hours",
-        "how_to_measure": "For Saturday and Sunday only: Count the number of distinct hour blocks (0-23) containing at least one work-related browse activity. For example, activity at 9:15 AM and 9:45 AM counts as 1 hour block; add activity at 2:30 PM for 2 total. If reviewing a weekday, record 0.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
+        "how_to_measure": "Binary: 1 if this is a work-related search (programming, technical topics, professional research) occurring on Saturday or Sunday, 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
         "aggregation": "sum"
       },
       {
-        "name": "late_weekday_work_activity",
+        "name": "friday_late_work",
         "construct": "unfinished_weekday_tasks",
-        "how_to_measure": "For Monday through Friday only: Count work-related browsing activities occurring after 8:00 PM. Work-related includes programming documentation, work tools, professional research, code searches. If reviewing a weekend day, record 0.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
+        "how_to_measure": "Binary: 1 if this is work-related browsing occurring after 7pm on Friday, 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
         "aggregation": "sum"
       },
       {
-        "name": "friday_evening_work",
+        "name": "weeknight_late_work",
         "construct": "unfinished_weekday_tasks",
-        "how_to_measure": "For Friday only: Record 1 if any work-related browsing occurs after 6:00 PM, record 0 if no work browsing after 6 PM on Friday. If reviewing any other day of the week, record 0.",
-        "measurement_granularity": "daily",
+        "how_to_measure": "Binary: 1 if this is work-related browsing occurring after 8pm on Monday, Tuesday, Wednesday, or Thursday, 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "sum"
+      },
+      {
+        "name": "work_during_workhours",
+        "construct": "weekday_productivity",
+        "how_to_measure": "For activity during weekday work hours (9am-6pm Mon-Fri): 1 if work-related (technical docs, programming, professional research), 0 if non-work. Return null for activities outside these hours or on weekends.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "mean"
+      },
+      {
+        "name": "workhour_distraction",
+        "construct": "weekday_productivity",
+        "how_to_measure": "Binary: 1 if this is non-work browsing (entertainment, social media, personal shopping, news) during weekday work hours (9am-6pm Mon-Fri), 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "sum"
+      },
+      {
+        "name": "weekday_work_activity",
+        "construct": "workload_volume",
+        "how_to_measure": "Binary: 1 if this is work-related browsing (technical searches, documentation, professional research) on a weekday, 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "sum"
+      },
+      {
+        "name": "work_domain_category",
+        "construct": "workload_volume",
+        "how_to_measure": "Categorize work activities by domain: 'programming' (code, languages), 'security_crypto' (security, encryption), 'infrastructure' (devops, servers), 'research' (papers, learning), 'other_work', or 'not_work' for non-work activities.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "categorical",
+        "aggregation": "n_unique"
+      },
+      {
+        "name": "stress_related_search",
+        "construct": "work_stress",
+        "how_to_measure": "Binary: 1 if this search/visit relates to stress, anxiety, burnout, mental health, therapy resources, or coping strategies, 0 otherwise.",
+        "measurement_granularity": "finest",
         "measurement_dtype": "binary",
         "aggregation": "max"
       },
       {
-        "name": "work_hours_activity_count",
-        "construct": "weekday_productivity",
-        "how_to_measure": "For weekdays (Mon-Fri) between 9 AM and 6 PM only: Count all work-related browsing activities including programming docs, technical searches, professional research, work tools like GitHub or Jira. If reviewing a weekend, record 0.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "mean"
-      },
-      {
-        "name": "distraction_site_visits",
-        "construct": "weekday_productivity",
-        "how_to_measure": "For weekdays (Mon-Fri) between 9 AM and 6 PM: Count visits to non-work sites including entertainment (YouTube for non-work, Netflix), social media, general news, shopping, games. If reviewing a weekend, record 0.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "mean"
-      },
-      {
-        "name": "total_work_searches",
-        "construct": "workload_volume",
-        "how_to_measure": "Count all work-related searches throughout the entire day, any day of week. Include programming topics, professional tools, technical documentation lookups, work project research.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "distinct_work_topics",
-        "construct": "workload_volume",
-        "how_to_measure": "Count the number of distinct work-related topics researched in the day. A topic is a distinct subject area (e.g., 'Haskell', 'TLS encryption', 'authentication', 'database queries'). Count each unique topic once regardless of how many times searched.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "stress_wellness_searches",
+        "name": "physical_symptom_search",
         "construct": "work_stress",
-        "how_to_measure": "Count searches containing stress or wellness related terms: stress, anxiety, burnout, mental health, relaxation, meditation, therapy, overwhelmed, panic, calm, wellness, headache, fatigue, insomnia.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "late_night_health_searches",
-        "construct": "work_stress",
-        "how_to_measure": "Count health-related or symptom-related searches occurring after 9 PM. Include searches about physical symptoms, mental health, medical conditions, wellness topics.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "evening_work_browsing",
-        "construct": "work_rumination",
-        "how_to_measure": "Count work-related browsing activities between 6 PM and 11 PM, any day of week. Work-related means programming, work communication tools, professional research, technical documentation.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "mean"
-      },
-      {
-        "name": "late_night_work_check",
-        "construct": "work_rumination",
-        "how_to_measure": "Record 1 if any work-related browsing occurs after 10 PM, record 0 otherwise. Work-related includes work email, code searches, work documentation, Slack, Teams, GitHub.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "binary",
-        "aggregation": "mean"
-      },
-      {
-        "name": "sleep_related_searches",
-        "construct": "sleep_quality",
-        "how_to_measure": "Count searches for sleep-related topics: sleep, insomnia, sleep quality, tired, fatigue, sleep aids, melatonin, can't sleep, sleep tracker, sleep app, sleep schedule, nap.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "last_activity_hour",
-        "construct": "sleep_quality",
-        "how_to_measure": "Record the hour (0-23) of the last browsing activity of the day. Example: last activity at 11:47 PM means record 23; last activity at 9:15 PM means record 21.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "continuous",
-        "aggregation": "mean"
-      },
-      {
-        "name": "daily_activity_volume",
-        "construct": "energy_levels",
-        "how_to_measure": "Count the total number of browsing activities (all searches and website visits) for the entire day. Count every entry in the browsing history for that day.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "mean"
-      },
-      {
-        "name": "morning_activity_count",
-        "construct": "energy_levels",
-        "how_to_measure": "Count all browsing activities occurring between 6 AM and 12 PM noon. Include all searches and visits in this time window.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "mean"
-      },
-      {
-        "name": "work_stops_by_evening",
-        "construct": "boundary_enforcement",
-        "how_to_measure": "Record 1 if there is NO work-related browsing after 7:00 PM. Record 0 if work browsing continues after 7 PM. Work means programming, work tools, professional research, work email.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "binary",
-        "aggregation": "mean"
-      },
-      {
-        "name": "evening_communication_free",
-        "construct": "boundary_enforcement",
-        "how_to_measure": "Record 1 if there are NO visits to work communication tools (Gmail, Outlook, Slack, Teams) after 6 PM. Record 0 if any such visits occur after 6 PM.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "binary",
-        "aggregation": "mean"
-      },
-      {
-        "name": "social_venue_searches",
-        "construct": "weekend_social_commitments",
-        "how_to_measure": "On Saturday and Sunday only: Count searches for social venues and activities including restaurants, bars, cafes, events, parties, meetups, concerts, nightlife. If reviewing a weekday, record 0.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "social_location_lookups",
-        "construct": "weekend_social_commitments",
-        "how_to_measure": "On Saturday and Sunday only: Count map views and location lookups for social places. Look for entries showing restaurants, cafes, entertainment venues, or searches for meeting spots and directions. If reviewing a weekday, record 0.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "hobby_leisure_browsing",
-        "construct": "weekend_recovery_activities",
-        "how_to_measure": "On Saturday and Sunday only: Count browsing for hobbies and leisure including music, travel planning, movies, books, games, creative activities, personal interest topics. Exclude work-related technical content. If reviewing a weekday, record 0.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "recreation_fitness_searches",
-        "construct": "weekend_recovery_activities",
-        "how_to_measure": "On Saturday and Sunday only: Count searches for physical recreation including exercise, sports, outdoor activities, hiking, beaches, swimming, diving, fitness, gym, nature activities. If reviewing a weekday, record 0.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "planning_tool_visits",
-        "construct": "planning_quality",
-        "how_to_measure": "Count visits to planning and organization tools: calendar apps such as Google Calendar, task managers such as Trello, Asana, Todoist, Notion, and any to-do list or scheduling tools.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "mean"
-      },
-      {
-        "name": "morning_planning_activity",
-        "construct": "planning_quality",
-        "how_to_measure": "Record 1 if any planning or organization tool (calendar, task manager, to-do list) is visited between 6 AM and 10 AM. Record 0 if no planning tools are used in the morning.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "binary",
-        "aggregation": "mean"
-      },
-      {
-        "name": "fitness_exercise_searches",
-        "construct": "physical_activity",
-        "how_to_measure": "Count searches related to fitness and exercise: workout, gym, running, yoga, swimming, cycling, fitness tracker, exercise routine, sports training, fitness app.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "outdoor_activity_searches",
-        "construct": "physical_activity",
-        "how_to_measure": "Count searches for outdoor physical activities: hiking, biking, trails, parks, beaches, diving, surfing, camping, nature walks, outdoor sports.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "off_hours_work_activity",
-        "construct": "work_guilt",
-        "how_to_measure": "Count work-related browsing during leisure time: all day on weekends, or after 8 PM on weekdays. Include work email, Slack, work documents, programming searches.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "mean"
-      },
-      {
-        "name": "work_life_balance_searches",
-        "construct": "work_guilt",
-        "how_to_measure": "Count searches related to work-life balance concerns: work guilt, productivity guilt, work-life balance, overwork, burnout, workaholic, hustle culture, taking time off, vacation guilt.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "deadline_urgency_searches",
-        "construct": "deadline_pressure",
-        "how_to_measure": "Count searches containing explicit deadline or urgency terms: deadline, urgent, due date, submit, due tomorrow, extension, rush, ASAP, overdue, on time, last minute.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "very_late_work_session",
-        "construct": "deadline_pressure",
-        "how_to_measure": "On weekdays only: Record 1 if work-related browsing occurs after 9 PM, suggesting deadline pressure requiring unusually late work. Record 0 if no work activity after 9 PM. If reviewing a weekend, record 0.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "binary",
-        "aggregation": "mean"
-      },
-      {
-        "name": "weekend_email_visits",
-        "construct": "manager_weekend_communication",
-        "how_to_measure": "On Saturday and Sunday only: Count visits to email services such as Gmail, Outlook, Yahoo Mail, or any email client. If reviewing a weekday, record 0.",
-        "measurement_granularity": "daily",
-        "measurement_dtype": "count",
-        "aggregation": "sum"
-      },
-      {
-        "name": "weekend_work_messaging",
-        "construct": "manager_weekend_communication",
-        "how_to_measure": "On Saturday and Sunday only: Record 1 if any visit to work messaging platforms (Slack, Teams, Discord) occurs. Record 0 if no work messaging visits. If reviewing a weekday, record 0.",
-        "measurement_granularity": "daily",
+        "how_to_measure": "Binary: 1 if this search relates to stress-related physical symptoms (headaches, muscle tension, stomach issues, fatigue, heart palpitations), 0 otherwise.",
+        "measurement_granularity": "finest",
         "measurement_dtype": "binary",
         "aggregation": "max"
+      },
+      {
+        "name": "after_hours_work",
+        "construct": "work_rumination",
+        "how_to_measure": "Binary: 1 if this is work-related browsing after 7pm on any day, 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "sum"
+      },
+      {
+        "name": "late_night_work",
+        "construct": "work_rumination",
+        "how_to_measure": "Binary: 1 if this is work-related browsing after 10pm, indicating strong difficulty disconnecting, 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "max"
+      },
+      {
+        "name": "after_11pm_activity",
+        "construct": "sleep_quality",
+        "how_to_measure": "Binary: 1 if any browsing activity (work or personal) occurs after 11pm, 0 otherwise. Higher values indicate poorer sleep habits.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "max"
+      },
+      {
+        "name": "sleep_problem_search",
+        "construct": "sleep_quality",
+        "how_to_measure": "Binary: 1 if this search/visit relates to sleep issues, insomnia, sleep trackers (Oura, sleep apps), sleep aids, or sleep improvement, 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "max"
+      },
+      {
+        "name": "daytime_browsing",
+        "construct": "energy_levels",
+        "how_to_measure": "Binary: 1 if browsing occurs during active daytime hours (8am-8pm), 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "sum"
+      },
+      {
+        "name": "fatigue_related_search",
+        "construct": "energy_levels",
+        "how_to_measure": "Binary: 1 if this search relates to tiredness, fatigue, low energy, needing caffeine, or energy supplements, 0 otherwise. Presence indicates low energy.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "max"
+      },
+      {
+        "name": "work_before_7pm",
+        "construct": "boundary_enforcement",
+        "how_to_measure": "For work-related activities: 1 if occurring before 7pm, 0 if at or after 7pm. Return null for non-work activities.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "mean"
+      },
+      {
+        "name": "post_8pm_work",
+        "construct": "boundary_enforcement",
+        "how_to_measure": "Binary: 1 if this is work-related browsing at or after 8pm, 0 otherwise. Higher values indicate poorer boundary enforcement.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "max"
+      },
+      {
+        "name": "weekend_social_venue_search",
+        "construct": "weekend_social_commitments",
+        "how_to_measure": "Binary: 1 if this is a search/visit on Saturday or Sunday for restaurants, bars, cafes, event venues, concerts, or social meetup locations, 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "sum"
+      },
+      {
+        "name": "social_event_planning",
+        "construct": "weekend_social_commitments",
+        "how_to_measure": "Binary: 1 if this search/visit relates to planning social activities, making reservations, finding event times, or coordinating gatherings, 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "sum"
+      },
+      {
+        "name": "weekend_leisure",
+        "construct": "weekend_recovery_activities",
+        "how_to_measure": "Binary: 1 if this is leisure browsing (entertainment, music, hobbies, sports, movies, travel, gaming) on Saturday or Sunday, 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "sum"
+      },
+      {
+        "name": "recreation_search",
+        "construct": "weekend_recovery_activities",
+        "how_to_measure": "Binary: 1 if this search relates to recreational activities: vacation planning, outdoor activities, hiking, beaches, nature, hobbies, 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "sum"
+      },
+      {
+        "name": "planning_tool_search",
+        "construct": "planning_quality",
+        "how_to_measure": "Binary: 1 if this search/visit relates to productivity tools, task managers, calendar apps, to-do lists, or time management techniques, 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "max"
+      },
+      {
+        "name": "deep_work_indicator",
+        "construct": "planning_quality",
+        "how_to_measure": "Binary: 1 if this work activity appears substantive (in-depth documentation reading, tutorial following, thorough research) rather than quick lookups, 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "sum"
+      },
+      {
+        "name": "exercise_related_search",
+        "construct": "physical_activity",
+        "how_to_measure": "Binary: 1 if this search/visit relates to exercise, gym, workouts, running, sports, or fitness routines, 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "max"
+      },
+      {
+        "name": "fitness_tracking_search",
+        "construct": "physical_activity",
+        "how_to_measure": "Binary: 1 if this search relates to fitness wearables (Fitbit, Garmin, Oura ring fitness), workout apps, or activity tracking, 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "max"
+      },
+      {
+        "name": "weekend_work_intrusion",
+        "construct": "work_guilt",
+        "how_to_measure": "Binary: 1 if this is work-related browsing on Saturday or Sunday, suggesting guilt-driven work, 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "sum"
+      },
+      {
+        "name": "evening_work_intrusion",
+        "construct": "work_guilt",
+        "how_to_measure": "Binary: 1 if this is work-related browsing during evening leisure hours (7pm-10pm) on weekdays, 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "sum"
+      },
+      {
+        "name": "urgency_indicator_search",
+        "construct": "deadline_pressure",
+        "how_to_measure": "Binary: 1 if this search contains urgency terms (deadline, urgent, ASAP, due, rush, emergency, quickly) or relates to urgent troubleshooting, 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "max"
+      },
+      {
+        "name": "error_troubleshooting",
+        "construct": "deadline_pressure",
+        "how_to_measure": "Binary: 1 if this search/visit relates to debugging, error messages, stack traces, quick fixes, or urgent problem resolution, 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "sum"
+      },
+      {
+        "name": "weekend_email_check",
+        "construct": "manager_weekend_communication",
+        "how_to_measure": "Binary: 1 if this is a visit to email services (Gmail, Outlook, Yahoo Mail, work email) on Saturday or Sunday, 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "sum"
+      },
+      {
+        "name": "weekend_messaging_check",
+        "construct": "manager_weekend_communication",
+        "how_to_measure": "Binary: 1 if this is a visit to workplace messaging platforms (Slack, Teams, workplace chat) on Saturday or Sunday, 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "sum"
+      },
+      {
+        "name": "incident_monitoring_tool_search",
+        "how_to_measure": "Proxy for job_role_demands: Binary: 1 if this search/visit relates to error monitoring, incident tracking, or alerting tools (Sentry, DataDog, PagerDuty, OpsGenie, New Relic, error tracking, incident management), 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "max",
+        "construct": "job_role_demands"
+      },
+      {
+        "name": "devops_infrastructure_search",
+        "how_to_measure": "Proxy for job_role_demands: Binary: 1 if this search/visit relates to DevOps, infrastructure management, server administration, deployment pipelines, or cloud operations (often indicating on-call responsibilities), 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "max",
+        "construct": "job_role_demands"
+      },
+      {
+        "name": "early_weekend_morning_work",
+        "how_to_measure": "Proxy for workaholism_tendency: Binary: 1 if this is work-related browsing before 9am on Saturday or Sunday, indicating compulsive early engagement with work on rest days, 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "sum",
+        "construct": "workaholism_tendency"
+      },
+      {
+        "name": "burnout_overwork_search",
+        "how_to_measure": "Proxy for workaholism_tendency: Binary: 1 if this search relates to burnout, workaholism, overwork, work addiction, or mental health issues linked to excessive work (depression treatments, ketamine for depression while showing work stress patterns), 0 otherwise.",
+        "measurement_granularity": "finest",
+        "measurement_dtype": "binary",
+        "aggregation": "max",
+        "construct": "workaholism_tendency"
       }
     ]
   }
