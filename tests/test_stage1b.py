@@ -255,6 +255,42 @@ class TestMergeProxies:
         assert new_indicator["construct"] == "Confounder"
         assert "confounder_proxy" in new_indicator["name"]
 
+    def test_merge_handles_full_indicator_objects(self, measurement_missing_confounder):
+        """Proxy response with full indicator objects (not just names) is handled correctly."""
+        # This is what models sometimes produce - full indicator specs instead of just names
+        proxy_response = {
+            "new_proxies": [
+                {
+                    "construct": "Confounder",
+                    "indicators": [
+                        {
+                            "name": "confounder_proxy",
+                            "how_to_measure": "Extract proxy value from data",
+                            "measurement_granularity": "daily",
+                            "measurement_dtype": "continuous",
+                            "aggregation": "mean",
+                        }
+                    ],
+                    "justification": "This proxy captures the confounder",
+                }
+            ],
+        }
+
+        result = _merge_proxies(measurement_missing_confounder, proxy_response)
+
+        # Should have one more indicator
+        assert len(result["indicators"]) == len(measurement_missing_confounder["indicators"]) + 1
+
+        # New indicator should have all fields from the full object
+        new_indicator = result["indicators"][-1]
+        assert new_indicator["name"] == "confounder_proxy"
+        assert new_indicator["construct"] == "Confounder"
+        assert new_indicator["measurement_granularity"] == "daily"
+        assert new_indicator["measurement_dtype"] == "continuous"
+        assert new_indicator["aggregation"] == "mean"
+        # how_to_measure should be prepended with proxy justification
+        assert "Proxy for Confounder:" in new_indicator["how_to_measure"]
+
 
 class TestGetConfoundersToFix:
     """Test _get_confounders_to_fix helper function."""

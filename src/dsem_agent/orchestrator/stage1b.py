@@ -85,7 +85,12 @@ class Stage1bMessages:
 
 
 def _merge_proxies(measurement: dict, proxy_response: dict | None) -> dict:
-    """Merge proxy indicators into measurement model."""
+    """Merge proxy indicators into measurement model.
+
+    Handles two formats for proxy indicators:
+    1. List of strings (indicator names) - as requested in prompt
+    2. List of full indicator objects - what models sometimes produce
+    """
     if not proxy_response or not proxy_response.get("new_proxies"):
         return measurement
 
@@ -93,12 +98,23 @@ def _merge_proxies(measurement: dict, proxy_response: dict | None) -> dict:
     result = {"indicators": list(measurement.get("indicators", []))}
 
     for proxy in proxy_response["new_proxies"]:
-        for indicator_name in proxy.get("indicators", []):
-            result["indicators"].append({
-                "name": indicator_name,
-                "construct": proxy["construct"],
-                "how_to_measure": f"Proxy for {proxy['construct']}: {proxy.get('justification', '')}",
-            })
+        for indicator in proxy.get("indicators", []):
+            if isinstance(indicator, dict):
+                # Model returned full indicator object - use it directly
+                # but ensure construct is set correctly
+                ind = dict(indicator)
+                ind["construct"] = proxy["construct"]
+                # Prepend proxy justification to how_to_measure if provided
+                if proxy.get("justification") and "how_to_measure" in ind:
+                    ind["how_to_measure"] = f"Proxy for {proxy['construct']}: {ind['how_to_measure']}"
+                result["indicators"].append(ind)
+            else:
+                # Model returned just indicator name (string) - build minimal indicator
+                result["indicators"].append({
+                    "name": indicator,
+                    "construct": proxy["construct"],
+                    "how_to_measure": f"Proxy for {proxy['construct']}: {proxy.get('justification', '')}",
+                })
 
     return result
 
