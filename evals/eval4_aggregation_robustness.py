@@ -8,6 +8,9 @@ This eval verifies that the aggregation pipeline can handle the diverse outputs
 produced by worker LLMs without breaking. Sets cycle through all 5 questions
 from config.yaml, testing each DSEMModel with its corresponding question.
 
+Uses the same core logic as production (via run_worker_extraction) for generating
+worker outputs, just with different model configurations.
+
 Usage:
     inspect eval evals/eval4_aggregation_robustness.py --model google/vertex/gemini-3-flash-preview
     inspect eval evals/eval4_aggregation_robustness.py -T n_sets=10 -T chunks_per_set=5
@@ -20,23 +23,22 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import asyncio
-import json
 import traceback
 
 from inspect_ai import Task, task
 from inspect_ai.dataset import MemoryDataset, Sample
-from inspect_ai.model import ChatMessageSystem, ChatMessageUser, get_model
+from inspect_ai.model import get_model
 from inspect_ai.scorer import Score, Target, accuracy, scorer, stderr
 from inspect_ai.solver import Generate, TaskState, solver
 
 from dsem_agent.utils.aggregations import aggregate_worker_measurements
-from dsem_agent.utils.llm import get_generate_config, make_worker_tools, multi_turn_generate, parse_json_response
-from dsem_agent.workers.prompts import WORKER_WO_PROPOSALS_SYSTEM, WORKER_USER
-from dsem_agent.workers.agents import (
+from dsem_agent.utils.llm import make_worker_generate_fn
+from dsem_agent.workers.prompts import WORKER_USER
+from dsem_agent.workers.core import (
+    run_worker_extraction,
     _format_indicators,
     _get_outcome_description,
 )
-from dsem_agent.workers.schemas import WorkerOutput
 
 from evals.common import (
     get_eval_questions,
@@ -125,38 +127,22 @@ async def generate_worker_output(
     chunk: str,
     question: str,
     dsem_model: dict,
-) -> str:
-    """Generate worker output for a single chunk.
+):
+    """Generate worker output for a single chunk using core logic.
 
-    Returns the raw completion text (including JSON).
+    Returns the dataframe from the extraction result.
     """
     model = get_model(model_id)
+    generate = make_worker_generate_fn(model)
 
-    indicators_text = _format_indicators(dsem_model)
-    outcome_description = _get_outcome_description(dsem_model)
-
-    messages = [
-        ChatMessageSystem(content=WORKER_WO_PROPOSALS_SYSTEM),
-        ChatMessageUser(
-            content=WORKER_USER.format(
-                question=question,
-                outcome_description=outcome_description,
-                indicators=indicators_text,
-                chunk=chunk,
-            )
-        ),
-    ]
-
-    config = get_generate_config()
-
-    completion = await multi_turn_generate(
-        messages=messages,
-        model=model,
-        tools=make_worker_tools(dsem_model),
-        config=config,
+    result = await run_worker_extraction(
+        chunk=chunk,
+        question=question,
+        dsem_model=dsem_model,
+        generate=generate,
     )
 
-    return completion
+    return result.dataframe
 
 
 def aggregation_solver(worker_timeout: float = 300):
@@ -179,7 +165,7 @@ def aggregation_solver(worker_timeout: float = 300):
             model_id = str(model)
 
             # Generate outputs from workers in parallel
-            async def safe_generate(chunk: str, chunk_idx: int) -> tuple[int, str | None, str | None]:
+            async def safe_generate(chunk: str, chunk_idx: int) -> tuple[int, any, str | None]:
                 """Generate with error handling, returns (chunk_idx, result, error)."""
                 try:
                     result = await asyncio.wait_for(
@@ -202,15 +188,8 @@ def aggregation_solver(worker_timeout: float = 300):
             for chunk_idx, result, error in results:
                 if error:
                     worker_errors.append(f"chunk_{chunk_idx}: {error}")
-                elif result:
-                    # Parse JSON and convert to DataFrame
-                    try:
-                        data = parse_json_response(result)
-                        output = WorkerOutput.model_validate(data)
-                        df = output.to_dataframe()
-                        worker_outputs.append(df)
-                    except Exception as e:
-                        worker_errors.append(f"chunk_{chunk_idx}: parse error - {e}")
+                elif result is not None:
+                    worker_outputs.append(result)
 
             # Store worker info in metadata
             state.metadata["n_successful_workers"] = len(worker_outputs)

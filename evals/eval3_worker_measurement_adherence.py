@@ -4,6 +4,9 @@ Uses a judge model to evaluate how well competing worker models follow
 the measurement instructions from the DSEMModel schema. The judge
 ranks outputs without knowing model names and returns the winner.
 
+Uses the same core logic as production (via run_worker_extraction) for generating
+worker outputs, just with different model configurations.
+
 Usage:
     inspect eval evals/eval3_worker_measurement_adherence.py --model openrouter/anthropic/claude-sonnet-4
 """
@@ -25,11 +28,12 @@ from inspect_ai.scorer import Score, Target, mean, scorer, stderr
 from inspect_ai.solver import Generate, TaskState, solver
 
 from dsem_agent.workers.prompts import WORKER_WO_PROPOSALS_SYSTEM, WORKER_USER
-from dsem_agent.workers.agents import (
+from dsem_agent.workers.core import (
+    run_worker_extraction,
     _format_indicators,
     _get_outcome_description,
 )
-from dsem_agent.utils.llm import get_generate_config, make_worker_tools, multi_turn_generate, parse_json_response
+from dsem_agent.utils.llm import get_generate_config, make_worker_generate_fn, parse_json_response
 
 from evals.common import (
     get_eval_questions,
@@ -102,37 +106,21 @@ async def generate_worker_output(
     question: str,
     dsem_model: dict,
 ) -> str:
-    """Generate worker output for a single model.
+    """Generate worker output for a single model using core logic.
 
-    Returns the raw completion text (including JSON).
+    Returns the raw JSON string of the output.
     """
     model = get_model(model_id)
+    generate = make_worker_generate_fn(model)
 
-    indicators_text = _format_indicators(dsem_model)
-    outcome_description = _get_outcome_description(dsem_model)
-
-    messages = [
-        ChatMessageSystem(content=WORKER_WO_PROPOSALS_SYSTEM),
-        ChatMessageUser(
-            content=WORKER_USER.format(
-                question=question,
-                outcome_description=outcome_description,
-                indicators=indicators_text,
-                chunk=chunk,
-            )
-        ),
-    ]
-
-    config = get_generate_config()
-
-    completion = await multi_turn_generate(
-        messages=messages,
-        model=model,
-        tools=make_worker_tools(dsem_model),
-        config=config,
+    result = await run_worker_extraction(
+        chunk=chunk,
+        question=question,
+        dsem_model=dsem_model,
+        generate=generate,
     )
 
-    return completion
+    return json.dumps(result.output.model_dump(), indent=2)
 
 
 def format_candidates_for_judge(outputs: dict[str, str], label_map: dict[str, str]) -> str:

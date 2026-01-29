@@ -1,16 +1,15 @@
-"""Stage 1a: Latent Model Proposal (Orchestrator).
+"""Stage 1a: Latent Model Proposal (Prefect wrapper).
 
-The orchestrator proposes theoretical constructs and causal edges based on
-domain knowledge alone, WITHOUT seeing any data.
-
-This follows the Anderson & Gerbing (1988) two-step approach where the
-latent model is specified first from theory.
+Wraps the core Stage 1a logic for use in Prefect pipelines.
 """
 
+from inspect_ai.model import get_model
 from prefect import task
 from prefect.cache_policies import INPUTS
 
-from dsem_agent.orchestrator.agents import propose_latent_model as propose_latent_model_agent
+from dsem_agent.orchestrator.stage1a import run_stage1a
+from dsem_agent.utils.config import get_config
+from dsem_agent.utils.llm import make_orchestrator_generate_fn
 
 
 @task(retries=2, retry_delay_seconds=30, cache_policy=INPUTS)
@@ -25,4 +24,12 @@ def propose_latent_model(question: str) -> dict:
     Returns:
         LatentModel as a dictionary with 'constructs' and 'edges'
     """
-    return propose_latent_model_agent(question)
+    import asyncio
+
+    async def run():
+        model = get_model(get_config().stage1_structure_proposal.model)
+        generate = make_orchestrator_generate_fn(model)
+        result = await run_stage1a(question=question, generate=generate)
+        return result.latent_model
+
+    return asyncio.run(run())

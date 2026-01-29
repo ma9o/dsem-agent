@@ -5,6 +5,9 @@ from a research question alone, WITHOUT seeing any data.
 
 This evaluates domain knowledge and causal reasoning, not data operationalization.
 
+Uses the same core logic as production (via run_stage1a), just with
+a different model configuration.
+
 Usage:
     inspect eval evals/eval1a_latent_model.py --model openrouter/anthropic/claude-sonnet-4
     inspect eval evals/eval1a_latent_model.py --model openrouter/google/gemini-2.5-pro-preview
@@ -21,23 +24,19 @@ from dataclasses import dataclass
 
 from inspect_ai import Task, task
 from inspect_ai.dataset import MemoryDataset, Sample
+from inspect_ai.model import get_model
 from inspect_ai.scorer import Score, Target, mean, scorer, stderr
-from inspect_ai.solver import TaskState, system_message
+from inspect_ai.solver import Generate, TaskState, solver, system_message
 
-from dsem_agent.orchestrator.prompts import (
-    LATENT_MODEL_SYSTEM,
-    LATENT_MODEL_USER,
-    LATENT_MODEL_REVIEW,
-)
+from dsem_agent.orchestrator.prompts import LATENT_MODEL_SYSTEM
 from dsem_agent.orchestrator.scoring import _count_rule_points_detailed
 from dsem_agent.orchestrator.schemas import LatentModel
-from dsem_agent.utils.llm import validate_latent_model_tool
+from dsem_agent.orchestrator.stage1a import run_stage1a, Stage1aResult
+from dsem_agent.utils.llm import make_orchestrator_generate_fn
 
 from evals.common import (
-    extract_json_from_response,
     get_eval_questions,
     load_eval_config,
-    tool_assisted_generate,
 )
 
 # Load config for models
@@ -75,12 +74,9 @@ def create_eval_dataset() -> MemoryDataset:
 
     samples = []
     for q in questions:
-        # Build the user prompt - question only, no data
-        user_prompt = LATENT_MODEL_USER.format(question=q.question)
-
         samples.append(
             Sample(
-                input=user_prompt,
+                input=q.question,  # Just the question, stage1a builds the full prompt
                 id=f"q{q.id}",
                 metadata={
                     "question": q.question,
@@ -104,37 +100,23 @@ def latent_model_scorer():
     """
 
     async def score(state: TaskState, target: Target) -> Score:
-        completion = state.output.completion
+        # Get the Stage1aResult from metadata (set by solver)
+        result: Stage1aResult | None = state.metadata.get("stage1a_result")
 
-        # Extract JSON from response
-        json_str = extract_json_from_response(completion)
-        if json_str is None:
+        if result is None:
             return Score(
                 value=0.0,
-                answer="[No valid JSON found]",
-                explanation=(
-                    "ERROR: Could not extract JSON from model response.\n"
-                    f"Response preview: {completion[:500]}..."
-                ),
-            )
-
-        # Parse JSON
-        try:
-            data = json.loads(json_str)
-        except json.JSONDecodeError as e:
-            return Score(
-                value=0.0,
-                answer=json_str[:200] + "..." if len(json_str) > 200 else json_str,
-                explanation=f"ERROR: JSON parse failed - {e}",
+                answer="[No result]",
+                explanation="Stage 1a did not produce a result",
             )
 
         # Validate against schema
         try:
-            structure = LatentModel(**data)
+            structure = LatentModel(**result.latent_model)
         except Exception as e:
             return Score(
                 value=0.0,
-                answer=json_str[:500] + "..." if len(json_str) > 500 else json_str,
+                answer=json.dumps(result.latent_model)[:500],
                 explanation=f"ERROR: Schema validation failed - {e}",
             )
 
@@ -143,7 +125,7 @@ def latent_model_scorer():
 
         return Score(
             value=scoring["total"],
-            answer=json_str[:500] + "..." if len(json_str) > 500 else json_str,
+            answer=json.dumps(result.latent_model, indent=2)[:500],
             explanation=scoring["breakdown"],
             metadata={
                 "constructs": scoring["constructs"],
@@ -154,6 +136,35 @@ def latent_model_scorer():
         )
 
     return score
+
+
+def latent_model_solver():
+    """Solver that runs the full Stage 1a flow using core logic."""
+
+    @solver
+    def _solver():
+        async def solve(state: TaskState, generate: Generate) -> TaskState:
+            model = get_model()
+            generate_fn = make_orchestrator_generate_fn(model)
+
+            # Get metadata
+            question = state.metadata.get("question", "")
+
+            # Run the SAME core logic as production
+            result = await run_stage1a(
+                question=question,
+                generate=generate_fn,
+            )
+
+            # Store result in metadata for scorer
+            state.metadata["stage1a_result"] = result
+            state.output.completion = json.dumps(result.latent_model, indent=2)
+
+            return state
+
+        return solve
+
+    return _solver()
 
 
 @task
@@ -172,10 +183,7 @@ def latent_model_eval():
         dataset=create_eval_dataset(),
         solver=[
             system_message(LATENT_MODEL_SYSTEM),
-            tool_assisted_generate(
-                tools=[validate_latent_model_tool()],
-                follow_ups=[LATENT_MODEL_REVIEW],
-            ),
+            latent_model_solver(),
         ],
         scorer=latent_model_scorer(),
     )

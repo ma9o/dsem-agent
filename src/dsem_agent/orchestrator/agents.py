@@ -5,33 +5,15 @@ Two-stage approach following Anderson & Gerbing (1988):
 2. Measurement Model (Stage 1b) - operationalize constructs into indicators, WITH DATA
 """
 
-import json
 from pathlib import Path
 
 from dotenv import load_dotenv
-from inspect_ai.model import (
-    ChatMessageSystem,
-    ChatMessageUser,
-    get_model,
-)
+from inspect_ai.model import get_model
 
 from dsem_agent.utils.config import get_config
-from dsem_agent.utils.llm import (
-    make_validate_measurement_model_tool,
-    multi_turn_generate,
-    parse_json_response,
-    validate_latent_model_tool,
-)
-from .prompts import (
-    LATENT_MODEL_SYSTEM,
-    LATENT_MODEL_USER,
-    LATENT_MODEL_REVIEW,
-    MEASUREMENT_MODEL_SYSTEM,
-    MEASUREMENT_MODEL_USER,
-    MEASUREMENT_MODEL_REVIEW,
-    PROXY_REQUEST_SYSTEM,
-    PROXY_REQUEST_USER,
-)
+from dsem_agent.utils.llm import make_orchestrator_generate_fn
+from .stage1a import run_stage1a
+from .stage1b import run_stage1b
 from .schemas import DSEMModel, MeasurementModel, LatentModel
 
 # Load environment variables from .env file (for API keys)
@@ -59,27 +41,10 @@ async def propose_latent_model_async(question: str) -> dict:
     Returns:
         LatentModel as a dictionary
     """
-    model_name = get_config().stage1_structure_proposal.model
-    model = get_model(model_name)
-
-    messages = [
-        ChatMessageSystem(content=LATENT_MODEL_SYSTEM),
-        ChatMessageUser(content=LATENT_MODEL_USER.format(question=question)),
-    ]
-
-    # Run multi-turn: initial proposal + self-review, with validation tool available
-    completion = await multi_turn_generate(
-        messages=messages,
-        model=model,
-        follow_ups=[LATENT_MODEL_REVIEW],
-        tools=[validate_latent_model_tool()],
-    )
-
-    # Parse and validate final result
-    data = parse_json_response(completion)
-    latent_model = LatentModel.model_validate(data)
-
-    return latent_model.model_dump()
+    model = get_model(get_config().stage1_structure_proposal.model)
+    generate = make_orchestrator_generate_fn(model)
+    result = await run_stage1a(question=question, generate=generate)
+    return result.latent_model
 
 
 def propose_latent_model(question: str) -> dict:
@@ -126,40 +91,16 @@ async def propose_measurement_model_async(
     Returns:
         MeasurementModel as a dictionary
     """
-    model_name = get_config().stage1_structure_proposal.model
-    model = get_model(model_name)
-
-    # Parse latent model for validation tool
-    latent = LatentModel.model_validate(latent_model)
-
-    # Format the chunks for the prompt
-    chunks_text = "\n".join(data_sample)
-
-    messages = [
-        ChatMessageSystem(content=MEASUREMENT_MODEL_SYSTEM),
-        ChatMessageUser(
-            content=MEASUREMENT_MODEL_USER.format(
-                question=question,
-                latent_model_json=json.dumps(latent_model, indent=2),
-                dataset_summary=dataset_summary or "Not provided",
-                chunks=chunks_text,
-            )
-        ),
-    ]
-
-    # Run multi-turn: initial proposal + self-review, with validation tool available
-    completion = await multi_turn_generate(
-        messages=messages,
-        model=model,
-        follow_ups=[MEASUREMENT_MODEL_REVIEW],
-        tools=[make_validate_measurement_model_tool(latent)],
+    model = get_model(get_config().stage1_structure_proposal.model)
+    generate = make_orchestrator_generate_fn(model)
+    result = await run_stage1b(
+        question=question,
+        latent_model=latent_model,
+        chunks=data_sample,
+        generate=generate,
+        dataset_summary=dataset_summary,
     )
-
-    # Parse and validate final result
-    data = parse_json_response(completion)
-    measurement_model = MeasurementModel.model_validate(data)
-
-    return measurement_model.model_dump()
+    return result.measurement_model
 
 
 def propose_measurement_model(
@@ -208,94 +149,3 @@ def build_dsem_model(latent_model: dict, measurement_model: dict) -> dict:
         measurement=MeasurementModel.model_validate(measurement_model),
     )
     return dsem.model_dump()
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# PROXY REQUEST: Fix non-identifiable effects
-# ══════════════════════════════════════════════════════════════════════════════
-
-
-async def request_proxy_measurements_async(
-    question: str,
-    latent_model: dict,
-    current_measurement: dict,
-    blocking_info: str,
-    confounders_to_operationalize: list[str],
-    data_sample: list[str],
-) -> dict:
-    """
-    Request proxy measurements for specific blocking confounders.
-
-    Args:
-        question: The causal research question
-        latent_model: The latent model dict
-        current_measurement: Current measurement model
-        blocking_info: Description of which effects are blocked
-        confounders_to_operationalize: List of confounder names needing proxies
-        data_sample: Sample chunks from the dataset
-
-    Returns:
-        Dict with 'new_proxies' and 'unfeasible_confounders'
-    """
-    model_name = get_config().stage1_structure_proposal.model
-    model = get_model(model_name)
-
-    # Format the data sample
-    data_text = "\n".join(data_sample[:5])  # Limit to first 5 chunks
-
-    messages = [
-        ChatMessageSystem(content=PROXY_REQUEST_SYSTEM),
-        ChatMessageUser(
-            content=PROXY_REQUEST_USER.format(
-                blocking_info=blocking_info,
-                confounders_to_operationalize=", ".join(confounders_to_operationalize),
-                latent_model_json=json.dumps(latent_model, indent=2),
-                current_measurements_json=json.dumps(current_measurement, indent=2),
-                data_sample=data_text,
-            )
-        ),
-    ]
-
-    # Single-turn generation for proxy request
-    response = await model.generate(messages)
-
-    # Parse response
-    data = parse_json_response(response.completion)
-
-    return data
-
-
-def request_proxy_measurements(
-    question: str,
-    latent_model: dict,
-    current_measurement: dict,
-    blocking_info: str,
-    confounders_to_operationalize: list[str],
-    data_sample: list[str],
-) -> dict:
-    """
-    Synchronous wrapper for request_proxy_measurements_async.
-
-    Args:
-        question: The causal research question
-        latent_model: The latent model dict
-        current_measurement: Current measurement model
-        blocking_info: Description of which effects are blocked
-        confounders_to_operationalize: List of confounder names needing proxies
-        data_sample: Sample chunks from the dataset
-
-    Returns:
-        Dict with 'new_proxies' and 'unfeasible_confounders'
-    """
-    import asyncio
-
-    return asyncio.run(
-        request_proxy_measurements_async(
-            question,
-            latent_model,
-            current_measurement,
-            blocking_info,
-            confounders_to_operationalize,
-            data_sample,
-        )
-    )

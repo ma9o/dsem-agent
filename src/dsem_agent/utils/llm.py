@@ -1,19 +1,32 @@
 """Shared LLM utilities for multi-turn generation."""
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Awaitable, Callable
 
 from inspect_ai.model import (
     ChatMessageAssistant,
+    ChatMessageSystem,
     ChatMessageUser,
     GenerateConfig,
     Model,
+    get_model,
 )
 from inspect_ai.tool import Tool, tool
 
 if TYPE_CHECKING:
     from inspect_ai.model import ChatMessage
     from dsem_agent.orchestrator.schemas import LatentModel
+
+
+# Type aliases for generate functions
+OrchestratorGenerateFn = Callable[
+    [list, list | None, list[str] | None],  # (messages, tools, follow_ups)
+    Awaitable[str]
+]
+WorkerGenerateFn = Callable[
+    [list, list | None],  # (messages, tools)
+    Awaitable[str]
+]
 
 
 def get_generate_config() -> GenerateConfig:
@@ -27,6 +40,84 @@ def get_generate_config() -> GenerateConfig:
         reasoning_tokens=32768,
         reasoning_history="all",  # Preserve reasoning across tool calls (required by Gemini)
     )
+
+
+def dict_messages_to_chat(messages: list[dict]) -> list["ChatMessage"]:
+    """Convert dict messages to ChatMessage objects.
+
+    Args:
+        messages: List of dicts with 'role' and 'content' keys
+
+    Returns:
+        List of ChatMessage objects (ChatMessageSystem or ChatMessageUser)
+    """
+    chat_messages = []
+    for msg in messages:
+        if msg["role"] == "system":
+            chat_messages.append(ChatMessageSystem(content=msg["content"]))
+        elif msg["role"] == "user":
+            chat_messages.append(ChatMessageUser(content=msg["content"]))
+    return chat_messages
+
+
+def make_orchestrator_generate_fn(model: Model, config: GenerateConfig | None = None) -> OrchestratorGenerateFn:
+    """Create a generate function for orchestrator stages (1a, 1b).
+
+    The returned function has signature: (messages, tools, follow_ups) -> str
+
+    Args:
+        model: The model to use for generation
+        config: Optional generation config (uses get_generate_config() if None)
+
+    Returns:
+        An async function that handles multi-turn generation with tools and follow-ups
+    """
+    if config is None:
+        config = get_generate_config()
+
+    async def generate(messages: list, tools: list | None, follow_ups: list[str] | None) -> str:
+        chat_messages = dict_messages_to_chat(messages)
+
+        if follow_ups:
+            return await multi_turn_generate(
+                messages=chat_messages,
+                model=model,
+                follow_ups=follow_ups,
+                tools=tools or [],
+                config=config,
+            )
+        else:
+            response = await model.generate(chat_messages, tools=tools or [], config=config)
+            return response.completion
+
+    return generate
+
+
+def make_worker_generate_fn(model: Model, config: GenerateConfig | None = None) -> WorkerGenerateFn:
+    """Create a generate function for worker extraction.
+
+    The returned function has signature: (messages, tools) -> str
+
+    Args:
+        model: The model to use for generation
+        config: Optional generation config (uses get_generate_config() if None)
+
+    Returns:
+        An async function that handles multi-turn generation with tools
+    """
+    if config is None:
+        config = get_generate_config()
+
+    async def generate(messages: list, tools: list | None) -> str:
+        chat_messages = dict_messages_to_chat(messages)
+        return await multi_turn_generate(
+            messages=chat_messages,
+            model=model,
+            tools=tools or [],
+            config=config,
+        )
+
+    return generate
 
 
 def parse_json_response(content: str) -> dict:

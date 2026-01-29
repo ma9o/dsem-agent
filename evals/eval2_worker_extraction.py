@@ -3,6 +3,9 @@
 Evaluates smaller LLMs on their ability to extract indicator values from
 data chunks given a DSEMModel schema from the orchestrator.
 
+Uses the same core logic as production (via run_worker_extraction), just with
+a different model configuration.
+
 Usage:
     inspect eval evals/eval2_worker_extraction.py --model google/vertex/gemini-3-flash-preview
     inspect eval evals/eval2_worker_extraction.py --model openrouter/anthropic/claude-haiku-4.5
@@ -18,19 +21,19 @@ import json
 
 from inspect_ai import Task, task
 from inspect_ai.dataset import MemoryDataset, Sample
+from inspect_ai.model import get_model
 from inspect_ai.scorer import Score, Target, mean, scorer, stderr
-from inspect_ai.solver import TaskState, system_message
+from inspect_ai.solver import Generate, TaskState, solver, system_message
 
-from dsem_agent.workers.prompts import WORKER_WO_PROPOSALS_SYSTEM, WORKER_USER
-from dsem_agent.workers.schemas import WorkerOutput, _get_indicator_info
-from dsem_agent.workers.agents import _format_indicators, _get_outcome_description
-from dsem_agent.utils.llm import make_worker_tools
+from dsem_agent.workers.prompts import WORKER_WO_PROPOSALS_SYSTEM
+from dsem_agent.workers.schemas import _get_indicator_info
+from dsem_agent.workers.core import run_worker_extraction, WorkerExtractionResult
+from dsem_agent.utils.llm import make_worker_generate_fn
 
 from evals.common import (
-    extract_json_from_response,
+    get_eval_questions,
     get_sample_chunks_worker,
     load_dsem_model_by_question_id,
-    tool_assisted_generate,
 )
 
 # Worker models for parallel execution
@@ -75,15 +78,12 @@ def create_eval_dataset(
     """
     # Load the DSEMModel schema
     dsem_model = load_dsem_model_by_question_id(question_id)
-    indicators_text = _format_indicators(dsem_model)
-    outcome_description = _get_outcome_description(dsem_model)
     indicator_dtypes = _get_indicator_dtypes(dsem_model)
 
     # Count indicators
     n_indicators = len(indicator_dtypes)
 
     # Get the question text from config
-    from evals.common import get_eval_questions
     questions = get_eval_questions()
     question = next((q["question"] for q in questions if q["id"] == question_id), "")
 
@@ -92,19 +92,13 @@ def create_eval_dataset(
 
     samples = []
     for i, chunk in enumerate(chunks):
-        user_prompt = WORKER_USER.format(
-            question=question,
-            outcome_description=outcome_description,
-            indicators=indicators_text,
-            chunk=chunk,
-        )
-
         samples.append(
             Sample(
-                input=user_prompt,
+                input=chunk,  # Just the chunk, core logic builds the full prompt
                 id=f"chunk_{i:04d}",
                 metadata={
                     "chunk_index": i,
+                    "chunk": chunk,
                     "question_id": question_id,
                     "question": question,
                     "n_indicators": n_indicators,
@@ -147,114 +141,155 @@ def _validate_dtype(value, expected_dtype: str) -> bool:
         return True  # Unknown dtype, accept anything
 
 
+def _score_worker_result(
+    result: WorkerExtractionResult,
+    indicator_dtypes: dict[str, str],
+) -> dict:
+    """Score a worker extraction result.
+
+    Returns:
+        - 0 if output is invalid (dtype validation error)
+        - 10 + number of valid extraction rows otherwise
+    """
+    output = result.output
+    df = result.dataframe
+
+    n_rows = len(df)
+
+    # Validate dtypes
+    dtype_errors = []
+    for extraction in output.extractions:
+        ind_name = extraction.indicator
+        expected_dtype = indicator_dtypes.get(ind_name)
+
+        if expected_dtype is not None and not _validate_dtype(extraction.value, expected_dtype):
+            dtype_errors.append(
+                f"{ind_name}: got {type(extraction.value).__name__}={extraction.value}, expected {expected_dtype}"
+            )
+
+    n_dtype_errors = len(dtype_errors)
+
+    if n_dtype_errors > 0:
+        error_summary = "; ".join(dtype_errors[:5])
+        if n_dtype_errors > 5:
+            error_summary += f"... and {n_dtype_errors - 5} more"
+        return {
+            "total": 0,
+            "error": True,
+            "explanation": f"Dtype validation failed ({n_dtype_errors} errors): {error_summary}",
+            "n_extractions": n_rows,
+            "n_dtype_errors": n_dtype_errors,
+        }
+
+    # Build explanation
+    n_proposed = len(output.proposed_indicators) if output.proposed_indicators else 0
+    unique_inds = df["indicator"].n_unique() if n_rows > 0 else 0
+    total_score = VALID_SCHEMA_POINTS + n_rows
+
+    explanation = (
+        f"Valid schema (+{VALID_SCHEMA_POINTS}). "
+        f"Extracted {n_rows} observations across {unique_inds} indicators. "
+        f"Proposed {n_proposed} new indicator(s)."
+    )
+
+    return {
+        "total": total_score,
+        "error": False,
+        "explanation": explanation,
+        "n_extractions": n_rows,
+        "n_dtype_errors": 0,
+        "n_unique_indicators": unique_inds,
+        "n_proposed_indicators": n_proposed,
+    }
+
+
 @scorer(metrics=[mean(), stderr()])
 def worker_extraction_scorer():
     """Score worker extractions.
 
     Returns:
-        - 0 if output is invalid (JSON parse error, schema validation error)
+        - 0 if output is invalid (JSON parse error, schema validation error, dtype error)
         - 10 + number of valid extraction rows (dtype-checked)
     """
 
     async def score(state: TaskState, target: Target) -> Score:
-        completion = state.output.completion
+        # Get the WorkerExtractionResult from metadata (set by solver)
+        result: WorkerExtractionResult | None = state.metadata.get("worker_result")
         indicator_dtypes = state.metadata.get("indicator_dtypes", {})
 
-        # Extract JSON from response
-        json_str = extract_json_from_response(completion)
-        if json_str is None:
+        if result is None:
             return Score(
                 value=0,
-                answer="[No valid JSON found]",
-                explanation=(
-                    "ERROR: Could not extract JSON from model response.\n"
-                    f"Response preview: {completion[:500]}..."
-                ),
+                answer="[No result]",
+                explanation="Worker extraction did not produce a result",
             )
 
-        # Parse JSON
-        try:
-            data = json.loads(json_str)
-        except json.JSONDecodeError as e:
+        scoring = _score_worker_result(result, indicator_dtypes)
+
+        if scoring.get("error"):
             return Score(
                 value=0,
-                answer=json_str[:200] + "..." if len(json_str) > 200 else json_str,
-                explanation=f"ERROR: JSON parse failed - {e}",
-            )
-
-        # Validate against schema
-        try:
-            output = WorkerOutput.model_validate(data)
-        except Exception as e:
-            return Score(
-                value=0,
-                answer=json_str[:500] + "..." if len(json_str) > 500 else json_str,
-                explanation=f"ERROR: Schema validation failed - {e}",
-            )
-
-        # Convert to dataframe and count rows
-        try:
-            df = output.to_dataframe()
-            n_rows = len(df)
-        except Exception as e:
-            return Score(
-                value=0,
-                answer=json_str[:500] + "..." if len(json_str) > 500 else json_str,
-                explanation=f"ERROR: DataFrame conversion failed - {e}",
-            )
-
-        # Validate dtypes - any error means score 0
-        dtype_errors = []
-
-        for extraction in output.extractions:
-            ind_name = extraction.indicator
-            expected_dtype = indicator_dtypes.get(ind_name)
-
-            if expected_dtype is not None and not _validate_dtype(extraction.value, expected_dtype):
-                dtype_errors.append(
-                    f"{ind_name}: got {type(extraction.value).__name__}={extraction.value}, expected {expected_dtype}"
-                )
-
-        n_dtype_errors = len(dtype_errors)
-
-        if n_dtype_errors > 0:
-            error_summary = "; ".join(dtype_errors[:5])
-            if n_dtype_errors > 5:
-                error_summary += f"... and {n_dtype_errors - 5} more"
-            return Score(
-                value=0,
-                answer=json_str[:500] + "..." if len(json_str) > 500 else json_str,
-                explanation=f"ERROR: Dtype validation failed ({n_dtype_errors} errors): {error_summary}",
+                answer=state.output.completion[:500],
+                explanation=f"ERROR: {scoring['explanation']}",
                 metadata={
-                    "n_extractions": n_rows,
-                    "n_dtype_errors": n_dtype_errors,
+                    "n_extractions": scoring.get("n_extractions", 0),
+                    "n_dtype_errors": scoring.get("n_dtype_errors", 0),
                 },
             )
 
-        # Build explanation
-        n_proposed = len(output.proposed_indicators) if output.proposed_indicators else 0
-        unique_inds = df["indicator"].n_unique() if n_rows > 0 else 0
-        total_score = VALID_SCHEMA_POINTS + n_rows
-
-        explanation = (
-            f"Valid schema (+{VALID_SCHEMA_POINTS}). "
-            f"Extracted {n_rows} observations across {unique_inds} indicators. "
-            f"Proposed {n_proposed} new indicator(s)."
-        )
-
         return Score(
-            value=total_score,
-            answer=json_str[:500] + "..." if len(json_str) > 500 else json_str,
-            explanation=explanation,
+            value=scoring["total"],
+            answer=state.output.completion[:500],
+            explanation=scoring["explanation"],
             metadata={
-                "n_extractions": n_rows,
+                "n_extractions": scoring["n_extractions"],
                 "n_dtype_errors": 0,
-                "n_unique_indicators": unique_inds,
-                "n_proposed_indicators": n_proposed,
+                "n_unique_indicators": scoring.get("n_unique_indicators", 0),
+                "n_proposed_indicators": scoring.get("n_proposed_indicators", 0),
             },
         )
 
     return score
+
+
+def worker_extraction_solver(question_id: int = DEFAULT_QUESTION_ID):
+    """Solver that runs the full worker extraction flow using core logic."""
+
+    @solver
+    def _solver():
+        async def solve(state: TaskState, generate: Generate) -> TaskState:
+            model = get_model()
+            generate_fn = make_worker_generate_fn(model)
+
+            # Get metadata
+            question = state.metadata.get("question", "")
+            chunk = state.metadata.get("chunk", "")
+            question_id_local = state.metadata.get("question_id", question_id)
+            dsem_model = load_dsem_model_by_question_id(question_id_local)
+
+            # Run the SAME core logic as production
+            try:
+                result = await run_worker_extraction(
+                    chunk=chunk,
+                    question=question,
+                    dsem_model=dsem_model,
+                    generate=generate_fn,
+                )
+
+                # Store result in metadata for scorer
+                state.metadata["worker_result"] = result
+                state.output.completion = json.dumps(result.output.model_dump(), indent=2)
+
+            except Exception as e:
+                # Store error for scorer
+                state.metadata["worker_result"] = None
+                state.output.completion = f"[ERROR: {e}]"
+
+            return state
+
+        return solve
+
+    return _solver()
 
 
 @task
@@ -272,9 +307,6 @@ def worker_eval(
         seed: Random seed for chunk sampling (reproducibility)
         input_file: Specific preprocessed file name, or None for latest
     """
-    # Load DSEMModel for tools (same schema for all samples)
-    dsem_model = load_dsem_model_by_question_id(question_id)
-
     return Task(
         dataset=create_eval_dataset(
             question_id=question_id,
@@ -284,7 +316,7 @@ def worker_eval(
         ),
         solver=[
             system_message(WORKER_WO_PROPOSALS_SYSTEM),
-            tool_assisted_generate(tools=make_worker_tools(dsem_model)),
+            worker_extraction_solver(question_id=question_id),
         ],
         scorer=worker_extraction_scorer(),
     )

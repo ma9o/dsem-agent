@@ -1,64 +1,26 @@
 """Worker agents using Inspect AI with OpenRouter."""
 
 import asyncio
-from dataclasses import dataclass
 from pathlib import Path
 
-import polars as pl
 from dotenv import load_dotenv
-from inspect_ai.model import (
-    ChatMessageSystem,
-    ChatMessageUser,
-    get_model,
-)
+from inspect_ai.model import get_model
 
 from dsem_agent.utils.config import get_config
-from dsem_agent.utils.llm import make_worker_tools, multi_turn_generate, parse_json_response
-from .prompts import WORKER_WO_PROPOSALS_SYSTEM, WORKER_USER
-from .schemas import WorkerOutput, validate_worker_output
+from dsem_agent.utils.llm import make_worker_generate_fn
+from .core import (
+    run_worker_extraction,
+    WorkerExtractionResult,
+    _format_indicators,
+    _get_outcome_description,
+)
 
 # Load environment variables from .env file (for API keys)
 load_dotenv(Path(__file__).parent.parent.parent.parent / ".env")
 
 
-@dataclass
-class WorkerResult:
-    """Result from a worker including both raw output and parsed dataframe."""
-
-    output: WorkerOutput
-    dataframe: pl.DataFrame
-
-
-def _format_indicators(dsem_model: dict) -> str:
-    """Format indicators for the worker prompt.
-
-    Shows: name, dtype, measurement_granularity, how_to_measure
-    """
-    indicators = dsem_model.get("measurement", {}).get("indicators", [])
-    lines = []
-    for ind in indicators:
-        name = ind.get("name", "unknown")
-        how_to_measure = ind.get("how_to_measure", "")
-        dtype = ind.get("measurement_dtype", "")
-        measurement_granularity = ind.get("measurement_granularity", "")
-
-        # Build info string with dtype and measurement_granularity
-        info_parts = [dtype]
-        if measurement_granularity:
-            info_parts.append(f"@{measurement_granularity}")
-        info = ", ".join(info_parts)
-
-        lines.append(f"- {name} ({info}): {how_to_measure}")
-    return "\n".join(lines)
-
-
-def _get_outcome_description(dsem_model: dict) -> str:
-    """Get the description of the outcome variable."""
-    constructs = dsem_model.get("latent", {}).get("constructs", [])
-    for c in constructs:
-        if c.get("is_outcome"):
-            return c.get("description", c.get("name", "outcome"))
-    return "Not specified"
+# Re-export for backwards compatibility
+WorkerResult = WorkerExtractionResult
 
 
 async def process_chunk_async(
@@ -77,41 +39,14 @@ async def process_chunk_async(
     Returns:
         WorkerResult with validated output and Polars dataframe
     """
-    model_name = get_config().stage2_workers.model
-    model = get_model(model_name)
-
-    # Format inputs for the prompt
-    indicators_text = _format_indicators(dsem_model)
-    outcome_description = _get_outcome_description(dsem_model)
-
-    messages = [
-        ChatMessageSystem(content=WORKER_WO_PROPOSALS_SYSTEM),
-        ChatMessageUser(
-            content=WORKER_USER.format(
-                question=question,
-                outcome_description=outcome_description,
-                indicators=indicators_text,
-                chunk=chunk,
-            )
-        ),
-    ]
-
-    # Generate with tools available
-    completion = await multi_turn_generate(
-        messages=messages,
-        model=model,
-        tools=make_worker_tools(dsem_model),
+    model = get_model(get_config().stage2_workers.model)
+    generate = make_worker_generate_fn(model)
+    return await run_worker_extraction(
+        chunk=chunk,
+        question=question,
+        dsem_model=dsem_model,
+        generate=generate,
     )
-    data = parse_json_response(completion)
-
-    # Final validation (should pass if LLM used the tool correctly)
-    output, errors = validate_worker_output(data, dsem_model)
-    if errors:
-        # Fallback to Pydantic validation for error message
-        output = WorkerOutput.model_validate(data)
-    dataframe = output.to_dataframe()
-
-    return WorkerResult(output=output, dataframe=dataframe)
 
 
 def process_chunk(
@@ -149,8 +84,10 @@ async def process_chunks_async(
     Returns:
         List of WorkerResults
     """
+    model = get_model(get_config().stage2_workers.model)
+    generate = make_worker_generate_fn(model)
     tasks = [
-        process_chunk_async(chunk, question, dsem_model)
+        run_worker_extraction(chunk, question, dsem_model, generate)
         for chunk in chunks
     ]
 
