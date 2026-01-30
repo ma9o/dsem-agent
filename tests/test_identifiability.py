@@ -3,9 +3,11 @@
 import pytest
 
 from dsem_agent.utils.identifiability import (
+    analyze_unobserved_constructs,
     build_projected_admg,
     check_identifiability,
     format_identifiability_report,
+    format_marginalization_report,
     get_observed_constructs,
 )
 
@@ -232,6 +234,154 @@ def test_format_identifiability_report():
     assert '1 treatments have identifiable effects' in report
     assert 'X' in report
     assert '3/5 constructs observed' in report
+
+
+def test_analyze_unobserved_all_observed():
+    """When all constructs are observed, nothing needs marginalization analysis."""
+    latent_model = {
+        'constructs': [
+            {'name': 'A', 'role': 'exogenous'},
+            {'name': 'B', 'role': 'endogenous', 'is_outcome': True},
+        ],
+        'edges': [
+            {'cause': 'A', 'effect': 'B', 'description': 'A causes B'},
+        ],
+    }
+
+    measurement_model = {
+        'indicators': [
+            {'name': 'a_ind', 'construct': 'A', 'how_to_measure': 'test'},
+            {'name': 'b_ind', 'construct': 'B', 'how_to_measure': 'test'},
+        ]
+    }
+
+    id_result = check_identifiability(latent_model, measurement_model)
+    analysis = analyze_unobserved_constructs(latent_model, measurement_model, id_result)
+
+    assert len(analysis['can_marginalize']) == 0
+    assert len(analysis['needs_modeling']) == 0
+
+
+def test_analyze_unobserved_blocking_confounder():
+    """Confounder blocking identification needs modeling."""
+    latent_model = {
+        'constructs': [
+            {'name': 'A', 'role': 'endogenous'},
+            {'name': 'B', 'role': 'endogenous', 'is_outcome': True},
+            {'name': 'U', 'role': 'exogenous'},  # Unobserved confounder
+        ],
+        'edges': [
+            {'cause': 'A', 'effect': 'B', 'description': 'A causes B'},
+            {'cause': 'U', 'effect': 'A', 'description': 'U causes A'},
+            {'cause': 'U', 'effect': 'B', 'description': 'U causes B'},
+        ],
+    }
+
+    # Only A and B observed
+    measurement_model = {
+        'indicators': [
+            {'name': 'a_ind', 'construct': 'A', 'how_to_measure': 'test'},
+            {'name': 'b_ind', 'construct': 'B', 'how_to_measure': 'test'},
+        ]
+    }
+
+    id_result = check_identifiability(latent_model, measurement_model)
+    analysis = analyze_unobserved_constructs(latent_model, measurement_model, id_result)
+
+    # U blocks A->B, so it needs modeling
+    assert 'U' in analysis['needs_modeling']
+    assert len(analysis['can_marginalize']) == 0
+    assert 'A' in analysis['modeling_reason']['U']
+
+
+def test_analyze_unobserved_front_door_marginalized():
+    """Confounder handled by front-door can be marginalized."""
+    # X -> M -> Y with U -> X, U -> Y (classic front-door)
+    latent_model = {
+        'constructs': [
+            {'name': 'X', 'role': 'endogenous'},
+            {'name': 'M', 'role': 'endogenous'},
+            {'name': 'Y', 'role': 'endogenous', 'is_outcome': True},
+            {'name': 'U', 'role': 'exogenous'},  # Unobserved confounder
+        ],
+        'edges': [
+            {'cause': 'X', 'effect': 'M', 'description': 'X causes M'},
+            {'cause': 'M', 'effect': 'Y', 'description': 'M causes Y'},
+            {'cause': 'U', 'effect': 'X', 'description': 'U causes X'},
+            {'cause': 'U', 'effect': 'Y', 'description': 'U causes Y'},
+        ],
+    }
+
+    # X, M, Y observed; U unobserved
+    measurement_model = {
+        'indicators': [
+            {'name': 'x_ind', 'construct': 'X', 'how_to_measure': 'test'},
+            {'name': 'm_ind', 'construct': 'M', 'how_to_measure': 'test'},
+            {'name': 'y_ind', 'construct': 'Y', 'how_to_measure': 'test'},
+        ]
+    }
+
+    id_result = check_identifiability(latent_model, measurement_model)
+    analysis = analyze_unobserved_constructs(latent_model, measurement_model, id_result)
+
+    # X->Y is identifiable via front-door, so U can be marginalized
+    assert 'U' in analysis['can_marginalize']
+    assert len(analysis['needs_modeling']) == 0
+    assert 'front-door' in analysis['marginalize_reason']['U'] or 'identification strategy' in analysis['marginalize_reason']['U']
+
+
+def test_analyze_unobserved_single_child():
+    """Unobserved with single child doesn't create confounding, can be marginalized."""
+    latent_model = {
+        'constructs': [
+            {'name': 'A', 'role': 'endogenous'},
+            {'name': 'B', 'role': 'endogenous', 'is_outcome': True},
+            {'name': 'U', 'role': 'exogenous'},  # Unobserved, only affects A
+        ],
+        'edges': [
+            {'cause': 'A', 'effect': 'B', 'description': 'A causes B'},
+            {'cause': 'U', 'effect': 'A', 'description': 'U causes A only'},
+        ],
+    }
+
+    measurement_model = {
+        'indicators': [
+            {'name': 'a_ind', 'construct': 'A', 'how_to_measure': 'test'},
+            {'name': 'b_ind', 'construct': 'B', 'how_to_measure': 'test'},
+        ]
+    }
+
+    id_result = check_identifiability(latent_model, measurement_model)
+    analysis = analyze_unobserved_constructs(latent_model, measurement_model, id_result)
+
+    # U only affects A, no confounding created
+    assert 'U' in analysis['can_marginalize']
+    assert len(analysis['needs_modeling']) == 0
+    assert 'single child' in analysis['marginalize_reason']['U'] or 'no observed children' in analysis['marginalize_reason']['U']
+
+
+def test_format_marginalization_report():
+    """Test formatting of marginalization report."""
+    analysis = {
+        'can_marginalize': {'U1', 'U2'},
+        'needs_modeling': {'U3'},
+        'marginalize_reason': {
+            'U1': 'does not create confounding (single child or no observed children)',
+            'U2': 'confounding handled by identification strategy (front-door or similar)',
+        },
+        'modeling_reason': {
+            'U3': 'blocks identification of: Treatment',
+        },
+    }
+
+    report = format_marginalization_report(analysis)
+
+    assert 'CAN MARGINALIZE (2 constructs)' in report
+    assert 'NEEDS MODELING (1 constructs)' in report
+    assert 'U1' in report
+    assert 'U2' in report
+    assert 'U3' in report
+    assert 'blocks identification' in report
 
 
 if __name__ == '__main__':

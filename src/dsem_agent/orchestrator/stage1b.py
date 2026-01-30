@@ -15,7 +15,10 @@ from .prompts import (
     PROXY_REQUEST_USER,
 )
 from .schemas import LatentModel, MeasurementModel
-from dsem_agent.utils.identifiability import check_identifiability
+from dsem_agent.utils.identifiability import (
+    analyze_unobserved_constructs,
+    check_identifiability,
+)
 from dsem_agent.utils.llm import (
     OrchestratorGenerateFn,
     make_validate_measurement_model_tool,
@@ -32,6 +35,7 @@ class Stage1bResult:
     final_identifiability: dict
     proxy_requested: bool
     proxy_response: dict | None = None
+    marginalization_analysis: dict | None = None
 
     @property
     def identifiability_status(self) -> dict:
@@ -42,6 +46,20 @@ class Stage1bResult:
             'non_identifiable_treatments': self.final_identifiability['non_identifiable_treatments'],
             'blocking_confounders': self.final_identifiability['blocking_confounders'],
         }
+
+    @property
+    def can_marginalize(self) -> set[str]:
+        """Unobserved constructs that can be ignored in DSEM specification."""
+        if self.marginalization_analysis:
+            return self.marginalization_analysis.get('can_marginalize', set())
+        return set()
+
+    @property
+    def needs_modeling(self) -> set[str]:
+        """Unobserved constructs that need explicit modeling (block identification)."""
+        if self.marginalization_analysis:
+            return self.marginalization_analysis.get('needs_modeling', set())
+        return set()
 
 
 @dataclass
@@ -207,10 +225,14 @@ async def run_stage1b(
     # Step 4: Final identifiability check
     final_id = check_identifiability(latent_model, measurement)
 
+    # Step 5: Analyze which unobserved constructs can be marginalized
+    marginalization = analyze_unobserved_constructs(latent_model, measurement, final_id)
+
     return Stage1bResult(
         measurement_model=measurement,
         initial_identifiability=initial_id,
         final_identifiability=final_id,
         proxy_requested=bool(initial_id["non_identifiable_treatments"]),
         proxy_response=proxy_response,
+        marginalization_analysis=marginalization,
     )

@@ -502,6 +502,38 @@ class TestStage1bFlow:
         assert "blocking_confounders" in status
         assert status["all_identifiable"] is True
 
+    def test_marginalization_analysis_included(
+        self, confounded_latent_model, measurement_missing_confounder, dummy_chunks
+    ):
+        """Marginalization analysis is computed and accessible."""
+        import asyncio
+
+        proxy_response = {
+            "new_proxies": [],
+            "unfeasible_confounders": ["Confounder"],
+        }
+
+        mock_generate = make_mock_generate([
+            json.dumps(measurement_missing_confounder),
+            json.dumps(proxy_response),
+        ])
+
+        result = asyncio.run(run_stage1b(
+            question="Does treatment improve outcome?",
+            latent_model=confounded_latent_model,
+            chunks=dummy_chunks,
+            generate=mock_generate,
+        ))
+
+        # Marginalization analysis should be present
+        assert result.marginalization_analysis is not None
+        assert "can_marginalize" in result.marginalization_analysis
+        assert "needs_modeling" in result.marginalization_analysis
+
+        # Confounder blocks identification, so it needs modeling
+        assert "Confounder" in result.needs_modeling
+        assert len(result.can_marginalize) == 0
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

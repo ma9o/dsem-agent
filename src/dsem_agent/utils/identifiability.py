@@ -223,6 +223,85 @@ def find_blocking_confounders(
     return blocking
 
 
+def analyze_unobserved_constructs(
+    latent_model: dict,
+    measurement_model: dict,
+    identifiability_result: dict,
+) -> dict[str, Any]:
+    """Analyze which unobserved constructs can be marginalized in DSEM specification.
+
+    When y0 identifies an effect despite unobserved confounding, it means the
+    identification strategy (front-door, IV, etc.) handles that confounding without
+    needing explicit modeling of the confounder. Such confounders can be "marginalized"
+    - their effects get absorbed into error terms.
+
+    Confounders that BLOCK identification cannot be marginalized - they need proxies
+    or must be explicitly modeled as latent variables.
+
+    Note: This analysis only considers whether U blocks OBSERVED treatments. An
+    unobserved treatment U is inherently non-identifiable (we can't intervene on it),
+    but that's a separate concern from whether U creates confounding for other effects.
+
+    Args:
+        latent_model: Dict with 'constructs' and 'edges'
+        measurement_model: Dict with 'indicators'
+        identifiability_result: Output from check_identifiability()
+
+    Returns:
+        Dict with:
+            - can_marginalize: Set of unobserved constructs safe to ignore in DSEM spec
+            - needs_modeling: Set of unobserved constructs that block identification
+            - marginalize_reason: Dict explaining why each can be marginalized
+            - modeling_reason: Dict explaining why each needs modeling
+    """
+    observed = get_observed_constructs(measurement_model)
+    all_constructs = {c['name'] for c in latent_model['constructs']}
+    unobserved = all_constructs - observed
+
+    # Collect confounders that block identification of OBSERVED treatments
+    # (Ignore unobserved treatments - they're inherently non-identifiable)
+    blocking_any = set()
+    blocking_details: dict[str, list[str]] = {}  # confounder -> list of treatments it blocks
+
+    for treatment, blockers in identifiability_result.get('blocking_confounders', {}).items():
+        # Skip if the treatment itself is unobserved (it's blocking itself)
+        if treatment in unobserved:
+            continue
+
+        for blocker in blockers:
+            # Only count confounders that are different from the treatment
+            if blocker in unobserved and blocker != treatment:
+                blocking_any.add(blocker)
+                if blocker not in blocking_details:
+                    blocking_details[blocker] = []
+                blocking_details[blocker].append(treatment)
+
+    # Classify unobserved constructs
+    can_marginalize = unobserved - blocking_any
+    needs_modeling = unobserved & blocking_any
+
+    # Build explanations
+    marginalize_reason = {}
+    for u in can_marginalize:
+        # Check if U creates any confounding at all (is in unobserved_confounders)
+        if u in identifiability_result['graph_info'].get('unobserved_confounders', []):
+            marginalize_reason[u] = "confounding handled by identification strategy (front-door or similar)"
+        else:
+            marginalize_reason[u] = "does not create confounding (single child or no observed children)"
+
+    modeling_reason = {
+        u: f"blocks identification of: {', '.join(sorted(blocking_details[u]))}"
+        for u in needs_modeling
+    }
+
+    return {
+        'can_marginalize': can_marginalize,
+        'needs_modeling': needs_modeling,
+        'marginalize_reason': marginalize_reason,
+        'modeling_reason': modeling_reason,
+    }
+
+
 def format_identifiability_report(result: dict) -> str:
     """Format identifiability check results for logging."""
     lines = []
@@ -257,5 +336,43 @@ def format_identifiability_report(result: dict) -> str:
     )
     if info['unobserved_confounders']:
         lines.append(f"Unobserved confounders: {', '.join(info['unobserved_confounders'])}")
+
+    return '\n'.join(lines)
+
+
+def format_marginalization_report(analysis: dict) -> str:
+    """Format the marginalization analysis for logging.
+
+    Args:
+        analysis: Output from analyze_unobserved_constructs()
+
+    Returns:
+        Formatted string report
+    """
+    lines = []
+
+    can_marginalize = analysis['can_marginalize']
+    needs_modeling = analysis['needs_modeling']
+
+    lines.append("=" * 60)
+    lines.append("UNOBSERVED CONSTRUCT ANALYSIS FOR DSEM SPECIFICATION")
+    lines.append("=" * 60)
+
+    if can_marginalize:
+        lines.append(f"\n✓ CAN MARGINALIZE ({len(can_marginalize)} constructs):")
+        lines.append("  These can be omitted from DSEM spec - effects absorbed into error terms")
+        for u in sorted(can_marginalize):
+            reason = analysis['marginalize_reason'].get(u, '')
+            lines.append(f"  - {u}: {reason}")
+
+    if needs_modeling:
+        lines.append(f"\n✗ NEEDS MODELING ({len(needs_modeling)} constructs):")
+        lines.append("  These block identification - need proxies or explicit latent variables")
+        for u in sorted(needs_modeling):
+            reason = analysis['modeling_reason'].get(u, '')
+            lines.append(f"  - {u}: {reason}")
+
+    if not can_marginalize and not needs_modeling:
+        lines.append("\n✓ All constructs are observed - no marginalization analysis needed")
 
     return '\n'.join(lines)
