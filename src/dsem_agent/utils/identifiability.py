@@ -122,7 +122,6 @@ def check_identifiability(
             'total_constructs': len(latent_model['constructs']),
             'unobserved_confounders': list(unobserved_confounders),
             'n_directed_edges': len(list(admg.directed.edges())),
-            'n_bidirected_edges': len(list(admg.undirected.edges())),
         },
     }
 
@@ -483,7 +482,7 @@ def format_identifiability_report(result: dict) -> str:
     info = result['graph_info']
     lines.append(
         f"\nGraph: {len(info['observed_constructs'])}/{info['total_constructs']} constructs observed, "
-        f"{info['n_directed_edges']} directed edges, {info['n_bidirected_edges']} bidirected edges"
+        f"{info['n_directed_edges']} directed edges"
     )
     if info['unobserved_confounders']:
         lines.append(f"Unobserved confounders: {', '.join(info['unobserved_confounders'])}")

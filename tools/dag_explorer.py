@@ -486,7 +486,6 @@ with col_graph:
                 info = id_result["graph_info"]
                 st.markdown(f"- **Observed:** {len(info['observed_constructs'])}/{info['total_constructs']} constructs")
                 st.markdown(f"- **Directed edges:** {info['n_directed_edges']}")
-                st.markdown(f"- **Bidirected edges:** {info['n_bidirected_edges']} (confounding)")
                 if info["unobserved_confounders"]:
                     st.markdown(f"- **Unobserved confounders:** {', '.join(info['unobserved_confounders'])}")
     else:

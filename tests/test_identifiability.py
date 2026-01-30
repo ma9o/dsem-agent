@@ -55,7 +55,6 @@ def test_identifiability_simple_chain():
     assert len(result['non_identifiable_treatments']) == 0
     assert 'A' in result['identifiable_treatments']
     assert 'B' in result['identifiable_treatments']
-    assert result['graph_info']['n_bidirected_edges'] == 0
 
 
 def test_identifiability_with_unobserved_confounder():
@@ -91,7 +90,6 @@ def test_identifiability_with_unobserved_confounder():
     assert result['outcome'] == 'B'
     assert 'A' in result['non_identifiable_treatments']
     assert 'U' in result['blocking_confounders']['A']
-    assert result['graph_info']['n_bidirected_edges'] == 1  # A <-> B
 
 
 def test_identifiability_front_door():
