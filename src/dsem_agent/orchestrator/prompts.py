@@ -329,15 +329,6 @@ The following causal effects are NOT identifiable:
 Please find proxy measurements for these specific confounders to make the effects identifiable:
 {confounders_to_operationalize}
 
-Current latent model:
-{latent_model_json}
-
-Current measurement model (DO NOT MODIFY):
-{current_measurements_json}
-
-Data sample to search for proxies:
-{data_sample}
-
 Return JSON with structure:
 {{
     "new_proxies": [
