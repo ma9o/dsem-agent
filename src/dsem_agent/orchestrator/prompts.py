@@ -23,7 +23,12 @@ Walk backwards from the implied outcome Y:
 2. What causes those causes?
 3. Keep asking until you reach exogenous factors (things we take as given)
 
-Be RICH and DEEP, not parsimonious. This is hypothesis generation - worker LLMs will later validate against data.
+Prefer COMPLETENESS over parsimony. Include:
+- All theoretically plausible confounders (common causes of multiple variables)
+- Intermediate mechanisms (mediators) along causal pathways
+- Domain-specific moderating factors
+
+Worker LLMs will prune; your job is to ensure nothing causally important is omitted.
 
 ## Construct Classification
 
@@ -55,6 +60,8 @@ Edges represent causal relationships between constructs.
 - **lagged=false**: cause at t → effect at t (contemporaneous, same timescale only)
 
 Cross-timescale edges are always lagged. The system computes lag in hours automatically.
+
+Contemporaneous edges must form a DAG within each time slice (A4). Feedback loops require lagged edges—model them across time, not within.
 
 ### Constraints
 - DSEMs must be acyclic WITHIN time slice (contemporaneous edges form a DAG)
@@ -100,7 +107,6 @@ Question: {question}
 Propose a theoretical causal structure (latent model) for answering this question. Remember:
 - You will NOT see data - reason from domain knowledge only
 - Focus on WHAT constructs matter and HOW they relate causally
-- Be rich and deep - later stages will operationalize and validate
 
 Think very hard.
 """
@@ -130,10 +136,11 @@ Latent Construct → Indicator₁
                  → Indicator₃
 ```
 
-This means:
-- Multiple indicators of the same construct should be correlated
-- You can propose multiple indicators per construct (recommended for reliability)
-- Indicators reflect the underlying construct, not form it
+This implies:
+- **Local independence**: Indicators are conditionally independent given the construct
+- **Marginal correlation**: Indicators covary because they share a common cause (the construct)
+- **Pure indicators**: No direct causal paths between indicators—all covariance flows through the construct
+- Multiple indicators per construct improve reliability (recommended ≥2 for measurement error separation)
 
 ## Indicator Specification
 
@@ -177,6 +184,8 @@ How to collapse measurements to the construct's causal_granularity.
 
 Choose based on meaning: mean (average level), sum (cumulative), max/min (extremes), last (recent state), instability (variability).
 
+The aggregated value should reflect the construct's state at that granularity. Avoid aggregations that introduce spurious temporal dependencies (e.g., running sums create artificial AR structure that violates A8).
+
 ## how_to_measure Guidelines
 
 The `how_to_measure` field tells workers what to extract. Be specific:
@@ -191,12 +200,19 @@ The `how_to_measure` field tells workers what to extract. Be specific:
 - **Global dependencies**: "Compare to the user's average..." → Can't access other chunks
 - **Vague instructions**: "Measure stress level" → How? What scale? What counts as stress?
 
+## Temporal Independence (A8)
+
+Indicator residuals are assumed iid across time. All temporal dependence in indicator series is attributed to the construct's dynamics, not indicator-specific dynamics.
+
+Implication: Do NOT propose indicators with their own temporal momentum independent of the construct (e.g., cumulative metrics, metrics with memory that persists beyond the construct's state).
+
 ## Constraints
 
-1. Every **time-varying** construct MUST have at least one indicator (A2)
+1. Every **time-varying** construct MUST have at least one indicator—constructs without indicators are unobserved, and causal effects through them may not be identifiable
 2. Indicators can only reference constructs from the latent model
 3. measurement_granularity must be ≤ construct's causal_granularity
-4. You CANNOT add new causal edges - only operationalize existing constructs
+4. You CANNOT add new causal edges—only operationalize existing constructs
+5. No direct causal edges between indicators (pure indicators assumption)
 
 ## Output Schema
 
@@ -283,12 +299,16 @@ Review your proposed measurement model for operationalization coherence.
    - mean, median → typically ordinal or continuous
 4. **Granularity appropriateness**: Is measurement_granularity achievable from the data?
 5. **Redundancy**: Are there indicators that are essentially duplicates?
+6. **Local independence**: Would any two indicators of the same construct remain correlated after conditioning on the construct? If so, they violate pure indicators.
+7. **Temporal independence (A8)**: Do any indicators have their own temporal dynamics beyond the construct?
 
 ## Red Flags
 
 - how_to_measure describes computed metrics → move to aggregation
 - how_to_measure requires cross-chunk data → not possible
 - Vague instructions that workers can't follow
+- Indicators that directly cause each other → violates pure indicators assumption
+- Cumulative/running metrics → violates A8 (temporal independence)
 
 ## Output
 
