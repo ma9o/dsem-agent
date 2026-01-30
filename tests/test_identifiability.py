@@ -314,9 +314,12 @@ def test_dag_to_admg_lagged_confounding():
     # U should be detected as a confounder
     assert 'U' in confounders
 
-    # Should have bidirected edge from U_{t-1} confounding X_t and Y_t
-    undirected_edges = list(admg.undirected.edges())
-    assert len(undirected_edges) >= 1, "Should have bidirected edge from lagged confounding"
+    # Should have bidirected edge X_t <-> Y_t capturing lagged confounding
+    undirected_pairs = {
+        tuple(sorted((str(edge[0]), str(edge[1]))))
+        for edge in admg.undirected.edges()
+    }
+    assert ('X_t', 'Y_t') in undirected_pairs, "Lagged confounder should induce X_t <-> Y_t"
 
 
 def test_dag_to_admg_validates_max_lag_one():
