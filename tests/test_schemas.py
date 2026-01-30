@@ -113,99 +113,87 @@ class TestCausalEdge:
 class TestLatentModel:
     """Tests for LatentModel validation."""
 
-    def _make_construct(self, name, granularity, role, is_outcome=False):
-        """Helper to create a construct."""
-        temporal_status = TemporalStatus.TIME_VARYING if granularity else TemporalStatus.TIME_INVARIANT
-        return Construct(
-            name=name,
-            description=f"{name} description",
-            role=role,
-            is_outcome=is_outcome,
-            temporal_status=temporal_status,
-            causal_granularity=granularity,
-        )
-
-    def test_valid_simple_structure(self):
+    def test_valid_simple_structure(self, construct_factory):
         """Simple valid structure passes validation."""
         structure = LatentModel(
             constructs=[
-                self._make_construct("stress", "daily", Role.EXOGENOUS),
-                self._make_construct("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
+                construct_factory("stress", "daily", Role.EXOGENOUS),
+                construct_factory("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
             ],
             edges=[CausalEdge(cause="stress", effect="mood", description="Stress affects mood", lagged=False)],
         )
         assert len(structure.constructs) == 2
         assert len(structure.edges) == 1
 
-    def test_invalid_edge_cause_not_in_constructs(self):
+    def test_invalid_edge_cause_not_in_constructs(self, construct_factory):
         """Edge cause must exist in constructs."""
         with pytest.raises(ValueError, match="Edge cause 'unknown' not in constructs"):
             LatentModel(
-                constructs=[self._make_construct("mood", "daily", Role.ENDOGENOUS, is_outcome=True)],
+                constructs=[construct_factory("mood", "daily", Role.ENDOGENOUS, is_outcome=True)],
                 edges=[CausalEdge(cause="unknown", effect="mood", description="Test edge")],
             )
 
-    def test_invalid_edge_effect_not_in_constructs(self):
+    def test_invalid_edge_effect_not_in_constructs(self, construct_factory):
         """Edge effect must exist in constructs."""
         with pytest.raises(ValueError, match="Edge effect 'unknown' not in constructs"):
             LatentModel(
                 constructs=[
-                    self._make_construct("stress", "daily", Role.EXOGENOUS),
-                    self._make_construct("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
+                    construct_factory("stress", "daily", Role.EXOGENOUS),
+                    construct_factory("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
                 ],
                 edges=[CausalEdge(cause="stress", effect="unknown", description="Test edge")],
             )
 
-    def test_invalid_exogenous_cannot_be_effect(self):
+    def test_invalid_exogenous_cannot_be_effect(self, construct_factory):
         """Exogenous construct cannot be an effect."""
         with pytest.raises(ValueError, match="Exogenous construct 'weather' cannot be an effect"):
             LatentModel(
                 constructs=[
-                    self._make_construct("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
-                    self._make_construct("weather", "daily", Role.EXOGENOUS),
+                    construct_factory("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
+                    construct_factory("weather", "daily", Role.EXOGENOUS),
                 ],
                 edges=[CausalEdge(cause="mood", effect="weather", description="Invalid edge", lagged=False)],
             )
 
-    def test_invalid_contemporaneous_cross_timescale(self):
+    def test_invalid_contemporaneous_cross_timescale(self, construct_factory):
         """Contemporaneous edge requires same timescale."""
         with pytest.raises(ValueError, match="Contemporaneous edge.*requires same timescale"):
             LatentModel(
                 constructs=[
-                    self._make_construct("hourly_stress", "hourly", Role.EXOGENOUS),
-                    self._make_construct("daily_mood", "daily", Role.ENDOGENOUS, is_outcome=True),
+                    construct_factory("hourly_stress", "hourly", Role.EXOGENOUS),
+                    construct_factory("daily_mood", "daily", Role.ENDOGENOUS, is_outcome=True),
                 ],
                 edges=[CausalEdge(cause="hourly_stress", effect="daily_mood", description="Invalid", lagged=False)],
             )
 
-    def test_invalid_no_outcome(self):
+    def test_invalid_no_outcome(self, construct_factory):
         """Structure must have exactly one outcome."""
         with pytest.raises(ValueError, match="Exactly one construct must have is_outcome=true"):
             LatentModel(
                 constructs=[
-                    self._make_construct("stress", "daily", Role.EXOGENOUS),
-                    self._make_construct("mood", "daily", Role.ENDOGENOUS),
+                    construct_factory("stress", "daily", Role.EXOGENOUS),
+                    construct_factory("mood", "daily", Role.ENDOGENOUS),
                 ],
                 edges=[CausalEdge(cause="stress", effect="mood", description="Test")],
             )
 
-    def test_invalid_multiple_outcomes(self):
+    def test_invalid_multiple_outcomes(self, construct_factory):
         """Structure must have exactly one outcome."""
         with pytest.raises(ValueError, match="Only one outcome allowed"):
             LatentModel(
                 constructs=[
-                    self._make_construct("stress", "daily", Role.ENDOGENOUS, is_outcome=True),
-                    self._make_construct("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
+                    construct_factory("stress", "daily", Role.ENDOGENOUS, is_outcome=True),
+                    construct_factory("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
                 ],
                 edges=[CausalEdge(cause="stress", effect="mood", description="Test")],
             )
 
-    def test_to_networkx(self):
+    def test_to_networkx(self, construct_factory):
         """Structure converts to NetworkX graph."""
         structure = LatentModel(
             constructs=[
-                self._make_construct("stress", "daily", Role.EXOGENOUS),
-                self._make_construct("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
+                construct_factory("stress", "daily", Role.EXOGENOUS),
+                construct_factory("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
             ],
             edges=[CausalEdge(cause="stress", effect="mood", description="Stress affects mood", lagged=False)],
         )
@@ -309,77 +297,54 @@ class TestMeasurementModel:
 class TestDSEMModel:
     """Tests for DSEMModel validation."""
 
-    def _make_construct(self, name, granularity, role, is_outcome=False):
-        """Helper to create a construct."""
-        temporal_status = TemporalStatus.TIME_VARYING if granularity else TemporalStatus.TIME_INVARIANT
-        return Construct(
-            name=name,
-            description=f"{name} description",
-            role=role,
-            is_outcome=is_outcome,
-            temporal_status=temporal_status,
-            causal_granularity=granularity,
-        )
-
-    def _make_indicator(self, name, construct, granularity="daily"):
-        """Helper to create an indicator."""
-        return Indicator(
-            name=name,
-            construct=construct,
-            how_to_measure=f"Extract {name}",
-            measurement_granularity=granularity,
-            measurement_dtype="continuous",
-            aggregation="mean",
-        )
-
-    def test_valid_dsem_model(self):
+    def test_valid_dsem_model(self, construct_factory, indicator_factory):
         """Valid DSEM model passes validation."""
         latent = LatentModel(
             constructs=[
-                self._make_construct("stress", "daily", Role.EXOGENOUS),
-                self._make_construct("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
+                construct_factory("stress", "daily", Role.EXOGENOUS),
+                construct_factory("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
             ],
             edges=[CausalEdge(cause="stress", effect="mood", description="Stress affects mood")],
         )
         measurement = MeasurementModel(
             indicators=[
-                self._make_indicator("stress_rating", "stress"),
-                self._make_indicator("mood_rating", "mood"),
+                indicator_factory("stress_rating", "stress"),
+                indicator_factory("mood_rating", "mood"),
             ]
         )
         dsem = DSEMModel(latent=latent, measurement=measurement)
         assert len(dsem.latent.constructs) == 2
         assert len(dsem.measurement.indicators) == 2
 
-    def test_invalid_indicator_references_unknown_construct(self):
+    def test_invalid_indicator_references_unknown_construct(self, construct_factory, indicator_factory):
         """Indicator must reference a valid construct."""
         latent = LatentModel(
             constructs=[
-                self._make_construct("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
+                construct_factory("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
             ],
             edges=[],
         )
         measurement = MeasurementModel(
             indicators=[
-                self._make_indicator("mood_rating", "mood"),
-                self._make_indicator("unknown_indicator", "unknown"),  # invalid reference
+                indicator_factory("mood_rating", "mood"),
+                indicator_factory("unknown_indicator", "unknown"),  # invalid reference
             ]
         )
         with pytest.raises(ValueError, match="references unknown construct 'unknown'"):
             DSEMModel(latent=latent, measurement=measurement)
 
-    def test_latent_construct_without_indicator_is_valid(self):
+    def test_latent_construct_without_indicator_is_valid(self, construct_factory, indicator_factory):
         """Latent constructs without indicators are allowed (A2 deferred to y0)."""
         latent = LatentModel(
             constructs=[
-                self._make_construct("stress", "daily", Role.EXOGENOUS),
-                self._make_construct("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
+                construct_factory("stress", "daily", Role.EXOGENOUS),
+                construct_factory("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
             ],
             edges=[CausalEdge(cause="stress", effect="mood", description="Test")],
         )
         measurement = MeasurementModel(
             indicators=[
-                self._make_indicator("mood_rating", "mood"),
+                indicator_factory("mood_rating", "mood"),
                 # stress has no indicator - it's a latent construct
             ]
         )
@@ -388,33 +353,33 @@ class TestDSEMModel:
         assert len(dsem.latent.constructs) == 2
         assert len(dsem.measurement.indicators) == 1
 
-    def test_invalid_measurement_granularity_coarser_than_causal(self):
+    def test_invalid_measurement_granularity_coarser_than_causal(self, construct_factory, indicator_factory):
         """Indicator measurement_granularity must be finer than construct's causal_granularity."""
         latent = LatentModel(
             constructs=[
-                self._make_construct("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
+                construct_factory("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
             ],
             edges=[],
         )
         measurement = MeasurementModel(
             indicators=[
-                self._make_indicator("mood_rating", "mood", granularity="weekly"),  # coarser than daily
+                indicator_factory("mood_rating", "mood", granularity="weekly"),  # coarser than daily
             ]
         )
         with pytest.raises(ValueError, match="coarser than construct"):
             DSEMModel(latent=latent, measurement=measurement)
 
-    def test_to_networkx_includes_loading_edges(self):
+    def test_to_networkx_includes_loading_edges(self, construct_factory, indicator_factory):
         """DSEMModel.to_networkx includes construct→indicator loading edges."""
         latent = LatentModel(
             constructs=[
-                self._make_construct("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
+                construct_factory("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
             ],
             edges=[],
         )
         measurement = MeasurementModel(
             indicators=[
-                self._make_indicator("mood_rating", "mood"),
+                indicator_factory("mood_rating", "mood"),
             ]
         )
         dsem = DSEMModel(latent=latent, measurement=measurement)
@@ -428,19 +393,19 @@ class TestDSEMModel:
         assert ("mood", "mood_rating") in G.edges
         assert G.edges["mood", "mood_rating"]["edge_type"] == "loading"
 
-    def test_get_edge_lag_hours(self):
+    def test_get_edge_lag_hours(self, construct_factory, indicator_factory):
         """DSEMModel.get_edge_lag_hours computes correct lag."""
         latent = LatentModel(
             constructs=[
-                self._make_construct("sleep", "daily", Role.EXOGENOUS),
-                self._make_construct("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
+                construct_factory("sleep", "daily", Role.EXOGENOUS),
+                construct_factory("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
             ],
             edges=[CausalEdge(cause="sleep", effect="mood", description="Sleep affects mood", lagged=True)],
         )
         measurement = MeasurementModel(
             indicators=[
-                self._make_indicator("sleep_hours", "sleep"),
-                self._make_indicator("mood_rating", "mood"),
+                indicator_factory("sleep_hours", "sleep"),
+                indicator_factory("mood_rating", "mood"),
             ]
         )
         dsem = DSEMModel(latent=latent, measurement=measurement)

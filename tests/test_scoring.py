@@ -1,7 +1,6 @@
 """Tests for latent model scoring function."""
 
 import json
-from dataclasses import dataclass
 
 import pytest
 
@@ -12,18 +11,11 @@ from dsem_agent.orchestrator.scoring import (
 )
 from dsem_agent.orchestrator.schemas import (
     CausalEdge,
-    Construct,
     Role,
     LatentModel,
-    TemporalStatus,
 )
 
-
-@dataclass
-class MockPrediction:
-    """Mock DSPy prediction object."""
-
-    structure: str
+from tests.helpers import MockPrediction
 
 
 class TestScoreLatentModel:
@@ -179,38 +171,22 @@ class TestScoreLatentModel:
 class TestCountRulePoints:
     """Tests for the internal point counting function."""
 
-    def _make_construct(self, name, granularity, role, is_outcome=False):
-        """Helper to create a construct."""
-        temporal_status = TemporalStatus.TIME_VARYING if granularity else TemporalStatus.TIME_INVARIANT
-        return Construct(
-            name=name,
-            description=f"{name} description",
-            role=role,
-            is_outcome=is_outcome,
-            temporal_status=temporal_status,
-            causal_granularity=granularity,
-        )
-
-    def _make_structure(self, constructs, edges):
-        """Helper to create LatentModel."""
-        return LatentModel(constructs=constructs, edges=edges)
-
-    def test_endogenous_time_varying_construct_points(self):
+    def test_endogenous_time_varying_construct_points(self, construct_factory):
         """Endogenous time-varying construct with all correct fields scores points."""
-        structure = self._make_structure(
-            constructs=[self._make_construct("mood", "daily", Role.ENDOGENOUS, is_outcome=True)],
+        structure = LatentModel(
+            constructs=[construct_factory("mood", "daily", Role.ENDOGENOUS, is_outcome=True)],
             edges=[],
         )
         points = _count_rule_points(structure)
         # +1 role, +1 temporal_status, +1 causal_granularity present, +1 valid causal_granularity
         assert points >= 4
 
-    def test_time_invariant_construct_points(self):
+    def test_time_invariant_construct_points(self, construct_factory):
         """Time-invariant construct scores points for correct constraints."""
-        structure = self._make_structure(
+        structure = LatentModel(
             constructs=[
-                self._make_construct("age", None, Role.EXOGENOUS),
-                self._make_construct("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
+                construct_factory("age", None, Role.EXOGENOUS),
+                construct_factory("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
             ],
             edges=[],
         )
@@ -219,12 +195,12 @@ class TestCountRulePoints:
         # mood: +1 role, +1 temporal_status, +1 granularity, +1 valid granularity = 4
         assert points >= 7
 
-    def test_edge_points(self):
+    def test_edge_points(self, construct_factory):
         """Edge between valid constructs scores points."""
-        structure = self._make_structure(
+        structure = LatentModel(
             constructs=[
-                self._make_construct("X", "daily", Role.EXOGENOUS),
-                self._make_construct("Y", "daily", Role.ENDOGENOUS, is_outcome=True),
+                construct_factory("X", "daily", Role.EXOGENOUS),
+                construct_factory("Y", "daily", Role.ENDOGENOUS, is_outcome=True),
             ],
             edges=[CausalEdge(cause="X", effect="Y", description="X causes Y")],
         )
@@ -232,12 +208,12 @@ class TestCountRulePoints:
         # Construct points (4+4=8) + edge points (cause exists, effect exists, effect endogenous, same timescale)
         assert points >= 8 + 4
 
-    def test_cross_timescale_edge_bonus(self):
+    def test_cross_timescale_edge_bonus(self, construct_factory):
         """Cross-timescale edge gets bonus points."""
-        structure = self._make_structure(
+        structure = LatentModel(
             constructs=[
-                self._make_construct("hourly_stress", "hourly", Role.EXOGENOUS),
-                self._make_construct("daily_mood", "daily", Role.ENDOGENOUS, is_outcome=True),
+                construct_factory("hourly_stress", "hourly", Role.EXOGENOUS),
+                construct_factory("daily_mood", "daily", Role.ENDOGENOUS, is_outcome=True),
             ],
             edges=[CausalEdge(cause="hourly_stress", effect="daily_mood", description="Stress affects mood")],
         )

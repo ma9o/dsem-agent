@@ -46,84 +46,69 @@ class TestAggregationRegistry:
 class TestAggregatorFunctions:
     """Test individual aggregator functions."""
 
-    @pytest.fixture
-    def sample_df(self):
-        """Sample DataFrame for testing."""
-        return pl.DataFrame({
-            "group": ["A", "A", "A", "B", "B", "B"],
-            "value": [1.0, 2.0, 3.0, 10.0, 20.0, 30.0],
-        })
-
-    def test_mean(self, sample_df):
+    def test_mean(self, sample_aggregation_df):
         """Test mean aggregation."""
-        result = sample_df.select(AGGREGATION_REGISTRY["mean"]("value"))
+        result = sample_aggregation_df.select(AGGREGATION_REGISTRY["mean"]("value"))
         assert result.item() == pytest.approx(11.0)
 
-    def test_sum(self, sample_df):
+    def test_sum(self, sample_aggregation_df):
         """Test sum aggregation."""
-        result = sample_df.select(AGGREGATION_REGISTRY["sum"]("value"))
+        result = sample_aggregation_df.select(AGGREGATION_REGISTRY["sum"]("value"))
         assert result.item() == pytest.approx(66.0)
 
-    def test_min(self, sample_df):
+    def test_min(self, sample_aggregation_df):
         """Test min aggregation."""
-        result = sample_df.select(AGGREGATION_REGISTRY["min"]("value"))
+        result = sample_aggregation_df.select(AGGREGATION_REGISTRY["min"]("value"))
         assert result.item() == pytest.approx(1.0)
 
-    def test_max(self, sample_df):
+    def test_max(self, sample_aggregation_df):
         """Test max aggregation."""
-        result = sample_df.select(AGGREGATION_REGISTRY["max"]("value"))
+        result = sample_aggregation_df.select(AGGREGATION_REGISTRY["max"]("value"))
         assert result.item() == pytest.approx(30.0)
 
-    def test_first(self, sample_df):
+    def test_first(self, sample_aggregation_df):
         """Test first aggregation."""
-        result = sample_df.select(AGGREGATION_REGISTRY["first"]("value"))
+        result = sample_aggregation_df.select(AGGREGATION_REGISTRY["first"]("value"))
         assert result.item() == pytest.approx(1.0)
 
-    def test_last(self, sample_df):
+    def test_last(self, sample_aggregation_df):
         """Test last aggregation."""
-        result = sample_df.select(AGGREGATION_REGISTRY["last"]("value"))
+        result = sample_aggregation_df.select(AGGREGATION_REGISTRY["last"]("value"))
         assert result.item() == pytest.approx(30.0)
 
-    def test_count(self, sample_df):
+    def test_count(self, sample_aggregation_df):
         """Test count aggregation."""
-        result = sample_df.select(AGGREGATION_REGISTRY["count"]("value"))
+        result = sample_aggregation_df.select(AGGREGATION_REGISTRY["count"]("value"))
         assert result.item() == 6
 
-    def test_median(self, sample_df):
+    def test_median(self, sample_aggregation_df):
         """Test median aggregation."""
-        result = sample_df.select(AGGREGATION_REGISTRY["median"]("value"))
+        result = sample_aggregation_df.select(AGGREGATION_REGISTRY["median"]("value"))
         assert result.item() == pytest.approx(6.5)
 
-    def test_range(self, sample_df):
+    def test_range(self, sample_aggregation_df):
         """Test range aggregation."""
-        result = sample_df.select(AGGREGATION_REGISTRY["range"]("value"))
+        result = sample_aggregation_df.select(AGGREGATION_REGISTRY["range"]("value"))
         assert result.item() == pytest.approx(29.0)
 
-    def test_n_unique(self, sample_df):
+    def test_n_unique(self, sample_aggregation_df):
         """Test n_unique aggregation."""
-        result = sample_df.select(AGGREGATION_REGISTRY["n_unique"]("group"))
+        result = sample_aggregation_df.select(AGGREGATION_REGISTRY["n_unique"]("group"))
         assert result.item() == 2
 
 
 class TestApplyAggregation:
     """Test the apply_aggregation helper."""
 
-    @pytest.fixture
-    def sample_df(self):
-        return pl.DataFrame({
-            "group": ["A", "A", "B", "B"],
-            "value": [1.0, 3.0, 10.0, 20.0],
-        })
-
-    def test_apply_without_groupby(self, sample_df):
+    def test_apply_without_groupby(self, sample_grouped_df):
         """Apply aggregation to whole column."""
-        result = apply_aggregation(sample_df, "value", "mean")
+        result = apply_aggregation(sample_grouped_df, "value", "mean")
         assert result.shape == (1, 1)
         assert result.item() == pytest.approx(8.5)
 
-    def test_apply_with_groupby(self, sample_df):
+    def test_apply_with_groupby(self, sample_grouped_df):
         """Apply aggregation with group by."""
-        result = apply_aggregation(sample_df, "value", "mean", group_by=["group"])
+        result = apply_aggregation(sample_grouped_df, "value", "mean", group_by=["group"])
         assert result.shape == (2, 2)
         # Sort to ensure consistent order
         result = result.sort("group")
@@ -171,63 +156,14 @@ class TestAggregateWorkerMeasurements:
     - Indicators are grouped by their construct's causal_granularity
     """
 
-    @pytest.fixture
-    def daily_schema(self):
-        """DSEMModel schema with daily causal_granularity constructs."""
-        return {
-            "latent": {
-                "constructs": [
-                    {"name": "body_temp", "causal_granularity": "daily"},
-                    {"name": "activity", "causal_granularity": "daily"},
-                ],
-                "edges": [],
-            },
-            "measurement": {
-                "indicators": [
-                    {
-                        "name": "temperature",
-                        "construct_name": "body_temp",
-                        "aggregation": "mean",
-                    },
-                    {
-                        "name": "step_count",
-                        "construct_name": "activity",
-                        "aggregation": "sum",
-                    },
-                ],
-            },
-        }
-
-    @pytest.fixture
-    def worker_dataframes(self):
-        """Sample worker dataframes with timestamps.
-
-        Data layout:
-        - 2024-01-01: temperature=[20, 22], step_count=[5000, 2000]
-        - 2024-01-02: temperature=[24], step_count=[3000, 4000]
-        """
-        df1 = pl.DataFrame({
-            "indicator": ["temperature", "temperature", "step_count", "step_count"],
-            "value": [20.0, 22.0, 5000, 3000],
-            "timestamp": ["2024-01-01 10:00", "2024-01-01 14:00", "2024-01-01 08:00", "2024-01-02 09:00"],
-        }, schema={"indicator": pl.Utf8, "value": pl.Object, "timestamp": pl.Utf8})
-
-        df2 = pl.DataFrame({
-            "indicator": ["temperature", "step_count", "step_count"],
-            "value": [24.0, 2000, 4000],
-            "timestamp": ["2024-01-02 12:00", "2024-01-01 20:00", "2024-01-02 18:00"],
-        }, schema={"indicator": pl.Utf8, "value": pl.Object, "timestamp": pl.Utf8})
-
-        return [df1, df2]
-
-    def test_empty_dataframes_list(self, daily_schema):
+    def test_empty_dataframes_list(self, daily_aggregation_schema):
         """Empty list returns empty dict."""
-        result = aggregate_worker_measurements([], daily_schema)
+        result = aggregate_worker_measurements([], daily_aggregation_schema)
         assert result == {}
 
-    def test_returns_dict_by_granularity(self, daily_schema, worker_dataframes):
+    def test_returns_dict_by_granularity(self, daily_aggregation_schema, worker_measurement_dfs):
         """Result is a dict with granularity keys."""
-        result = aggregate_worker_measurements(worker_dataframes, daily_schema)
+        result = aggregate_worker_measurements(worker_measurement_dfs, daily_aggregation_schema)
 
         assert isinstance(result, dict)
         assert "daily" in result
@@ -237,9 +173,9 @@ class TestAggregateWorkerMeasurements:
         assert "temperature" in daily_df.columns
         assert "step_count" in daily_df.columns
 
-    def test_aggregates_within_time_buckets(self, daily_schema, worker_dataframes):
+    def test_aggregates_within_time_buckets(self, daily_aggregation_schema, worker_measurement_dfs):
         """Values are aggregated within each time bucket using indicator's aggregation."""
-        result = aggregate_worker_measurements(worker_dataframes, daily_schema)
+        result = aggregate_worker_measurements(worker_measurement_dfs, daily_aggregation_schema)
         daily_df = result["daily"].sort("time_bucket")
 
         # 2024-01-01: temperature=[20, 22] -> mean = 21.0
@@ -311,7 +247,7 @@ class TestAggregateWorkerMeasurements:
         # Check daily aggregation: [100, 200] -> sum = 300
         assert daily_df["daily_metric"][0] == pytest.approx(300.0)
 
-    def test_only_includes_known_indicators(self, daily_schema):
+    def test_only_includes_known_indicators(self, daily_aggregation_schema):
         """Only indicators defined in schema are processed."""
         df = pl.DataFrame({
             "indicator": ["unknown_metric", "temperature"],
@@ -319,7 +255,7 @@ class TestAggregateWorkerMeasurements:
             "timestamp": ["2024-01-01 08:00", "2024-01-01 10:00"],
         }, schema={"indicator": pl.Utf8, "value": pl.Object, "timestamp": pl.Utf8})
 
-        result = aggregate_worker_measurements([df], daily_schema)
+        result = aggregate_worker_measurements([df], daily_aggregation_schema)
 
         daily_df = result["daily"]
         assert "unknown_metric" not in daily_df.columns
@@ -367,7 +303,7 @@ class TestAggregateWorkerMeasurements:
         assert "mood" in daily_df.columns
         assert "age" not in daily_df.columns
 
-    def test_handles_unparseable_timestamps(self, daily_schema):
+    def test_handles_unparseable_timestamps(self, daily_aggregation_schema):
         """Rows with unparseable timestamps are filtered out."""
         df = pl.DataFrame({
             "indicator": ["temperature", "temperature", "temperature"],
@@ -375,7 +311,7 @@ class TestAggregateWorkerMeasurements:
             "timestamp": ["2024-01-01 10:00", "invalid-date", "2024-01-01 14:00"],
         }, schema={"indicator": pl.Utf8, "value": pl.Object, "timestamp": pl.Utf8})
 
-        result = aggregate_worker_measurements([df], daily_schema)
+        result = aggregate_worker_measurements([df], daily_aggregation_schema)
 
         # Should have one row for 2024-01-01 with mean of 20 and 24 = 22
         daily_df = result["daily"]
