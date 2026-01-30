@@ -62,7 +62,7 @@ P(Cₜ | Cₜ₋₁, Cₜ₋₂, ..., C₁) = P(Cₜ | Cₜ₋₁)
 
 **Justification:** Cyclic contemporaneous relationships are not identified without additional constraints (instrumental variables, non-Gaussianity). Requiring acyclicity simplifies identification while allowing feedback dynamics through the temporal structure.
 
-**Identification implication:** When checking causal identifiability using algorithms like Shpitser-Pearl, only contemporaneous edges are included in the ADMG. Lagged edges represent cross-time effects (t-1 → t) where causality flows forward through time—these don't create cycles and are handled separately in DSEM estimation by conditioning on lagged values.
+**Identification implication:** When checking causal identifiability using algorithms like Shpitser-Pearl, only contemporaneous edges are included. Lagged edges represent cross-time effects (t-1 → t) where causality flows forward through time—these don't create cycles and are handled separately in DSEM estimation by conditioning on lagged values. The DAG (with explicit latent confounders) is projected to an ADMG internally for the identification algorithm, but users always specify structure as a DAG.
 
 **Reference:** Asparouhov, T., Hamaker, E. L., & Muthén, B. (2018). Dynamic structural equation models. *Structural Equation Modeling*, 25(3), 359-388. https://doi.org/10.1080/10705511.2017.1406803
 

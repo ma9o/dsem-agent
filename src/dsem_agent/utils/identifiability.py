@@ -5,9 +5,11 @@ given observed/unobserved constructs. This properly handles:
 - Backdoor criterion
 - Front-door criterion
 - Other identification strategies from Shpitser & Pearl
+
+Design principle: Users specify DAGs with explicit latent confounders. We convert
+to ADMG internally using y0's from_latent_variable_dag() for identification.
 """
 
-from itertools import combinations
 from typing import Any
 
 import networkx as nx
@@ -47,8 +49,8 @@ def check_identifiability(
     # Determine which constructs have measurements (observed)
     observed_constructs = get_observed_constructs(measurement_model)
 
-    # Build projected ADMG
-    admg, unobserved_confounders = build_projected_admg(latent_model, observed_constructs)
+    # Convert DAG to ADMG for identification
+    admg, unobserved_confounders = dag_to_admg(latent_model, observed_constructs)
 
     # Get all potential treatments (constructs with paths to outcome)
     all_treatments = _get_treatments_from_graph(latent_model, outcome)
@@ -128,73 +130,85 @@ def get_observed_constructs(measurement_model: dict) -> set[str]:
     return observed
 
 
-def build_projected_admg(
+def build_latent_variable_dag(
     latent_model: dict,
     observed_constructs: set[str],
-) -> tuple[NxMixedGraph, set[str]]:
-    """Build a projected ADMG for identifiability analysis.
+    include_lagged: bool = False,
+) -> nx.DiGraph:
+    """Build a labeled DAG for y0's from_latent_variable_dag().
 
-    In the projected ADMG:
-    - Only observed constructs are nodes
-    - Only CONTEMPORANEOUS edges are included (lagged edges are identified by
-      construction since we observe lagged values)
-    - Unobserved constructs with multiple contemporaneous children create
-      bidirected edges (representing confounding)
+    Constructs a networkx DiGraph where unobserved nodes are labeled with
+    hidden=True. This can be passed to NxMixedGraph.from_latent_variable_dag()
+    to get an ADMG for identification.
 
     Args:
         latent_model: Dict with 'constructs' and 'edges'
         observed_constructs: Set of construct names that have measurements
+        include_lagged: Whether to include lagged edges. Currently False because
+            lagged effects are identified by construction (we condition on past).
+            TODO: Will be True once we implement time-unrolled identification.
+
+    Returns:
+        nx.DiGraph with hidden=True/False labels on nodes
+    """
+    dag = nx.DiGraph()
+
+    # Add all constructs as nodes with hidden label
+    for construct in latent_model['constructs']:
+        name = construct['name']
+        is_hidden = name not in observed_constructs
+        dag.add_node(name, hidden=is_hidden)
+
+    # Add edges (optionally filtering lagged)
+    for edge in latent_model.get('edges', []):
+        if not include_lagged and edge.get('lagged', False):
+            continue
+        dag.add_edge(edge['cause'], edge['effect'])
+
+    return dag
+
+
+def dag_to_admg(
+    latent_model: dict,
+    observed_constructs: set[str],
+    include_lagged: bool = False,
+) -> tuple[NxMixedGraph, set[str]]:
+    """Convert a DAG with latent confounders to an ADMG using y0.
+
+    Uses y0's from_latent_variable_dag() to project out latent nodes,
+    creating bidirected edges where latent common causes exist.
+
+    Args:
+        latent_model: Dict with 'constructs' and 'edges'
+        observed_constructs: Set of construct names that have measurements
+        include_lagged: Whether to include lagged edges in identification
 
     Returns:
         Tuple of (NxMixedGraph, set of unobserved confounder names)
     """
-    # Create Variable objects for observed constructs
-    var_map = {name: Variable(name) for name in observed_constructs}
+    # Build labeled DAG
+    dag = build_latent_variable_dag(latent_model, observed_constructs, include_lagged)
 
-    # Collect directed edges (only contemporaneous edges between observed constructs)
-    # Lagged edges are excluded because they represent cross-time effects (t-1 → t)
-    # which don't create cycles - causality flows forward through time.
-    # See Asparouhov, Hamaker & Muthén (2018) "Dynamic structural equation models"
-    # for the theoretical foundation of separating contemporaneous vs lagged effects.
-    directed_edges = []
-    for edge in latent_model.get('edges', []):
-        if edge.get('lagged', False):
-            continue  # Skip lagged edges
-        cause, effect = edge['cause'], edge['effect']
-        if cause in observed_constructs and effect in observed_constructs:
-            directed_edges.append((var_map[cause], var_map[effect]))
-
-    # Find unobserved constructs and their contemporaneous children
+    # Find unobserved nodes that will become confounders (have 2+ observed children)
     all_constructs = {c['name'] for c in latent_model['constructs']}
     unobserved = all_constructs - observed_constructs
 
-    # Build child map for unobserved constructs (contemporaneous edges only)
-    unobserved_children: dict[str, set[str]] = {u: set() for u in unobserved}
-    for edge in latent_model.get('edges', []):
-        if edge.get('lagged', False):
-            continue  # Skip lagged edges
-        cause, effect = edge['cause'], edge['effect']
-        if cause in unobserved and effect in observed_constructs:
-            unobserved_children[cause].add(effect)
-
-    # Create bidirected edges for unobserved confounders
-    # An unobserved node U with children A, B, C creates edges A↔B, A↔C, B↔C
-    bidirected_edges = []
     unobserved_confounders = set()
+    for u in unobserved:
+        if u in dag:
+            observed_children = [
+                child for child in dag.successors(u)
+                if child in observed_constructs
+            ]
+            if len(observed_children) >= 2:
+                unobserved_confounders.add(u)
 
-    for u, children in unobserved_children.items():
-        if len(children) >= 2:
-            unobserved_confounders.add(u)
-            for c1, c2 in combinations(children, 2):
-                bidirected_edges.append((var_map[c1], var_map[c2]))
-
-    # Build the ADMG
-    admg = NxMixedGraph.from_edges(
-        directed=directed_edges,
-        undirected=bidirected_edges,
-    )
+    # Convert to ADMG using y0's built-in projection
+    admg = NxMixedGraph.from_latent_variable_dag(dag)
 
     return admg, unobserved_confounders
+
+
 
 
 def find_blocking_confounders(

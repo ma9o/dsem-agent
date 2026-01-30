@@ -4,8 +4,8 @@ import pytest
 
 from dsem_agent.utils.identifiability import (
     analyze_unobserved_constructs,
-    build_projected_admg,
     check_identifiability,
+    dag_to_admg,
     format_identifiability_report,
     format_marginalization_report,
     get_observed_constructs,
@@ -159,7 +159,7 @@ def test_identifiability_unobserved_treatment():
     assert 'X' in result['blocking_confounders']['X']  # Treatment itself is the blocker
 
 
-def test_build_projected_admg():
+def test_dag_to_admg():
     """Test ADMG construction with bidirected edges for confounders."""
     latent_model = {
         'constructs': [
@@ -177,15 +177,15 @@ def test_build_projected_admg():
     }
 
     observed = {'A', 'B', 'C'}
-    admg, confounders = build_projected_admg(latent_model, observed)
+    admg, confounders = dag_to_admg(latent_model, observed)
 
     # Should have A <-> B bidirected edge from U
     assert 'U' in confounders
     assert len(list(admg.undirected.edges())) == 1
 
 
-def test_build_projected_admg_excludes_lagged_edges():
-    """Test that lagged edges are excluded from ADMG (they're identified by construction)."""
+def test_dag_to_admg_excludes_lagged_edges():
+    """Test that lagged edges are excluded from ADMG by default."""
     latent_model = {
         'constructs': [
             {'name': 'A'},
@@ -194,13 +194,13 @@ def test_build_projected_admg_excludes_lagged_edges():
         'edges': [
             # Contemporaneous edge: should be included
             {'cause': 'A', 'effect': 'B', 'description': 'test', 'lagged': False},
-            # Lagged feedback edge: should be excluded (would create cycle otherwise)
+            # Lagged feedback edge: should be excluded by default
             {'cause': 'B', 'effect': 'A', 'description': 'test', 'lagged': True},
         ],
     }
 
     observed = {'A', 'B'}
-    admg, confounders = build_projected_admg(latent_model, observed)
+    admg, confounders = dag_to_admg(latent_model, observed, include_lagged=False)
 
     # Only contemporaneous edge should be in the ADMG
     directed_edges = list(admg.directed.edges())
@@ -209,6 +209,30 @@ def test_build_projected_admg_excludes_lagged_edges():
     edge_names = [(str(e[0]), str(e[1])) for e in directed_edges]
     assert ('A', 'B') in edge_names
     assert ('B', 'A') not in edge_names
+
+
+def test_dag_to_admg_includes_lagged_edges():
+    """Test that lagged edges can be included when requested."""
+    latent_model = {
+        'constructs': [
+            {'name': 'A'},
+            {'name': 'B'},
+        ],
+        'edges': [
+            {'cause': 'A', 'effect': 'B', 'description': 'test', 'lagged': False},
+            {'cause': 'B', 'effect': 'A', 'description': 'test', 'lagged': True},
+        ],
+    }
+
+    observed = {'A', 'B'}
+    admg, confounders = dag_to_admg(latent_model, observed, include_lagged=True)
+
+    # Both edges should be in the ADMG
+    directed_edges = list(admg.directed.edges())
+    assert len(directed_edges) == 2
+    edge_names = [(str(e[0]), str(e[1])) for e in directed_edges]
+    assert ('A', 'B') in edge_names
+    assert ('B', 'A') in edge_names
 
 
 def test_format_identifiability_report():

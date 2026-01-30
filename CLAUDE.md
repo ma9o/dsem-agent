@@ -14,6 +14,8 @@
 
 8. NEVER add backwards compatibility code. This project is not deployed anywhere yet. When refactoring, completely replace old patterns with new ones - do not support both old and new formats simultaneously.
 
+9. ALWAYS encode structural assumptions as DAGs with explicit latent confounders. NEVER use ADMGs (bidirected edges) as user-facing representations. If unobserved confounding exists, model it as an explicit unobserved node (e.g., `U -> X`, `U -> Y`) rather than a bidirected edge (`X <-> Y`). ADMGs are only used internally for running y0's identification algorithm via projection.
+
 ------
 
 # Terminology: Causal Modeling
@@ -208,22 +210,28 @@ Docs: https://y0.readthedocs.io/
 
 ## Best Practices
 
-### Graph Format
-- Use y0's NxMixedGraph for ADMGs (directed + bidirected edges)
-- Directed edges represent causal relationships
-- Bidirected edges represent unobserved confounding
+### Design Principle: DAGs First, Project to ADMG
+- **User-facing**: Always specify causal structure as DAGs with explicit latent confounders
+- **Internally**: Project DAG to ADMG for y0's identification algorithm
+- Never ask users to specify bidirected edges directly
 
-### Identification
+### Identification Pattern
 ```python
+import networkx as nx
 from y0.algorithm.identify import identify_outcomes
 from y0.dsl import Variable
 from y0.graph import NxMixedGraph
 
-# Build ADMG with directed and bidirected edges
-admg = NxMixedGraph.from_edges(
-    directed=[(Variable('X'), Variable('Y'))],
-    undirected=[(Variable('X'), Variable('Y'))],  # confounding
-)
+# Build DAG with explicit latent confounders labeled hidden=True
+dag = nx.DiGraph()
+dag.add_node('U', hidden=True)   # Latent confounder
+dag.add_node('X', hidden=False)  # Observed
+dag.add_node('Y', hidden=False)  # Observed
+dag.add_edges_from([('U', 'X'), ('U', 'Y'), ('X', 'Y')])
+
+# y0 projects out latent nodes, creating bidirected edges
+admg = NxMixedGraph.from_latent_variable_dag(dag)
+# Result: X -> Y (directed), X <-> Y (bidirected from U)
 
 # Check identifiability
 estimand = identify_outcomes(
@@ -233,6 +241,9 @@ estimand = identify_outcomes(
 )
 # Returns None if not identifiable, otherwise the estimand formula
 ```
+
+See `src/dsem_agent/utils/identifiability.py` for the full implementation with
+`dag_to_admg()` helper that handles the conversion.
 
 # NetworkX
 Docs: https://networkx.org/documentation/stable/
