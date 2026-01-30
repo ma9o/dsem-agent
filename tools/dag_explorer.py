@@ -111,6 +111,7 @@ COLORS = {
     "exogenous": "#f78166",
     "outcome": "#a371f7",
     "edge": "#8b949e",
+    "feedback": "#f0883e",  # Orange - feedback loop edges
     "background": "#0d1117",
     "can_marginalize": "#3fb950",  # Green - safe to ignore
     "needs_modeling": "#f85149",  # Red - blocks identification
@@ -130,6 +131,18 @@ def create_agraph_elements(
     """
     nodes = []
     edges = []
+
+    # Detect feedback loops (edges in both directions between same node pair)
+    # so we can curve them to avoid visual overlap
+    edge_pairs = set()
+    reciprocal_pairs = set()
+    for edge in data.get("edges", []):
+        pair = (edge["cause"], edge["effect"])
+        reverse = (edge["effect"], edge["cause"])
+        if reverse in edge_pairs:
+            reciprocal_pairs.add(pair)
+            reciprocal_pairs.add(reverse)
+        edge_pairs.add(pair)
 
     # Compute which constructs have indicators (derived observability)
     measured_constructs = {
@@ -203,13 +216,28 @@ def create_agraph_elements(
             )
 
     for edge in data["edges"]:
+        pair = (edge["cause"], edge["effect"])
+        is_feedback = pair in reciprocal_pairs
+
+        # Use curved edges for feedback loops so they don't overlap
+        # curvedCW for one direction, curvedCCW for the other
+        if is_feedback:
+            # Use clockwise curve; the reverse edge will also use CW
+            # but vis.js will curve them in opposite directions automatically
+            smooth = {"enabled": True, "type": "curvedCW", "roundness": 0.2}
+            edge_color = COLORS["feedback"]
+        else:
+            smooth = {"enabled": False}
+            edge_color = COLORS["edge"]
+
         edges.append(
             Edge(
                 source=edge["cause"],
                 target=edge["effect"],
-                color=COLORS["edge"],
+                color=edge_color,
                 dashes=edge.get("lagged", False),
                 width=1.5,
+                smooth=smooth,
             )
         )
 
@@ -351,8 +379,9 @@ with col_input:
             <div><span style="color: #f85149;">◯</span> Needs proxy (blocks ID)</div>
             <div><span style="color: #3fb950;">◯</span> Can marginalize</div>
             <div style="font-weight: 600; margin-top: 10px; margin-bottom: 4px;">Edges</div>
-            <div>— Contemporaneous</div>
-            <div>┅ Lagged</div>
+            <div><span style="color: #8b949e;">—</span> Contemporaneous (t→t)</div>
+            <div><span style="color: #8b949e;">┅</span> Lagged (t-1→t)</div>
+            <div><span style="color: #f0883e;">⟳</span> Feedback loop (curved, orange)</div>
         </div>
         """,
         unsafe_allow_html=True,
