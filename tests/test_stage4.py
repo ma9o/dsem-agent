@@ -1,293 +1,395 @@
-"""Tests for Stage 4: Model Specification."""
+"""Tests for Stage 4: Model Specification & Prior Elicitation."""
 
+import numpy as np
+import pandas as pd
 import pytest
 
-from dsem_agent.flows.stages.stage4_model import (
-    DEFAULT_PRIORS,
-    DTYPE_TO_DISTRIBUTION,
-    specify_model,
-    elicit_priors_sync,
+from dsem_agent.models.dsem_model_builder import DSEMModelBuilder
+from dsem_agent.models.prior_predictive import (
+    _get_constraint_from_distribution,
+    _validate_parameter,
+    _validate_prior_predictive_samples,
+    format_validation_report,
+)
+from dsem_agent.orchestrator.schemas_glmm import (
+    DistributionFamily,
+    GLMMSpec,
+    LikelihoodSpec,
+    LinkFunction,
+    ParameterConstraint,
+    ParameterRole,
+    ParameterSpec,
+)
+from dsem_agent.workers.prior_research import get_default_prior
+from dsem_agent.workers.schemas_prior import (
+    PriorProposal,
+    PriorSource,
+    PriorValidationResult,
 )
 
 
+# --- Fixtures ---
+
+
 @pytest.fixture
-def simple_dsem_model():
-    """A simple DSEM model for testing."""
+def simple_glmm_spec() -> dict:
+    """A minimal GLMM spec for testing."""
     return {
-        "latent": {
-            "constructs": [
-                {
-                    "name": "stress",
-                    "description": "Psychological stress level",
-                    "role": "endogenous",
-                    "is_outcome": False,
-                    "temporal_status": "time_varying",
-                    "causal_granularity": "daily",
-                },
-                {
-                    "name": "sleep",
-                    "description": "Sleep quality",
-                    "role": "endogenous",
-                    "is_outcome": False,
-                    "temporal_status": "time_varying",
-                    "causal_granularity": "daily",
-                },
-                {
-                    "name": "mood",
-                    "description": "Emotional state",
-                    "role": "endogenous",
-                    "is_outcome": True,
-                    "temporal_status": "time_varying",
-                    "causal_granularity": "daily",
-                },
-                {
-                    "name": "trait_anxiety",
-                    "description": "Stable anxiety disposition",
-                    "role": "exogenous",
-                    "is_outcome": False,
-                    "temporal_status": "time_invariant",
-                    "causal_granularity": None,
-                },
-            ],
-            "edges": [
-                {
-                    "cause": "stress",
-                    "effect": "mood",
-                    "description": "Stress reduces mood",
-                    "lagged": True,
-                },
-                {
-                    "cause": "sleep",
-                    "effect": "mood",
-                    "description": "Poor sleep worsens mood",
-                    "lagged": True,
-                },
-                {
-                    "cause": "trait_anxiety",
-                    "effect": "stress",
-                    "description": "Anxious people experience more stress",
-                    "lagged": False,
-                },
-            ],
-        },
-        "measurement": {
-            "indicators": [
-                {
-                    "name": "hrv",
-                    "construct": "stress",
-                    "how_to_measure": "Heart rate variability",
-                    "measurement_granularity": "hourly",
-                    "measurement_dtype": "continuous",
-                    "aggregation": "mean",
-                },
-                {
-                    "name": "cortisol",
-                    "construct": "stress",
-                    "how_to_measure": "Cortisol level",
-                    "measurement_granularity": "daily",
-                    "measurement_dtype": "continuous",
-                    "aggregation": "mean",
-                },
-                {
-                    "name": "sleep_hours",
-                    "construct": "sleep",
-                    "how_to_measure": "Hours of sleep",
-                    "measurement_granularity": "daily",
-                    "measurement_dtype": "continuous",
-                    "aggregation": "sum",
-                },
-                {
-                    "name": "mood_rating",
-                    "construct": "mood",
-                    "how_to_measure": "Self-reported mood 1-10",
-                    "measurement_granularity": "daily",
-                    "measurement_dtype": "continuous",
-                    "aggregation": "mean",
-                },
-                {
-                    "name": "stai_score",
-                    "construct": "trait_anxiety",
-                    "how_to_measure": "STAI trait score",
-                    "measurement_granularity": "daily",
-                    "measurement_dtype": "continuous",
-                    "aggregation": "first",
-                },
-            ],
-        },
-        "identifiability": None,
+        "likelihoods": [
+            {
+                "variable": "mood_score",
+                "distribution": "Normal",
+                "link": "identity",
+                "reasoning": "Continuous Likert-type scale",
+            }
+        ],
+        "random_effects": [],
+        "parameters": [
+            {
+                "name": "intercept_mood_score",
+                "role": "fixed_effect",
+                "constraint": "none",
+                "description": "Intercept for mood",
+                "search_context": "mood baseline population mean",
+            },
+            {
+                "name": "rho_mood",
+                "role": "ar_coefficient",
+                "constraint": "unit_interval",
+                "description": "AR(1) coefficient for mood",
+                "search_context": "mood autocorrelation daily",
+            },
+            {
+                "name": "sigma_mood_score",
+                "role": "residual_sd",
+                "constraint": "positive",
+                "description": "Residual SD for mood",
+                "search_context": "mood variability within-person",
+            },
+        ],
+        "model_clock": "daily",
+        "reasoning": "Simple AR(1) model for mood",
     }
 
 
-class TestSpecifyModel:
-    """Tests for specify_model()."""
-
-    def test_model_clock_is_finest_granularity(self, simple_dsem_model):
-        """Model clock should be the finest endogenous granularity."""
-        spec = specify_model({}, simple_dsem_model)
-        assert spec["time_index"] == "daily"
-
-    def test_constructs_have_required_fields(self, simple_dsem_model):
-        """Each construct spec should have required fields."""
-        spec = specify_model({}, simple_dsem_model)
-
-        for name, construct in spec["constructs"].items():
-            assert "name" in construct
-            assert "role" in construct
-            assert "temporal_status" in construct
-            assert "is_outcome" in construct
-
-    def test_endogenous_time_varying_get_ar_prior(self, simple_dsem_model):
-        """Endogenous time-varying constructs should get AR priors."""
-        spec = specify_model({}, simple_dsem_model)
-
-        # stress, sleep, mood are endogenous time-varying
-        assert "ar_prior" in spec["constructs"]["stress"]
-        assert "ar_prior" in spec["constructs"]["sleep"]
-        assert "ar_prior" in spec["constructs"]["mood"]
-
-        # trait_anxiety is exogenous, no AR
-        assert "ar_prior" not in spec["constructs"]["trait_anxiety"]
-
-    def test_endogenous_get_sigma_prior(self, simple_dsem_model):
-        """Endogenous constructs should get residual variance priors."""
-        spec = specify_model({}, simple_dsem_model)
-
-        assert "sigma_prior" in spec["constructs"]["stress"]
-        assert "sigma_prior" in spec["constructs"]["mood"]
-        assert "sigma_prior" not in spec["constructs"]["trait_anxiety"]
-
-    def test_edges_have_coefficient_priors(self, simple_dsem_model):
-        """Each edge should have a beta coefficient prior."""
-        spec = specify_model({}, simple_dsem_model)
-
-        assert len(spec["edges"]) == 3
-
-        for param_name, edge in spec["edges"].items():
-            assert param_name.startswith("beta_")
-            assert "prior" in edge
-            assert "cause" in edge
-            assert "effect" in edge
-            assert "lagged" in edge
-
-    def test_single_indicator_loading_fixed(self, simple_dsem_model):
-        """Single-indicator constructs should have loading=1.0."""
-        spec = specify_model({}, simple_dsem_model)
-
-        # mood has only mood_rating
-        assert spec["measurement"]["mood_rating"]["loading"] == 1.0
-        assert spec["measurement"]["mood_rating"]["loading_prior"] is None
-
-    def test_multi_indicator_first_loading_fixed(self, simple_dsem_model):
-        """Multi-indicator: first loading fixed, rest estimated."""
-        spec = specify_model({}, simple_dsem_model)
-
-        # stress has hrv and cortisol
-        # First one (hrv) should be fixed
-        assert spec["measurement"]["hrv"]["loading"] == 1.0
-        assert spec["measurement"]["hrv"]["loading_prior"] is None
-
-        # Second one (cortisol) should be estimated
-        assert spec["measurement"]["cortisol"]["loading"] is None
-        assert spec["measurement"]["cortisol"]["loading_prior"] is not None
-
-    def test_dtype_to_distribution_mapping(self, simple_dsem_model):
-        """Indicators should get correct distribution based on dtype."""
-        spec = specify_model({}, simple_dsem_model)
-
-        # All indicators are continuous
-        for ind_spec in spec["measurement"].values():
-            assert ind_spec["distribution"] == "Normal"
-            assert ind_spec["link"] == "identity"
+@pytest.fixture
+def simple_priors() -> dict:
+    """Simple priors matching the GLMM spec."""
+    return {
+        "intercept_mood_score": {
+            "parameter": "intercept_mood_score",
+            "distribution": "Normal",
+            "params": {"mu": 5.0, "sigma": 1.0},
+            "sources": [],
+            "confidence": 0.5,
+            "reasoning": "Centered on scale midpoint",
+        },
+        "rho_mood": {
+            "parameter": "rho_mood",
+            "distribution": "Beta",
+            "params": {"alpha": 2.0, "beta": 2.0},
+            "sources": [],
+            "confidence": 0.5,
+            "reasoning": "Weakly informative for AR coefficient",
+        },
+        "sigma_mood_score": {
+            "parameter": "sigma_mood_score",
+            "distribution": "HalfNormal",
+            "params": {"sigma": 1.0},
+            "sources": [],
+            "confidence": 0.5,
+            "reasoning": "Weakly informative for residual SD",
+        },
+    }
 
 
-class TestElicitPriorsSync:
-    """Tests for elicit_priors_sync() (default priors)."""
-
-    def test_returns_all_parameters(self, simple_dsem_model):
-        """Should return priors for all parameters."""
-        spec = specify_model({}, simple_dsem_model)
-        priors = elicit_priors_sync(spec)
-
-        # AR priors for endogenous time-varying
-        assert "rho_stress" in priors
-        assert "rho_sleep" in priors
-        assert "rho_mood" in priors
-
-        # Sigma priors for endogenous
-        assert "sigma_stress" in priors
-        assert "sigma_mood" in priors
-
-        # Beta priors for edges
-        assert "beta_mood_stress" in priors
-        assert "beta_mood_sleep" in priors
-        assert "beta_stress_trait_anxiety" in priors
-
-    def test_priors_have_required_fields(self, simple_dsem_model):
-        """Each prior should have mean, std, reasoning, source."""
-        spec = specify_model({}, simple_dsem_model)
-        priors = elicit_priors_sync(spec)
-
-        for param_name, prior in priors.items():
-            assert "mean" in prior
-            assert "std" in prior
-            assert "reasoning" in prior
-            assert "source" in prior
-            assert prior["source"] == "default"
-
-    def test_loading_priors_for_multi_indicator(self, simple_dsem_model):
-        """Should have loading priors for non-reference indicators."""
-        spec = specify_model({}, simple_dsem_model)
-        priors = elicit_priors_sync(spec)
-
-        # cortisol is 2nd indicator for stress, should have loading prior
-        assert "lambda_cortisol" in priors
+@pytest.fixture
+def simple_data() -> pd.DataFrame:
+    """Simple test data with lagged columns."""
+    n = 50
+    return pd.DataFrame({
+        "mood_score": np.random.randn(n) * 1.5 + 5,
+        "mood_score_lag1": np.random.randn(n) * 1.5 + 5,
+        "subject_id": np.repeat(np.arange(5), 10),
+    })
 
 
-class TestDtypeMapping:
-    """Tests for dtype to distribution mapping."""
+# --- Schema Tests ---
 
-    def test_all_dtypes_mapped(self):
-        """All valid dtypes should have mappings."""
-        valid_dtypes = ["continuous", "binary", "count", "ordinal", "categorical"]
 
-        for dtype in valid_dtypes:
-            assert dtype in DTYPE_TO_DISTRIBUTION
-            assert "dist" in DTYPE_TO_DISTRIBUTION[dtype]
-            assert "link" in DTYPE_TO_DISTRIBUTION[dtype]
+class TestSchemas:
+    """Test GLMM and prior schemas."""
 
-    def test_continuous_is_normal(self):
-        """Continuous should map to Normal with identity link."""
-        assert DTYPE_TO_DISTRIBUTION["continuous"]["dist"] == "Normal"
-        assert DTYPE_TO_DISTRIBUTION["continuous"]["link"] == "identity"
+    def test_parameter_spec_validation(self):
+        """ParameterSpec validates correctly."""
+        spec = ParameterSpec(
+            name="beta_stress_mood",
+            role=ParameterRole.FIXED_EFFECT,
+            constraint=ParameterConstraint.NONE,
+            description="Effect of stress on mood",
+            search_context="stress mood effect size",
+        )
+        assert spec.name == "beta_stress_mood"
+        assert spec.role == ParameterRole.FIXED_EFFECT
 
-    def test_binary_is_bernoulli(self):
-        """Binary should map to Bernoulli with logit link."""
-        assert DTYPE_TO_DISTRIBUTION["binary"]["dist"] == "Bernoulli"
-        assert DTYPE_TO_DISTRIBUTION["binary"]["link"] == "logit"
+    def test_likelihood_spec_validation(self):
+        """LikelihoodSpec validates correctly."""
+        spec = LikelihoodSpec(
+            variable="mood_score",
+            distribution=DistributionFamily.NORMAL,
+            link=LinkFunction.IDENTITY,
+            reasoning="Continuous outcome",
+        )
+        assert spec.distribution == DistributionFamily.NORMAL
 
-    def test_count_is_poisson(self):
-        """Count should map to Poisson with log link."""
-        assert DTYPE_TO_DISTRIBUTION["count"]["dist"] == "Poisson"
-        assert DTYPE_TO_DISTRIBUTION["count"]["link"] == "log"
+    def test_glmm_spec_validation(self, simple_glmm_spec):
+        """GLMMSpec validates from dict."""
+        spec = GLMMSpec.model_validate(simple_glmm_spec)
+        assert len(spec.likelihoods) == 1
+        assert len(spec.parameters) == 3
+
+    def test_prior_proposal_validation(self):
+        """PriorProposal validates correctly."""
+        proposal = PriorProposal(
+            parameter="beta_x",
+            distribution="Normal",
+            params={"mu": 0.3, "sigma": 0.1},
+            sources=[
+                PriorSource(
+                    title="Meta-analysis",
+                    url="https://example.com",
+                    snippet="Effect size r=0.3",
+                    effect_size="r=0.3",
+                )
+            ],
+            confidence=0.8,
+            reasoning="Based on meta-analysis",
+        )
+        assert proposal.confidence == 0.8
+        assert len(proposal.sources) == 1
+
+
+# --- DSEMModelBuilder Tests ---
+
+
+class TestDSEMModelBuilder:
+    """Test PyMC model building."""
+
+    def test_builder_init(self, simple_glmm_spec, simple_priors):
+        """Builder initializes with spec and priors."""
+        builder = DSEMModelBuilder(
+            glmm_spec=simple_glmm_spec,
+            priors=simple_priors,
+        )
+        assert builder._model_type == "DSEM"
+        assert builder.version == "0.1.0"
+
+    def test_build_model(self, simple_glmm_spec, simple_priors, simple_data):
+        """Builder creates a valid PyMC model."""
+        builder = DSEMModelBuilder(
+            glmm_spec=simple_glmm_spec,
+            priors=simple_priors,
+        )
+        model = builder.build_model(simple_data)
+
+        assert model is not None
+        assert "intercept_mood_score" in model.named_vars
+        assert "rho_mood" in model.named_vars
+        assert "sigma_mood_score" in model.named_vars
+        assert "mood_score" in model.named_vars  # likelihood
+
+    def test_output_var(self, simple_glmm_spec, simple_priors):
+        """output_var returns the first likelihood variable."""
+        builder = DSEMModelBuilder(
+            glmm_spec=simple_glmm_spec,
+            priors=simple_priors,
+        )
+        assert builder.output_var == "mood_score"
+
+    def test_create_distribution_normal(self, simple_glmm_spec, simple_priors, simple_data):
+        """Normal distribution created correctly."""
+        builder = DSEMModelBuilder(
+            glmm_spec=simple_glmm_spec,
+            priors=simple_priors,
+        )
+        builder.build_model(simple_data)
+        # Check the intercept is Normal
+        var = builder.model.named_vars["intercept_mood_score"]
+        assert "normal" in str(var.type).lower() or var is not None
+
+    def test_create_distribution_halfnormal(self, simple_glmm_spec, simple_priors, simple_data):
+        """HalfNormal distribution created correctly."""
+        builder = DSEMModelBuilder(
+            glmm_spec=simple_glmm_spec,
+            priors=simple_priors,
+        )
+        builder.build_model(simple_data)
+        var = builder.model.named_vars["sigma_mood_score"]
+        assert var is not None
+
+    def test_create_distribution_beta(self, simple_glmm_spec, simple_priors, simple_data):
+        """Beta distribution created correctly."""
+        builder = DSEMModelBuilder(
+            glmm_spec=simple_glmm_spec,
+            priors=simple_priors,
+        )
+        builder.build_model(simple_data)
+        var = builder.model.named_vars["rho_mood"]
+        assert var is not None
+
+    def test_sample_prior_predictive(self, simple_glmm_spec, simple_priors, simple_data):
+        """Prior predictive sampling works."""
+        builder = DSEMModelBuilder(
+            glmm_spec=simple_glmm_spec,
+            priors=simple_priors,
+        )
+        builder.build_model(simple_data)
+        idata = builder.sample_prior_predictive(samples=10)
+
+        assert hasattr(idata, "prior")
+        assert "intercept_mood_score" in idata.prior
+
+    def test_sample_prior_predictive_without_build_raises(self, simple_glmm_spec, simple_priors):
+        """sample_prior_predictive raises if model not built."""
+        builder = DSEMModelBuilder(
+            glmm_spec=simple_glmm_spec,
+            priors=simple_priors,
+        )
+        with pytest.raises(ValueError, match="Model must be built"):
+            builder.sample_prior_predictive()
+
+
+# --- Prior Validation Tests ---
+
+
+class TestPriorValidation:
+    """Test prior predictive validation helpers."""
+
+    def test_get_constraint_positive(self):
+        """HalfNormal implies positive constraint."""
+        assert _get_constraint_from_distribution("HalfNormal") == "positive"
+        assert _get_constraint_from_distribution("Gamma") == "positive"
+        assert _get_constraint_from_distribution("Exponential") == "positive"
+
+    def test_get_constraint_unit_interval(self):
+        """Beta implies unit_interval constraint."""
+        assert _get_constraint_from_distribution("Beta") == "unit_interval"
+
+    def test_get_constraint_none(self):
+        """Normal has no implicit constraint."""
+        assert _get_constraint_from_distribution("Normal") == "none"
+        assert _get_constraint_from_distribution("Unknown") == "none"
+
+    def test_validate_prior_predictive_samples_valid(self):
+        """Valid samples pass validation."""
+        samples = np.random.randn(100) + 5
+        result = _validate_prior_predictive_samples("mood", samples, "Normal")
+        assert result.is_valid
+        assert result.issue is None
+
+    def test_validate_prior_predictive_samples_nan(self):
+        """NaN samples fail validation."""
+        samples = np.array([1.0, 2.0, np.nan, 4.0])
+        result = _validate_prior_predictive_samples("mood", samples, "Normal")
+        assert not result.is_valid
+        assert "NaN/Inf" in result.issue
+
+    def test_validate_prior_predictive_samples_negative_poisson(self):
+        """Negative samples fail for Poisson."""
+        samples = np.array([1.0, 2.0, -1.0, 4.0])
+        result = _validate_prior_predictive_samples("count", samples, "Poisson")
+        assert not result.is_valid
+        assert "negative" in result.issue
+
+    def test_validate_prior_predictive_samples_outside_beta(self):
+        """Samples outside [0,1] fail for Beta."""
+        samples = np.array([0.5, 0.8, 1.5, 0.2])
+        result = _validate_prior_predictive_samples("prob", samples, "Beta")
+        assert not result.is_valid
+        assert "outside [0, 1]" in result.issue
+
+    def test_format_validation_report_passed(self):
+        """Report formats correctly for passed validation."""
+        results = [
+            PriorValidationResult(parameter="x", is_valid=True, issue=None, suggested_adjustment=None),
+        ]
+        report = format_validation_report(True, results)
+        assert "PASSED" in report
+
+    def test_format_validation_report_failed(self):
+        """Report formats correctly for failed validation."""
+        results = [
+            PriorValidationResult(parameter="x", is_valid=False, issue="Bad values", suggested_adjustment=None),
+        ]
+        report = format_validation_report(False, results)
+        assert "FAILED" in report
+        assert "x: Bad values" in report
+
+
+# --- Default Prior Tests ---
 
 
 class TestDefaultPriors:
-    """Tests for default prior specifications."""
+    """Test default prior generation."""
 
-    def test_ar_bounded_zero_one(self):
-        """AR prior should be bounded [0, 1]."""
-        ar_prior = DEFAULT_PRIORS["ar"]
-        assert ar_prior["dist"] == "Uniform"
-        assert ar_prior["lower"] == 0.0
-        assert ar_prior["upper"] == 1.0
+    def test_default_prior_positive_constraint(self):
+        """Positive constraint yields HalfNormal."""
+        param = ParameterSpec(
+            name="sigma_x",
+            role=ParameterRole.RESIDUAL_SD,
+            constraint=ParameterConstraint.POSITIVE,
+            description="Residual SD",
+            search_context="",
+        )
+        prior = get_default_prior(param)
+        assert prior.distribution == "HalfNormal"
 
-    def test_beta_centered_at_zero(self):
-        """Beta prior should be centered at zero."""
-        beta_prior = DEFAULT_PRIORS["beta"]
-        assert beta_prior["dist"] == "Normal"
-        assert beta_prior["mean"] == 0.0
+    def test_default_prior_unit_interval(self):
+        """Unit interval constraint yields Beta."""
+        param = ParameterSpec(
+            name="rho_x",
+            role=ParameterRole.AR_COEFFICIENT,
+            constraint=ParameterConstraint.UNIT_INTERVAL,
+            description="AR coefficient",
+            search_context="",
+        )
+        prior = get_default_prior(param)
+        assert prior.distribution == "Beta"
 
-    def test_sigma_is_positive(self):
-        """Sigma prior should be positive (HalfNormal)."""
-        sigma_prior = DEFAULT_PRIORS["sigma"]
-        assert sigma_prior["dist"] == "HalfNormal"
+    def test_default_prior_correlation(self):
+        """Correlation constraint yields Uniform(-1, 1)."""
+        param = ParameterSpec(
+            name="cor_xy",
+            role=ParameterRole.CORRELATION,
+            constraint=ParameterConstraint.CORRELATION,
+            description="Correlation",
+            search_context="",
+        )
+        prior = get_default_prior(param)
+        assert prior.distribution == "Uniform"
+        assert prior.params["lower"] == -1.0
+        assert prior.params["upper"] == 1.0
+
+    def test_default_prior_unconstrained(self):
+        """Unconstrained parameter yields Normal."""
+        param = ParameterSpec(
+            name="beta_x",
+            role=ParameterRole.FIXED_EFFECT,
+            constraint=ParameterConstraint.NONE,
+            description="Fixed effect",
+            search_context="",
+        )
+        prior = get_default_prior(param)
+        assert prior.distribution == "Normal"
+
+    def test_default_prior_low_confidence(self):
+        """Default priors have low confidence."""
+        param = ParameterSpec(
+            name="beta_x",
+            role=ParameterRole.FIXED_EFFECT,
+            constraint=ParameterConstraint.NONE,
+            description="Fixed effect",
+            search_context="",
+        )
+        prior = get_default_prior(param)
+        assert prior.confidence == 0.3

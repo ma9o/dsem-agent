@@ -28,7 +28,7 @@ from inspect_ai.model import get_model
 from inspect_ai.scorer import Score, Target, mean, scorer, stderr
 from inspect_ai.solver import Generate, TaskState, solver, system_message
 
-from dsem_agent.orchestrator.prompts import MEASUREMENT_MODEL_SYSTEM
+from dsem_agent.orchestrator.prompts import measurement_model
 from dsem_agent.orchestrator.schemas import LatentModel, MeasurementModel
 from dsem_agent.orchestrator.stage1b import run_stage1b, Stage1bResult
 from dsem_agent.utils.effects import get_all_treatments, get_outcome_from_latent_model
@@ -300,7 +300,7 @@ def measurement_model_eval(
     return Task(
         dataset=create_eval_dataset(n_chunks=n_chunks, seed=seed, input_file=input_file),
         solver=[
-            system_message(MEASUREMENT_MODEL_SYSTEM),
+            system_message(measurement_model.SYSTEM),
             measurement_model_solver(),
         ],
         scorer=measurement_model_scorer(),

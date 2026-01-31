@@ -1,251 +1,43 @@
 """Stage 4: Model Specification & Prior Elicitation.
 
-Translates the causal DAG (topological structure) into a PyMC-ready
-functional specification. Combines rule-based constraints with
-LLM-assisted prior elicitation.
+Orchestrator-Worker architecture with PyMC grounding:
+1. Orchestrator proposes GLMM specification
+2. Workers research priors in parallel (one per parameter via Exa + LLM)
+3. PyMC model is built as grounding step (validates priors compile)
+4. Prior predictive checks validate reasonableness
 
 See docs/modeling/functional_spec.md for design rationale.
 """
 
-from prefect import task
-from prefect.cache_policies import INPUTS
-
-from dsem_agent.orchestrator.schemas import (
-    DSEMModel,
-    Role,
-    TemporalStatus,
-)
+import polars as pl
+from prefect import flow, task
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# RULE-BASED SPECIFICATION
-# ══════════════════════════════════════════════════════════════════════════════
-
-# Link functions determined by measurement dtype
-DTYPE_TO_DISTRIBUTION = {
-    "continuous": {"dist": "Normal", "link": "identity"},
-    "binary": {"dist": "Bernoulli", "link": "logit"},
-    "count": {"dist": "Poisson", "link": "log"},
-    "ordinal": {"dist": "OrderedLogistic", "link": "cumulative_logit"},
-    "categorical": {"dist": "Categorical", "link": "softmax"},
-}
-
-# Default priors for parameters (can be overridden by LLM elicitation)
-DEFAULT_PRIORS = {
-    # AR(1) coefficient: uniform on [0, 1] for stability
-    "ar": {"dist": "Uniform", "lower": 0.0, "upper": 1.0},
-    # Cross-lag coefficients: weakly informative normal
-    "beta": {"dist": "Normal", "mean": 0.0, "std": 0.5},
-    # Residual standard deviation: half-normal
-    "sigma": {"dist": "HalfNormal", "sigma": 1.0},
-    # Factor loadings (for multi-indicator): half-normal
-    "loading": {"dist": "HalfNormal", "sigma": 1.0},
-}
-
-
-def _get_model_clock(dsem_model: DSEMModel) -> str:
-    """Determine the model clock (finest endogenous outcome granularity).
-
-    The model operates at the finest temporal resolution among
-    endogenous time-varying constructs.
-    """
-    from dsem_agent.orchestrator.schemas import GRANULARITY_HOURS
-
-    finest_hours = float("inf")
-    finest_gran = "daily"  # default
-
-    for construct in dsem_model.latent.constructs:
-        if (
-            construct.role == Role.ENDOGENOUS
-            and construct.temporal_status == TemporalStatus.TIME_VARYING
-            and construct.causal_granularity
-        ):
-            hours = GRANULARITY_HOURS.get(construct.causal_granularity, 24)
-            if hours < finest_hours:
-                finest_hours = hours
-                finest_gran = construct.causal_granularity
-
-    return finest_gran
-
-
-def _build_construct_specs(dsem_model: DSEMModel) -> dict:
-    """Build specification for each construct."""
-    specs = {}
-
-    for construct in dsem_model.latent.constructs:
-        spec = {
-            "name": construct.name,
-            "description": construct.description,
-            "role": construct.role.value,
-            "temporal_status": construct.temporal_status.value,
-            "is_outcome": construct.is_outcome,
-        }
-
-        if construct.temporal_status == TemporalStatus.TIME_VARYING:
-            spec["granularity"] = construct.causal_granularity
-
-            # Endogenous time-varying constructs get AR(1)
-            if construct.role == Role.ENDOGENOUS:
-                spec["ar_prior"] = DEFAULT_PRIORS["ar"].copy()
-
-        # Residual variance for endogenous constructs
-        if construct.role == Role.ENDOGENOUS:
-            spec["sigma_prior"] = DEFAULT_PRIORS["sigma"].copy()
-
-        specs[construct.name] = spec
-
-    return specs
-
-
-def _build_edge_specs(dsem_model: DSEMModel) -> dict:
-    """Build specification for each causal edge (cross-lag coefficient)."""
-    specs = {}
-
-    for edge in dsem_model.latent.edges:
-        param_name = f"beta_{edge.effect}_{edge.cause}"
-
-        specs[param_name] = {
-            "cause": edge.cause,
-            "effect": edge.effect,
-            "description": edge.description,
-            "lagged": edge.lagged,
-            "lag_hours": dsem_model.get_edge_lag_hours(edge),
-            "prior": DEFAULT_PRIORS["beta"].copy(),
-        }
-
-    return specs
-
-
-def _build_measurement_specs(dsem_model: DSEMModel) -> dict:
-    """Build specification for measurement model (indicators)."""
-    specs = {}
-
-    # Group indicators by construct
-    indicators_by_construct: dict[str, list] = {}
-    for indicator in dsem_model.measurement.indicators:
-        if indicator.construct_name not in indicators_by_construct:
-            indicators_by_construct[indicator.construct_name] = []
-        indicators_by_construct[indicator.construct_name].append(indicator)
-
-    for indicator in dsem_model.measurement.indicators:
-        construct_indicators = indicators_by_construct[indicator.construct_name]
-        is_single = len(construct_indicators) == 1
-
-        dist_info = DTYPE_TO_DISTRIBUTION.get(
-            indicator.measurement_dtype,
-            DTYPE_TO_DISTRIBUTION["continuous"],
-        )
-
-        spec = {
-            "name": indicator.name,
-            "construct": indicator.construct_name,
-            "dtype": indicator.measurement_dtype,
-            "distribution": dist_info["dist"],
-            "link": dist_info["link"],
-            "granularity": indicator.measurement_granularity,
-            "aggregation": indicator.aggregation,
-        }
-
-        # Single-indicator: loading fixed to 1 (absorbed measurement error)
-        # Multi-indicator: estimate loadings (first fixed to 1 for identification)
-        if is_single:
-            spec["loading"] = 1.0  # fixed
-            spec["loading_prior"] = None
-        else:
-            first_indicator = construct_indicators[0]
-            if indicator.name == first_indicator.name:
-                spec["loading"] = 1.0  # reference indicator
-                spec["loading_prior"] = None
-            else:
-                spec["loading"] = None  # estimated
-                spec["loading_prior"] = DEFAULT_PRIORS["loading"].copy()
-
-        specs[indicator.name] = spec
-
-    return specs
-
-
-def _build_identifiability_specs(dsem_model: DSEMModel) -> dict:
-    """Extract identifiability status for flagging in results."""
-    id_status = dsem_model.identifiability
-
-    if id_status is None:
-        return {
-            "identifiable": [],
-            "non_identifiable": [],
-        }
-
-    return {
-        "identifiable": list(id_status.identifiable_treatments.keys()),
-        "non_identifiable": list(id_status.non_identifiable_treatments.keys()),
-    }
-
-
-@task(retries=1, cache_policy=INPUTS)
-def specify_model(latent_dict: dict, dsem_dict: dict) -> dict:
-    """Generate PyMC-ready model specification from DSEM model.
-
-    This is the rule-based component of Stage 4. It determines:
-    - Model clock (finest temporal resolution)
-    - AR(1) structure for time-varying endogenous constructs
-    - Link functions based on indicator dtypes
-    - Measurement model structure (single vs. multi-indicator)
-    - Default priors for all parameters
-
-    Args:
-        latent_dict: Latent model dict (unused, kept for API compatibility)
-        dsem_dict: Full DSEM model dict
-
-    Returns:
-        ModelSpec dict ready for LLM prior refinement and PyMC construction
-    """
-    # Parse into validated model
-    dsem_model = DSEMModel.model_validate(dsem_dict)
-
-    model_spec = {
-        "time_index": _get_model_clock(dsem_model),
-        "constructs": _build_construct_specs(dsem_model),
-        "edges": _build_edge_specs(dsem_model),
-        "measurement": _build_measurement_specs(dsem_model),
-        "identifiability": _build_identifiability_specs(dsem_model),
-    }
-
-    return model_spec
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# LLM-ASSISTED PRIOR ELICITATION
-# ══════════════════════════════════════════════════════════════════════════════
-
-
-@task(retries=2, retry_delay_seconds=10, task_run_name="elicit-priors")
-def elicit_priors(
-    model_spec: dict,
-    question: str = "",
+@task(retries=2, retry_delay_seconds=10, task_run_name="propose-glmm-spec")
+def propose_glmm_task(
+    dsem_model: dict,
+    question: str,
+    measurements_data: dict[str, pl.DataFrame],
 ) -> dict:
-    """Elicit domain-informed priors from LLM for model parameters.
-
-    Uses the orchestrator LLM to propose effect size priors based on
-    domain knowledge and the causal structure. Optionally searches
-    literature for empirical effect sizes to ground priors.
+    """Orchestrator proposes GLMM specification.
 
     Args:
-        model_spec: Output from specify_model()
-        question: The research question for context
+        dsem_model: Full DSEM model dict
+        question: Research question
+        measurements_data: Measurement data by granularity
 
     Returns:
-        Priors dict with LLM-informed hyperparameters
+        GLMMSpec as dict
     """
     import asyncio
 
     from inspect_ai.model import get_model
 
-    from dsem_agent.orchestrator.stage4 import run_stage4
-    from dsem_agent.utils.config import get_config
-    from dsem_agent.utils.literature_search import (
-        format_literature_for_prompt,
-        search_literature,
+    from dsem_agent.orchestrator.stage4_orchestrator import (
+        build_data_summary,
+        propose_glmm_spec,
     )
+    from dsem_agent.utils.config import get_config
     from dsem_agent.utils.llm import make_orchestrator_generate_fn
 
     async def run():
@@ -253,88 +45,202 @@ def elicit_priors(
         model = get_model(config.stage4_prior_elicitation.model)
         generate = make_orchestrator_generate_fn(model)
 
-        # Search literature for empirical evidence (if enabled)
-        literature_context = ""
-        lit_config = config.stage4_prior_elicitation.literature_search
-        if lit_config.enabled:
-            # Extract edges for literature search
-            edges = [
-                {"cause": spec["cause"], "effect": spec["effect"]}
-                for spec in model_spec.get("edges", {}).values()
-            ]
+        data_summary = build_data_summary(measurements_data)
 
-            if edges:
-                lit_result = await search_literature(
-                    question=question,
-                    edges=edges,
-                    model=lit_config.model,
-                    timeout_ms=lit_config.timeout_ms,
-                )
-                literature_context = format_literature_for_prompt(lit_result, edges)
-
-        result = await run_stage4(
-            model_spec=model_spec,
+        result = await propose_glmm_spec(
+            dsem_model=dsem_model,
+            data_summary=data_summary,
             question=question,
             generate=generate,
-            default_priors=DEFAULT_PRIORS,
-            n_paraphrases=1,
-            literature_context=literature_context,
         )
 
-        return result.to_prior_dict()
+        return result.glmm_spec.model_dump()
 
     return asyncio.run(run())
 
 
-@task(cache_policy=INPUTS)
-def elicit_priors_sync(model_spec: dict) -> dict:
-    """Synchronous fallback: return default priors without LLM elicitation.
-
-    Use this when LLM elicitation is not available or for testing.
+@task(retries=2, retry_delay_seconds=5)
+def research_prior_task(
+    parameter_spec: dict,
+    question: str,
+    enable_literature: bool = True,
+) -> dict:
+    """Worker researches prior for a single parameter.
 
     Args:
-        model_spec: Output from specify_model()
+        parameter_spec: ParameterSpec as dict
+        question: Research question
+        enable_literature: Whether to search Exa
 
     Returns:
-        Default priors dict extracted from model_spec
+        PriorProposal as dict
     """
-    priors = {}
+    import asyncio
 
-    # Extract AR priors
-    for name, spec in model_spec.get("constructs", {}).items():
-        if "ar_prior" in spec and spec["ar_prior"]:
-            priors[f"rho_{name}"] = {
-                "mean": 0.5,
-                "std": 0.25,
-                "reasoning": "Default: moderate persistence expected",
-                "source": "default",
-            }
-        if "sigma_prior" in spec and spec["sigma_prior"]:
-            priors[f"sigma_{name}"] = {
-                "mean": 1.0,
-                "std": 0.5,
-                "reasoning": "Default: unit-scale residual variance",
-                "source": "default",
-            }
+    from inspect_ai.model import get_model
 
-    # Extract edge priors
-    for param_name, spec in model_spec.get("edges", {}).items():
-        prior = spec.get("prior", {})
-        priors[param_name] = {
-            "mean": prior.get("mean", 0.0),
-            "std": prior.get("std", 0.5),
-            "reasoning": "Default: weakly informative prior centered at zero",
-            "source": "default",
+    from dsem_agent.orchestrator.schemas_glmm import ParameterSpec
+    from dsem_agent.utils.config import get_config
+    from dsem_agent.utils.llm import make_worker_generate_fn
+    from dsem_agent.workers.prior_research import (
+        get_default_prior,
+        research_single_prior,
+    )
+
+    async def run():
+        config = get_config()
+        worker_model = config.stage4_prior_elicitation.worker_model or config.stage2_workers.model
+        model = get_model(worker_model)
+        generate = make_worker_generate_fn(model)
+
+        param = ParameterSpec.model_validate(parameter_spec)
+
+        try:
+            result = await research_single_prior(
+                parameter=param,
+                question=question,
+                generate=generate,
+                enable_literature=enable_literature,
+            )
+            return result.proposal.model_dump()
+        except Exception as e:
+            print(f"Prior research failed for {param.name}: {e}. Using default prior.")
+            return get_default_prior(param).model_dump()
+
+    return asyncio.run(run())
+
+
+@task(retries=1, task_run_name="validate-priors")
+def validate_priors_task(
+    glmm_spec: dict,
+    priors: dict[str, dict],
+    measurements_data: dict[str, pl.DataFrame],
+) -> dict:
+    """Validate priors via prior predictive sampling.
+
+    Args:
+        glmm_spec: GLMM specification dict
+        priors: Prior proposals by parameter name
+        measurements_data: Measurement data
+
+    Returns:
+        Validation result dict with is_valid and issues
+    """
+    from dsem_agent.models.prior_predictive import validate_prior_predictive
+
+    is_valid, results = validate_prior_predictive(
+        glmm_spec=glmm_spec,
+        priors=priors,
+        measurements_data=measurements_data,
+    )
+
+    return {
+        "is_valid": is_valid,
+        "results": [r.model_dump() for r in results],
+        "issues": [r.model_dump() for r in results if not r.is_valid],
+    }
+
+
+@task(task_run_name="build-dsem-model")
+def build_model_task(
+    glmm_spec: dict,
+    priors: dict[str, dict],
+    measurements_data: dict[str, pl.DataFrame],
+) -> dict:
+    """Build DSEMModelBuilder from spec and priors.
+
+    Args:
+        glmm_spec: GLMM specification
+        priors: Prior proposals
+        measurements_data: Measurement data
+
+    Returns:
+        Dict with model_built status and builder info
+    """
+    import pandas as pd
+
+    from dsem_agent.models.dsem_model_builder import DSEMModelBuilder
+
+    try:
+        builder = DSEMModelBuilder(glmm_spec=glmm_spec, priors=priors)
+
+        dfs = []
+        for granularity, df in measurements_data.items():
+            if granularity != "time_invariant" and df.height > 0:
+                dfs.append(df.to_pandas())
+
+        X = dfs[0] if dfs else pd.DataFrame({"x": [0.0]})
+
+        builder.build_model(X)
+
+        return {
+            "model_built": True,
+            "model_type": builder._model_type,
+            "version": builder.version,
+            "output_var": builder.output_var,
         }
 
-    # Extract loading priors
-    for name, spec in model_spec.get("measurement", {}).items():
-        if spec.get("loading_prior"):
-            priors[f"lambda_{name}"] = {
-                "mean": 1.0,
-                "std": 0.5,
-                "reasoning": "Default: loadings expected near unity",
-                "source": "default",
-            }
+    except Exception as e:
+        return {
+            "model_built": False,
+            "error": str(e),
+        }
 
-    return priors
+
+@flow(name="stage4-orchestrated", log_prints=True)
+def stage4_orchestrated_flow(
+    dsem_model: dict,
+    question: str,
+    measurements_data: dict[str, pl.DataFrame],
+    enable_literature: bool = True,
+) -> dict:
+    """Stage 4 orchestrated flow with parallel worker prior research.
+
+    1. Orchestrator proposes GLMM specification
+    2. Workers research priors in parallel (one per parameter)
+    3. Validate via prior predictive checks
+    4. Build PyMC model
+
+    Args:
+        dsem_model: Full DSEM model dict
+        question: Research question
+        measurements_data: Measurement data by granularity
+        enable_literature: Whether to search Exa for literature
+
+    Returns:
+        Stage 4 result dict with glmm_spec, priors, validation
+    """
+    from prefect.utilities.annotations import unmapped
+
+    # 1. Orchestrator proposes GLMM specification
+    glmm_spec = propose_glmm_task(dsem_model, question, measurements_data)
+
+    # 2. Workers research priors in parallel
+    parameter_specs = glmm_spec.get("parameters", [])
+    prior_results = research_prior_task.map(
+        parameter_specs,
+        question=unmapped(question),
+        enable_literature=unmapped(enable_literature),
+    )
+
+    # Collect results into dict
+    priors = {}
+    for param_spec, prior_result in zip(parameter_specs, prior_results):
+        param_name = param_spec.get("name", "unknown")
+        priors[param_name] = prior_result.result() if hasattr(prior_result, "result") else prior_result
+
+    # 3. Validate priors
+    validation = validate_priors_task(glmm_spec, priors, measurements_data)
+    validation_result = validation.result() if hasattr(validation, "result") else validation
+
+    # 4. Build PyMC model
+    model_info = build_model_task(glmm_spec, priors, measurements_data)
+    model_result = model_info.result() if hasattr(model_info, "result") else model_info
+
+    return {
+        "glmm_spec": glmm_spec,
+        "priors": priors,
+        "validation": validation_result,
+        "model_info": model_result,
+        "is_valid": validation_result.get("is_valid", False),
+    }

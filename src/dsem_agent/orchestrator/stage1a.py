@@ -6,11 +6,7 @@ Uses dependency injection for the LLM generate function.
 
 from dataclasses import dataclass
 
-from .prompts import (
-    LATENT_MODEL_SYSTEM,
-    LATENT_MODEL_USER,
-    LATENT_MODEL_REVIEW,
-)
+from .prompts import latent_model
 from .schemas import LatentModel
 from dsem_agent.utils.llm import (
     OrchestratorGenerateFn,
@@ -45,8 +41,8 @@ class Stage1aMessages:
     def proposal_messages(self) -> list[dict]:
         """Build messages for initial latent model proposal."""
         return [
-            {"role": "system", "content": LATENT_MODEL_SYSTEM},
-            {"role": "user", "content": LATENT_MODEL_USER.format(question=self.question)},
+            {"role": "system", "content": latent_model.SYSTEM},
+            {"role": "user", "content": latent_model.USER.format(question=self.question)},
         ]
 
 
@@ -73,7 +69,7 @@ async def run_stage1a(
     proposal_msgs = msgs.proposal_messages()
     tools = [validate_latent_model_tool()]
 
-    completion = await generate(proposal_msgs, tools, [LATENT_MODEL_REVIEW])
+    completion = await generate(proposal_msgs, tools, [latent_model.REVIEW])
 
     # Parse latent model
     latent = parse_json_response(completion)

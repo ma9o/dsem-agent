@@ -2,6 +2,8 @@
 
 Fits the DSEM model and runs counterfactual interventions to
 estimate treatment effects, ranked by effect size.
+
+TODO: Implement using DSEMModelBuilder from Stage 4.
 """
 
 from typing import Any
@@ -10,10 +12,18 @@ from prefect import task
 
 
 @task
-def fit_model(model_spec: dict, priors: dict, data: list[str]) -> Any:
+def fit_model(stage4_result: dict, data: list[str]) -> Any:
     """Fit the PyMC model to data.
 
-    TODO: Implement PyMC model fitting.
+    Args:
+        stage4_result: Result from stage4_orchestrated_flow containing
+            glmm_spec, priors, and model_info
+        data: Raw data chunks
+
+    Returns:
+        Fitted model (TODO: implement)
+
+    TODO: Use DSEMModelBuilder.fit() from stage4_result
     """
     pass
 

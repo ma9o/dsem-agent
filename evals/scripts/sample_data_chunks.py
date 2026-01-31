@@ -17,7 +17,7 @@ from dsem_agent.utils.data import (
     get_latest_preprocessed_file,
     sample_chunks,
 )
-from dsem_agent.orchestrator.prompts import LATENT_MODEL_SYSTEM
+from dsem_agent.orchestrator.prompts import latent_model
 
 OUTPUT_FILE = PROCESSED_DIR / "orchestrator-samples-manual.txt"
 EXCLUDE_FILES = {OUTPUT_FILE.name}
@@ -49,7 +49,7 @@ def main():
     output_parts = []
 
     if args.prompt:
-        output_parts.append(LATENT_MODEL_SYSTEM)
+        output_parts.append(latent_model.SYSTEM)
         output_parts.append("\n---\n")
         output_parts.append("Question: <YOUR QUESTION HERE>\n")
         output_parts.append("\nSample data:\n")

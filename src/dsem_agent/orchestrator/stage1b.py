@@ -7,13 +7,7 @@ Uses dependency injection for the LLM generate function.
 import json
 from dataclasses import dataclass
 
-from .prompts import (
-    MEASUREMENT_MODEL_SYSTEM,
-    MEASUREMENT_MODEL_USER,
-    MEASUREMENT_MODEL_REVIEW,
-    PROXY_REQUEST_SYSTEM,
-    PROXY_REQUEST_USER,
-)
+from .prompts import measurement_model
 from .schemas import LatentModel, MeasurementModel
 from dsem_agent.utils.identifiability import (
     analyze_unobserved_constructs,
@@ -79,8 +73,8 @@ class Stage1bMessages:
     def proposal_messages(self) -> list[dict]:
         """Build messages for initial measurement proposal."""
         return [
-            {"role": "system", "content": MEASUREMENT_MODEL_SYSTEM},
-            {"role": "user", "content": MEASUREMENT_MODEL_USER.format(
+            {"role": "system", "content": measurement_model.SYSTEM},
+            {"role": "user", "content": measurement_model.USER.format(
                 question=self.question,
                 latent_model_json=json.dumps(self.latent_model, indent=2),
                 dataset_summary=self.dataset_summary or "Not provided",
@@ -96,8 +90,8 @@ class Stage1bMessages:
     ) -> list[dict]:
         """Build messages for proxy request."""
         return [
-            {"role": "system", "content": PROXY_REQUEST_SYSTEM},
-            {"role": "user", "content": PROXY_REQUEST_USER.format(
+            {"role": "system", "content": measurement_model.PROXY_SYSTEM},
+            {"role": "user", "content": measurement_model.PROXY_USER.format(
                 blocking_info=blocking_info,
                 confounders_to_operationalize=", ".join(confounders),
                 latent_model_json=json.dumps(self.latent_model, indent=2),
@@ -209,7 +203,7 @@ async def run_stage1b(
     proposal_msgs = msgs.proposal_messages()
     tools = [make_validate_measurement_model_tool(latent)]
 
-    completion = await generate(proposal_msgs, tools, [MEASUREMENT_MODEL_REVIEW])
+    completion = await generate(proposal_msgs, tools, [measurement_model.REVIEW])
 
     # Parse measurement model
     measurement = parse_json_response(completion)

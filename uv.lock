@@ -290,6 +290,20 @@ wheels = [
 ]
 
 [[package]]
+name = "arviz-stats"
+version = "0.8.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13'" },
+    { name = "scipy", version = "1.16.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/1c/c3/34c8e1baa44b100c137fe8df0421f179241846c2e4311775ba29d2af38bd/arviz_stats-0.8.0.tar.gz", hash = "sha256:633576cbb488aeb50608466fe2c0c79926d599ec1937d24636ba88c0cdfa224f", size = 137513, upload-time = "2026-01-15T16:08:57.39Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/80/08/8a8ad310c116a5574468c0fa2f37a418769719d9ff5127dc817c54ce20b2/arviz_stats-0.8.0-py3-none-any.whl", hash = "sha256:c80553f11c590219c6eabdee6d67fb100c31f8751790772bdc269a9970429913", size = 164648, upload-time = "2026-01-15T16:08:55.653Z" },
+]
+
+[[package]]
 name = "asgi-lifespan"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -400,6 +414,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c3/b0/1c6a16426d389813b48d95e26898aff79abbde42ad353958ad95cc8c9b21/beautifulsoup4-4.14.3.tar.gz", hash = "sha256:6292b1c5186d356bba669ef9f7f051757099565ad9ada5dd630bd9de5fa7fb86", size = 627737, upload-time = "2025-11-30T15:08:26.084Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1a/39/47f9197bdd44df24d67ac8893641e16f386c984a0619ef2ee4c51fbbc019/beautifulsoup4-4.14.3-py3-none-any.whl", hash = "sha256:0918bfe44902e6ad8d57732ba310582e98da931428d231a5ecb9e7c703a735bb", size = 107721, upload-time = "2025-11-30T15:08:24.087Z" },
+]
+
+[[package]]
+name = "better-optimize"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "rich" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13'" },
+    { name = "scipy", version = "1.16.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/34/c9/8d595769a06f36dbd08df98fa19c0c31630bb701c62868b4bc642eef6cef/better_optimize-0.2.0.tar.gz", hash = "sha256:e92e1320df5dcb368a4b64fb716e7a63d07c4ea6bf1300198f54829e122f7362", size = 28647, upload-time = "2025-12-13T04:37:44.824Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/99/d1/785d1f4a696349d6a0c7993cb6b2aedc0d11d2efb8aa7c64ec8704b9bf2d/better_optimize-0.2.0-py3-none-any.whl", hash = "sha256:a746b01c1a114489fe8c9f875ef7a2e4848082485149c648dda34ddec1eda722", size = 20152, upload-time = "2025-12-13T04:37:43.347Z" },
 ]
 
 [[package]]
@@ -873,6 +902,7 @@ dependencies = [
     { name = "polars" },
     { name = "prefect" },
     { name = "pymc" },
+    { name = "pymc-extras" },
     { name = "python-dotenv" },
     { name = "y0" },
 ]
@@ -897,6 +927,7 @@ requires-dist = [
     { name = "polars", specifier = ">=1.35.2" },
     { name = "prefect", specifier = ">=3.6.5" },
     { name = "pymc", specifier = ">=5.27.0" },
+    { name = "pymc-extras", specifier = ">=0.7.0" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
     { name = "y0", git = "https://github.com/y0-causal-inference/y0.git" },
 ]
@@ -3226,6 +3257,23 @@ wheels = [
 ]
 
 [[package]]
+name = "preliz"
+version = "0.23.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "arviz-stats" },
+    { name = "matplotlib" },
+    { name = "numba" },
+    { name = "numpy" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13'" },
+    { name = "scipy", version = "1.16.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f1/a9/e8550e2329a42c1618139812c414d764b9b6736b49e62a3f853bfb85bfbf/preliz-0.23.0.tar.gz", hash = "sha256:1a590be941f5d93590eb119f8c720cd7ef0a343894e7eee60739726702100dda", size = 460397, upload-time = "2025-11-05T10:18:04.055Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/33/4a/014e81503acba455c217b88df26e1c6063a1ef68c0e2da4c88f9a42dcbc4/preliz-0.23.0-py3-none-any.whl", hash = "sha256:6aec0a88290c0ecf63f4d967e9bbb61bbc4a0b688013dcd8dc25e31bfc68b4de", size = 529174, upload-time = "2025-11-05T10:18:02.276Z" },
+]
+
+[[package]]
 name = "prometheus-client"
 version = "0.23.1"
 source = { registry = "https://pypi.org/simple" }
@@ -3673,6 +3721,23 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ba/25/110ddb1f736c459d5884520ac7f703b420c1753199c6ab89ce2c08d6b023/pymc-5.27.0.tar.gz", hash = "sha256:f31e05af4566b301e94d5e7d050d45cd9f9033abcfc40e306cf4926457d937fd", size = 491599, upload-time = "2025-12-21T12:48:40.196Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5d/0e/9c239bb0c064835cdfa67a1b67bbbb2b550848ef999d2925398fc89ccb59/pymc-5.27.0-py3-none-any.whl", hash = "sha256:2c65915796db4173a864f85ad16f0880585dfdd8ab0eed8f2ce6b1052409cfc1", size = 539119, upload-time = "2025-12-21T12:48:38.542Z" },
+]
+
+[[package]]
+name = "pymc-extras"
+version = "0.7.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "better-optimize" },
+    { name = "preliz" },
+    { name = "pydantic" },
+    { name = "pymc" },
+    { name = "pytensor" },
+    { name = "scikit-learn" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ed/e6/e7a320780fd27841fd2fc4608af03f4543d44bf5d5f8268e8066ea641bab/pymc_extras-0.7.0.tar.gz", hash = "sha256:bd3f8e5912c47af7ec459500b4a1ac2c3e8c331f5064336e11582f23a3aa2a0f", size = 322982, upload-time = "2026-01-09T16:14:56.303Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/90/a1/89edbf59717804cbab6e4c73e4e2300a477e16a9a58cc20d29348e0fb9e9/pymc_extras-0.7.0-py3-none-any.whl", hash = "sha256:e4b84496829a54dbfd80ac93bd8cace51e13fdf5a2f618978b6e2bec15c1ca87", size = 258024, upload-time = "2026-01-09T16:14:54.706Z" },
 ]
 
 [[package]]

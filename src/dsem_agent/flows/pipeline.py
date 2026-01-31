@@ -34,8 +34,7 @@ from .stages import (
     # Stage 3
     validate_extraction,
     # Stage 4
-    elicit_priors,
-    specify_model,
+    stage4_orchestrated_flow,
     # Stage 5
     fit_model,
     run_interventions,
@@ -190,23 +189,42 @@ def causal_inference_pipeline(
         print(f"⚠️  Aggregation produced no data for indicators: {joined}")
 
     # ══════════════════════════════════════════════════════════════════════════
-    # Stage 4: Model specification
+    # Stage 4: GLMM Specification (Orchestrator-Worker Architecture)
     # ══════════════════════════════════════════════════════════════════════════
-    print("\n=== Stage 4: Model Specification ===")
-    model_spec = specify_model(dsem_model["latent"], dsem_model)
-    print(f"Model clock: {model_spec['time_index']}")
-    print(f"Parameters: {len(model_spec['edges'])} causal effects, "
-          f"{sum(1 for c in model_spec['constructs'].values() if c.get('ar_prior'))} AR terms")
+    from dsem_agent.utils.config import get_config
 
-    print("\n=== Stage 4b: Prior Elicitation ===")
-    priors = elicit_priors(model_spec, question)
+    config = get_config()
+
+    print("\n=== Stage 4: GLMM Specification ===")
+    stage4_result = stage4_orchestrated_flow(
+        dsem_model=dsem_model,
+        question=question,
+        measurements_data=measurements_data,
+        enable_literature=config.stage4_prior_elicitation.literature_search.enabled,
+    )
+
+    glmm_spec = stage4_result.get("glmm_spec", {})
+    print(f"Model clock: {glmm_spec.get('model_clock', 'unknown')}")
+    print(f"Parameters: {len(glmm_spec.get('parameters', []))} total")
+
+    # Report validation issues
+    validation = stage4_result.get("validation", {})
+    if not validation.get("is_valid", True):
+        issues = validation.get("issues", [])
+        print(f"⚠️  Stage 4 prior validation failed ({len(issues)} issues):")
+        for issue in issues:
+            print(f"    - {issue.get('parameter')}: {issue.get('issue')}")
+
+    model_info = stage4_result.get("model_info", {})
+    if not model_info.get("model_built", True):
+        print(f"⚠️  Stage 4 model build failed: {model_info.get('error')}")
 
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 5: Fit and intervene (with identifiability awareness)
     # ══════════════════════════════════════════════════════════════════════════
     print("\n=== Stage 5: Inference ===")
     print(f"Estimating effects of {len(treatments)} treatments on {outcome}")
-    fitted = fit_model(model_spec, priors, worker_chunks)
+    fitted = fit_model(stage4_result, worker_chunks)
 
     # Run interventions for all treatments
     results = run_interventions(fitted, treatments, dsem_model)

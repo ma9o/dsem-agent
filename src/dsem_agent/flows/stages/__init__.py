@@ -17,8 +17,7 @@ from .stage3_validation import (
     validate_extraction,
 )
 from .stage4_model import (
-    elicit_priors,
-    specify_model,
+    stage4_orchestrated_flow,
 )
 from .stage5_inference import (
     fit_model,
@@ -39,8 +38,7 @@ __all__ = [
     "aggregate_measurements",
     "validate_extraction",
     # Stage 4
-    "specify_model",
-    "elicit_priors",
+    "stage4_orchestrated_flow",
     # Stage 5
     "fit_model",
     "run_interventions",

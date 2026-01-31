@@ -35,10 +35,11 @@ class LiteratureSearchConfig:
 
 @dataclass(frozen=True)
 class Stage4Config:
-    """Stage 4: Prior Elicitation."""
+    """Stage 4: Prior Elicitation (Orchestrator-Worker Architecture)."""
 
     model: str
     literature_search: LiteratureSearchConfig = LiteratureSearchConfig()
+    worker_model: str | None = None  # If None, uses stage2_workers.model
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,7 @@ def load_config() -> PipelineConfig:
     stage4_config = Stage4Config(
         model=stage4_raw["model"],
         literature_search=LiteratureSearchConfig(**lit_search_raw) if lit_search_raw else LiteratureSearchConfig(),
+        worker_model=stage4_raw.get("worker_model"),
     )
 
     return PipelineConfig(

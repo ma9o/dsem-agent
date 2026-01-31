@@ -28,7 +28,7 @@ from inspect_ai.model import get_model
 from inspect_ai.scorer import Score, Target, mean, scorer, stderr
 from inspect_ai.solver import Generate, TaskState, solver, system_message
 
-from dsem_agent.orchestrator.prompts import LATENT_MODEL_SYSTEM
+from dsem_agent.orchestrator.prompts import latent_model
 from dsem_agent.orchestrator.scoring import _count_rule_points_detailed
 from dsem_agent.orchestrator.schemas import LatentModel
 from dsem_agent.orchestrator.stage1a import run_stage1a, Stage1aResult
@@ -182,7 +182,7 @@ def latent_model_eval():
     return Task(
         dataset=create_eval_dataset(),
         solver=[
-            system_message(LATENT_MODEL_SYSTEM),
+            system_message(latent_model.SYSTEM),
             latent_model_solver(),
         ],
         scorer=latent_model_scorer(),

@@ -50,14 +50,26 @@ dsem-agent/
 ├── src/dsem_agent/
 │   ├── orchestrator/  # Two-stage model specification (latent + measurement)
 │   │   ├── agents.py  # Stage 1a: latent model, Stage 1b: measurement model
-│   │   ├── prompts.py # LLM prompts for both stages
-│   │   └── schemas.py # Construct, Indicator, LatentModel, MeasurementModel, DSEMModel
-│   ├── workers/       # Indicator extraction LLMs
+│   │   ├── prompts/   # LLM prompts for all stages
+│   │   │   ├── latent_model.py      # Stage 1a prompts
+│   │   │   ├── measurement_model.py # Stage 1b prompts
+│   │   │   └── glmm_proposal.py     # Stage 4 GLMM specification prompts
+│   │   ├── schemas.py        # Construct, Indicator, LatentModel, MeasurementModel, DSEMModel
+│   │   ├── schemas_glmm.py   # GLMMSpec, ParameterSpec for Stage 4
+│   │   └── stage4_orchestrator.py   # Stage 4 orchestrator logic
+│   ├── workers/       # Indicator extraction + prior research LLMs
+│   │   ├── agents.py         # Stage 2 worker agents
+│   │   ├── schemas.py        # Worker output schemas
+│   │   ├── schemas_prior.py  # PriorProposal, PriorValidationResult
+│   │   ├── prior_research.py # Stage 4 worker prior research
+│   │   └── prompts/          # Worker prompts
 │   ├── causal/        # y0 identifiability, sensitivity analysis
-│   ├── models/        # PyMC GLM specification
+│   ├── models/        # PyMC model specification
+│   │   ├── dsem_model_builder.py  # PyMC ModelBuilder subclass with save/load
+│   │   └── prior_predictive.py    # Prior predictive validation
 │   ├── flows/         # Prefect pipeline + stages/
-│   │   └── stages/    # stage1a_latent, stage1b_measurement, stage2_workers, ...
-│   └── utils/         # Shared utilities
+│   │   └── stages/    # stage1a_latent, stage1b_measurement, stage2_workers, stage4_model, ...
+│   └── utils/         # Shared utilities (config, llm, data, etc.)
 ├── tests/             # pytest tests (test_{name}.py)
 └── tools/             # CLI tools + UIs (dag_cli.py, dag_explorer.py, log readers)
 ```
