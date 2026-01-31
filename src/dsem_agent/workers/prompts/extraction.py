@@ -1,6 +1,6 @@
-"""Prompts for worker LLM agents."""
+"""Worker extraction prompts."""
 
-WORKER_W_PROPOSALS_SYSTEM = """\
+SYSTEM_WITH_PROPOSALS = """\
 You are a data extraction worker. Given a causal question, a proposed indicator schema, and a data chunk, your job is to:
 
 1. Extract data for each indicator in the schema at the specified measurement_granularity
@@ -55,7 +55,7 @@ You have access to `validate_extractions` tool. Use it to validate your JSON bef
 IMPORTANT: Always output the JSON after validating your final answer. `validate_extractions` does not save the final result.
 """
 
-WORKER_WO_PROPOSALS_SYSTEM = """
+SYSTEM_WITHOUT_PROPOSALS = """
 You are a data extraction worker. Given a causal question, a proposed indicator schema, and a data chunk, your job is to extract data for each indicator in the schema at the specified measurement_granularity.
 
 ## Measurement Granularity
@@ -94,7 +94,7 @@ You have access to `validate_extractions` tool. Use it to validate your JSON bef
 IMPORTANT: Always output the JSON after validating your final answer. `validate_extractions` does not save the final result.
 """
 
-WORKER_USER = """\
+USER = """\
 ## Causal question
 
 {question}
