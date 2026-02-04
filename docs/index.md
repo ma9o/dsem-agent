@@ -29,3 +29,8 @@ docs/
 - `guides/quickstart.md` for installation and first run
 - `guides/data_workflow.md` for data preprocessing
 - `guides/running_evals.md` for evaluation
+
+**Library patterns (extracted from AGENTS.md):**
+- `guides/prefect.md` for Prefect v3 task/flow patterns
+- `guides/inspect.md` for AISI inspect eval framework
+- `guides/exa.md` for Exa literature search
