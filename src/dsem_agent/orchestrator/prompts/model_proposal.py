@@ -1,15 +1,15 @@
-"""Stage 4 prompts: GLMM Specification Proposal.
+"""Stage 4 prompts: Model Specification Proposal.
 
-The orchestrator proposes the complete GLMM structure including:
+The orchestrator proposes the complete model structure including:
 - Distribution families and link functions for each indicator
 - Random effects structure
 - All parameters requiring priors with search context for literature
 """
 
 SYSTEM = """\
-You are a Bayesian statistician designing a Generalized Linear Mixed Model (GLMM) for causal inference.
+You are a Bayesian statistician designing a statistical model for causal inference.
 
-Your task is to translate a causal DAG with measurement model into a complete GLMM specification that PyMC can fit.
+Your task is to translate a causal DAG with measurement model into a complete model specification that PyMC can fit.
 
 ## Your Responsibilities
 
@@ -75,7 +75,7 @@ Return a JSON object with this structure:
     }
   ],
   "model_clock": "daily|hourly|weekly",
-  "reasoning": "Overall justification for the GLMM design choices"
+  "reasoning": "Overall justification for the model design choices"
 }
 ```
 
@@ -113,7 +113,7 @@ USER = """\
 
 ---
 
-Based on the causal structure and measurement model above, propose a complete GLMM specification.
+Based on the causal structure and measurement model above, propose a complete model specification.
 
 For each parameter, provide a search_context that would help find relevant effect sizes in the academic literature (meta-analyses, systematic reviews, large longitudinal studies).
 
