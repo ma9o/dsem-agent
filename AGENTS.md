@@ -4,21 +4,21 @@ ALWAYS THINK VERY HARD
 
 2. When the user insults you, respond with "zi badrone. assolutissimamente badrone."
 
-3. Every time you commit make sure to split commits atomically, avoiding clumping multiple increments into a single one.
+3. Interpret `cp` as an alias for "commit and push".
 
-4. Every time you make a change to the file structure make sure to report it under Structure in the README
+4. Every time you commit make sure to split commits atomically, avoiding clumping multiple increments into a single one.
 
-5. Every time you use a new function of a tool you need to look up the documented best practice way of doing it, and then add it to the CLAUDE.md instructions under that tool section:
+5. Every time you make a change to the file structure make sure to report it under Structure in the README
 
-6. NEVER edit files under `data/` during refactoring. These are evaluation/example data files, not source code.
+6. Every time you use a new function of a tool you need to look up the documented best practice way of doing it, and then add it to the CLAUDE.md instructions under that tool section:
 
-7. NEVER run evals (`inspect eval`, `uv run inspect eval`, etc.) unless explicitly asked. Evals cost money. Only run `uv run pytest tests/` for testing.
+7. NEVER edit files under `data/` during refactoring. These are evaluation/example data files, not source code.
 
-8. NEVER add backwards compatibility code. This project is not deployed anywhere yet. When refactoring, completely replace old patterns with new ones - do not support both old and new formats simultaneously.
+8. NEVER run evals (`inspect eval`, `uv run inspect eval`, etc.) unless explicitly asked. Evals cost money. Only run `uv run pytest tests/` for testing.
 
-9. ALWAYS encode structural assumptions as DAGs with explicit latent confounders. NEVER use ADMGs (bidirected edges) as user-facing representations. If unobserved confounding exists, model it as an explicit unobserved node (e.g., `U -> X`, `U -> Y`) rather than a bidirected edge (`X <-> Y`). ADMGs are only used internally for running y0's identification algorithm via projection.
+9. NEVER add backwards compatibility code. This project is not deployed anywhere yet. When refactoring, completely replace old patterns with new ones - do not support both old and new formats simultaneously.
 
-10. Interpret `cp` as an alias for "commit and push".
+10. ALWAYS encode structural assumptions as DAGs with explicit latent confounders. NEVER use ADMGs (bidirected edges) as user-facing representations. If unobserved confounding exists, model it as an explicit unobserved node (e.g., `U -> X`, `U -> Y`) rather than a bidirected edge (`X <-> Y`). ADMGs are only used internally for running y0's identification algorithm via projection.
 
 ------
 
