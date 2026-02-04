@@ -1,7 +1,7 @@
 # Makefile for dsem-agent
 # Orchestrates uv (Python) and renv (R) environments
 
-.PHONY: all setup setup-python setup-r test test-all test-ctsem-parity test-ctsem-parity-full clean clean-r help
+.PHONY: all setup setup-python setup-r test test-all test-ctsem-parity test-ctsem-parity-full test-ctsem-estimation clean clean-r help
 
 # Default target
 all: setup
@@ -54,6 +54,9 @@ test-ctsem-parity-full: setup ## Run all ctsem parity tests including slow recov
 		tests/test_ctsem.py::TestParityEdgeCases \
 		tests/test_ctsem.py::TestParityMultiSubject \
 		tests/test_ctsem.py::TestParityModelRecovery -v
+
+test-ctsem-estimation: setup ## Run full estimation parity tests (slow, ~5 min)
+	uv run pytest tests/test_ctsem.py::TestParityFullEstimation -v
 
 # ============================================================================
 # Clean targets

@@ -14,7 +14,7 @@ import pytest
 
 
 def generate_stable_drift(n: int, seed: int = 42) -> np.ndarray:
-    """Generate stable n×n drift matrix with guaranteed negative eigenvalues."""
+    """Generate stable nxn drift matrix with guaranteed negative eigenvalues."""
     rng = np.random.default_rng(seed)
     # Start with negative diagonal (ensures stability for small off-diagonal)
     drift = np.diag(rng.uniform(-0.8, -0.3, size=n))
@@ -30,7 +30,7 @@ def generate_stable_drift(n: int, seed: int = 42) -> np.ndarray:
 
 
 def generate_diffusion_chol(n: int, seed: int = 42) -> np.ndarray:
-    """Generate n×n lower triangular Cholesky factor."""
+    """Generate nxn lower triangular Cholesky factor."""
     rng = np.random.default_rng(seed)
     chol = np.zeros((n, n))
     # Positive diagonal
@@ -97,9 +97,9 @@ class TestCoreUtilities:
 
     def test_discretize_system_unit_time(self):
         """Test discretization at dt=1."""
-        from dsem_agent.models.ctsem.core import discretize_system
-
         import jax.scipy.linalg as jla
+
+        from dsem_agent.models.ctsem.core import discretize_system
 
         A = jnp.array([[-1.0, 0.0], [0.0, -2.0]])
         Q = jnp.array([[1.0, 0.0], [0.0, 1.0]])
@@ -236,9 +236,8 @@ class TestCTSEMModel:
         # Try to trace the model (this will fail if there are shape errors)
         import numpyro
 
-        with numpyro.handlers.seed(rng_seed=0):
-            with numpyro.handlers.trace() as trace:
-                model.model(observations, times)
+        with numpyro.handlers.seed(rng_seed=0), numpyro.handlers.trace() as trace:
+            model.model(observations, times)
 
         # Check that key sites exist
         assert "drift_diag_pop" in trace
@@ -297,9 +296,9 @@ class TestParityWithCtsem:
         """Initialize R with ctsem package loaded."""
         pytest.importorskip("rpy2")
         import rpy2.robjects as ro
-        from rpy2.robjects.packages import importr
         from rpy2.robjects import numpy2ri
         from rpy2.robjects.conversion import localconverter
+        from rpy2.robjects.packages import importr
 
         # Check if ctsem is installed
         try:
@@ -551,16 +550,16 @@ class TestParityWithCtsem:
 
 
 class TestParityDimensionScaling:
-    """Test parity across different system dimensions (3×3, 5×5)."""
+    """Test parity across different system dimensions (3x3, 5x5)."""
 
     @pytest.fixture
     def r_ctsem(self):
         """Initialize R with ctsem package loaded."""
         pytest.importorskip("rpy2")
         import rpy2.robjects as ro
-        from rpy2.robjects.packages import importr
         from rpy2.robjects import numpy2ri
         from rpy2.robjects.conversion import localconverter
+        from rpy2.robjects.packages import importr
 
         try:
             ctsem = importr("ctsem")
@@ -582,7 +581,7 @@ class TestParityDimensionScaling:
 
     @pytest.mark.parametrize("n_latent", [3, 5])
     def test_discretization_scaling(self, r_ctsem, n_latent):
-        """Discretization matches ctsem for n×n systems."""
+        """Discretization matches ctsem for nxn systems."""
         from dsem_agent.models.ctsem.core import discretize_system
 
         ro = r_ctsem["ro"]
@@ -653,7 +652,7 @@ class TestParityDimensionScaling:
 
     @pytest.mark.parametrize("n_latent", [3, 5])
     def test_kalman_likelihood_scaling(self, r_ctsem, n_latent):
-        """Kalman likelihood matches for n×n systems."""
+        """Kalman likelihood matches for nxn systems."""
         from dsem_agent.models.ctsem.kalman import kalman_log_likelihood
 
         ro = r_ctsem["ro"]
@@ -769,9 +768,9 @@ class TestParityEdgeCases:
         """Initialize R with ctsem package loaded."""
         pytest.importorskip("rpy2")
         import rpy2.robjects as ro
-        from rpy2.robjects.packages import importr
         from rpy2.robjects import numpy2ri
         from rpy2.robjects.conversion import localconverter
+        from rpy2.robjects.packages import importr
 
         try:
             ctsem = importr("ctsem")
@@ -1106,9 +1105,9 @@ class TestParityMultiSubject:
         """Initialize R with ctsem package loaded."""
         pytest.importorskip("rpy2")
         import rpy2.robjects as ro
-        from rpy2.robjects.packages import importr
         from rpy2.robjects import numpy2ri
         from rpy2.robjects.conversion import localconverter
+        from rpy2.robjects.packages import importr
 
         try:
             ctsem = importr("ctsem")
@@ -1458,9 +1457,9 @@ class TestParityModelRecovery:
         """Initialize R with ctsem package loaded."""
         pytest.importorskip("rpy2")
         import rpy2.robjects as ro
-        from rpy2.robjects.packages import importr
         from rpy2.robjects import numpy2ri
         from rpy2.robjects.conversion import localconverter
+        from rpy2.robjects.packages import importr
 
         try:
             ctsem = importr("ctsem")
@@ -1644,6 +1643,403 @@ class TestParityModelRecovery:
             true_diffusion_diag,
             atol=0.25,
             err_msg=f"Diffusion diagonal recovery: estimated={posterior_mean}, true={true_diffusion_diag}",
+        )
+
+
+class TestParityFullEstimation:
+    """Test full model estimation parity between NumPyro and ctsem.
+
+    These tests generate data from complex CT-SEM models, fit with both
+    ctsem's ctStanFit and our NumPyro implementation, and compare
+    parameter estimates.
+
+    Note: These tests are slow (~minutes) because they run full MCMC in both R and Python.
+    """
+
+    @pytest.fixture
+    def r_ctsem(self):
+        """Initialize R with ctsem package loaded."""
+        pytest.importorskip("rpy2")
+        import rpy2.robjects as ro
+        from rpy2.robjects import numpy2ri
+        from rpy2.robjects.conversion import localconverter
+        from rpy2.robjects.packages import importr
+
+        try:
+            ctsem = importr("ctsem")
+        except Exception:
+            pytest.skip("R package 'ctsem' not installed")
+
+        try:
+            matrix_pkg = importr("Matrix")
+        except Exception:
+            pytest.skip("R package 'Matrix' not installed")
+
+        return {
+            "ro": ro,
+            "ctsem": ctsem,
+            "Matrix": matrix_pkg,
+            "numpy2ri": numpy2ri,
+            "localconverter": localconverter,
+        }
+
+    @pytest.mark.slow
+    def test_full_estimation_bivariate_cross_lagged(self, r_ctsem):
+        """Full estimation parity for bivariate cross-lagged model.
+
+        This is the "big test" - a complex model with:
+        - Cross-lagged effects (off-diagonal drift)
+        - Single subject with many time points (150)
+        - Uses both ctsem and NumPyro to fit the same data
+
+        Compares MAP/posterior mean estimates from ctsem vs NumPyro.
+        """
+        from dsem_agent.models.ctsem import CTSEMModel, CTSEMSpec
+
+        ro = r_ctsem["ro"]
+        numpy2ri = r_ctsem["numpy2ri"]
+        localconverter = r_ctsem["localconverter"]
+
+        # True parameters for data generation
+        true_drift_11 = -0.6  # Auto-effect latent 1
+        true_drift_22 = -0.8  # Auto-effect latent 2
+        true_drift_12 = 0.15  # Cross-lag: latent 2 -> latent 1
+        true_drift_21 = -0.1  # Cross-lag: latent 1 -> latent 2
+        true_diffusion = 0.4  # Diagonal diffusion (Cholesky)
+        true_manifest_var = 0.1
+        n_timepoints = 150  # More data for better estimation
+
+        # Generate data and fit with ctsem in R
+        r_code = """
+        function(n_timepoints, drift_11, drift_22, drift_12, drift_21,
+                 diffusion_diag, manifest_var, seed) {
+            library(ctsem)
+            set.seed(seed)
+
+            # Define the generative model (column-major ordering)
+            DRIFT <- matrix(c(drift_11, drift_21, drift_12, drift_22), nrow=2, byrow=FALSE)
+            DIFFUSION_chol <- diag(diffusion_diag, 2)
+
+            gm <- ctModel(
+                Tpoints = n_timepoints,
+                n.latent = 2,
+                n.manifest = 2,
+                DRIFT = DRIFT,
+                DIFFUSION = DIFFUSION_chol,
+                MANIFESTVAR = diag(manifest_var, 2),
+                LAMBDA = diag(1, 2),
+                CINT = matrix(c(0.0, 0.0), nrow=2),
+                T0MEANS = matrix(c(0, 0), nrow=2),
+                T0VAR = diag(1, 2)
+            )
+
+            # Generate single-subject data
+            data <- ctGenerate(gm, n.subjects=1, burnin=30, dtmean=0.5)
+
+            # Define estimation model
+            em <- ctModel(
+                type = "stanct",
+                n.latent = 2,
+                n.manifest = 2,
+                LAMBDA = diag(1, 2),
+                manifestNames = c("Y1", "Y2"),
+                latentNames = c("eta1", "eta2")
+            )
+
+            # Fit with ctStanFit (optimization = MAP estimate)
+            fit <- ctStanFit(
+                datalong = data,
+                ctstanmodel = em,
+                optimize = TRUE,
+                optimcontrol = list(is = FALSE),
+                verbose = 0
+            )
+
+            # Extract parameter estimates from summary
+            summ <- summary(fit)
+            pop_means <- summ$popmeans
+
+            # ctsem uses lowercase names: drift_eta1, drift_eta2, drift_eta1_eta2, etc.
+            list(
+                data_long = data,
+                drift_11 = pop_means["drift_eta1", "mean"],
+                drift_22 = pop_means["drift_eta2", "mean"],
+                drift_12 = pop_means["drift_eta1_eta2", "mean"],
+                drift_21 = pop_means["drift_eta2_eta1", "mean"],
+                true_drift = DRIFT
+            )
+        }
+        """
+        r_fit_ctsem = ro.r(r_code)
+
+        with localconverter(ro.default_converter + numpy2ri.converter):
+            result = r_fit_ctsem(
+                n_timepoints,
+                true_drift_11, true_drift_22, true_drift_12, true_drift_21,
+                true_diffusion, true_manifest_var,
+                42  # seed
+            )
+
+            data_long = np.asarray(result[0])
+            r_drift_11 = float(np.asarray(result[1]).flat[0])
+            r_drift_22 = float(np.asarray(result[2]).flat[0])
+            r_drift_12 = float(np.asarray(result[3]).flat[0])
+            r_drift_21 = float(np.asarray(result[4]).flat[0])
+
+        # Parse R's drift estimates
+        r_drift_diag = np.array([r_drift_11, r_drift_22])
+        r_drift_offdiag = np.array([r_drift_21, r_drift_12])
+
+        # Prepare data for NumPyro (single subject)
+        times = data_long[:, 1]
+        Y = data_long[:, 2:4]
+
+        # Fit with NumPyro
+        spec = CTSEMSpec(
+            n_latent=2,
+            n_manifest=2,
+            lambda_mat=jnp.eye(2),
+        )
+        model = CTSEMModel(spec)
+
+        mcmc = model.fit(
+            observations=jnp.array(Y),
+            times=jnp.array(times),
+            num_warmup=500,
+            num_samples=500,
+            num_chains=1,
+        )
+
+        samples = mcmc.get_samples()
+
+        # Get NumPyro estimates (posterior mean)
+        py_drift_diag = np.mean(samples["drift_diag_pop"], axis=0)
+        py_drift_offdiag = np.mean(samples["drift_offdiag_pop"], axis=0)
+
+        # Compare drift diagonal (auto-effects)
+        # Note: Tolerance is 0.5 due to different priors between ctsem and NumPyro,
+        # and different estimation methods (MAP vs MCMC posterior mean)
+        np.testing.assert_allclose(
+            np.sort(py_drift_diag),
+            np.sort(r_drift_diag),
+            atol=0.5,
+            err_msg=f"Drift diagonal mismatch: NumPyro={py_drift_diag}, ctsem={r_drift_diag}",
+        )
+
+        # Compare drift off-diagonal (cross-effects)
+        np.testing.assert_allclose(
+            np.sort(py_drift_offdiag),
+            np.sort(r_drift_offdiag),
+            atol=0.5,
+            err_msg=f"Drift off-diagonal mismatch: NumPyro={py_drift_offdiag}, ctsem={r_drift_offdiag}",
+        )
+
+        # Verify recovery of true parameters (both implementations)
+        # This is the most important test - both should recover true values
+        true_drift_diag = np.array([true_drift_11, true_drift_22])
+        np.testing.assert_allclose(
+            np.sort(py_drift_diag),
+            np.sort(true_drift_diag),
+            atol=0.5,
+            err_msg=f"NumPyro drift diagonal recovery: estimated={py_drift_diag}, true={true_drift_diag}",
+        )
+
+        # ctsem should also recover true values
+        np.testing.assert_allclose(
+            np.sort(r_drift_diag),
+            np.sort(true_drift_diag),
+            atol=0.8,  # More relaxed for ctsem due to regularization priors
+            err_msg=f"ctsem drift diagonal recovery: estimated={r_drift_diag}, true={true_drift_diag}",
+        )
+
+    @pytest.mark.slow
+    def test_full_estimation_with_cint(self, r_ctsem):
+        """Parameter recovery with non-zero continuous intercepts.
+
+        Tests that NumPyro can recover CINT from ctsem-generated data.
+        Note: ctsem doesn't estimate CINT by default (fixed at 0), so we only
+        test NumPyro's recovery of true parameters, not cross-implementation parity.
+        """
+        from dsem_agent.models.ctsem import CTSEMModel, CTSEMSpec
+
+        ro = r_ctsem["ro"]
+        numpy2ri = r_ctsem["numpy2ri"]
+        localconverter = r_ctsem["localconverter"]
+
+        # True parameters
+        true_drift_diag = np.array([-0.5, -0.7])
+        true_cint = np.array([0.3, -0.2])  # Non-zero intercepts
+        true_diffusion = 0.3
+        n_timepoints = 150  # More data for CINT estimation
+
+        # Generate data with ctsem
+        r_code = """
+        function(n_timepoints, drift_11, drift_22, cint1, cint2,
+                 diffusion_diag, seed) {
+            library(ctsem)
+            set.seed(seed)
+
+            DRIFT <- diag(c(drift_11, drift_22))
+            DIFFUSION_chol <- diag(diffusion_diag, 2)
+            CINT <- matrix(c(cint1, cint2), nrow=2)
+
+            gm <- ctModel(
+                Tpoints = n_timepoints,
+                n.latent = 2,
+                n.manifest = 2,
+                DRIFT = DRIFT,
+                DIFFUSION = DIFFUSION_chol,
+                MANIFESTVAR = diag(0.1, 2),
+                LAMBDA = diag(1, 2),
+                CINT = CINT,
+                T0MEANS = matrix(c(0, 0), nrow=2),
+                T0VAR = diag(1, 2)
+            )
+
+            data <- ctGenerate(gm, n.subjects=1, burnin=30, dtmean=0.5)
+            return(data)
+        }
+        """
+        r_generate = ro.r(r_code)
+
+        with localconverter(ro.default_converter + numpy2ri.converter):
+            data_long = np.asarray(r_generate(
+                n_timepoints,
+                true_drift_diag[0], true_drift_diag[1],
+                true_cint[0], true_cint[1],
+                true_diffusion,
+                123  # seed
+            ))
+
+        # Prepare data for NumPyro
+        times = data_long[:, 1]
+        Y = data_long[:, 2:4]
+
+        # Fit with NumPyro (with CINT enabled)
+        spec = CTSEMSpec(
+            n_latent=2,
+            n_manifest=2,
+            lambda_mat=jnp.eye(2),
+            cint="free",  # Enable CINT estimation
+        )
+        model = CTSEMModel(spec)
+
+        mcmc = model.fit(
+            observations=jnp.array(Y),
+            times=jnp.array(times),
+            num_warmup=500,
+            num_samples=500,
+            num_chains=1,
+        )
+
+        samples = mcmc.get_samples()
+        py_drift_diag = np.mean(samples["drift_diag_pop"], axis=0)
+        py_cint = np.mean(samples["cint_pop"], axis=0)
+
+        # Verify recovery of true parameters
+        np.testing.assert_allclose(
+            np.sort(py_drift_diag),
+            np.sort(true_drift_diag),
+            atol=0.5,
+            err_msg=f"NumPyro drift diagonal recovery: estimated={py_drift_diag}, true={true_drift_diag}",
+        )
+
+        np.testing.assert_allclose(
+            py_cint,
+            true_cint,
+            atol=0.5,
+            err_msg=f"NumPyro CINT recovery: estimated={py_cint}, true={true_cint}",
+        )
+
+    @pytest.mark.slow
+    def test_full_estimation_trivariate(self, r_ctsem):
+        """Parameter recovery for a 3-latent variable model.
+
+        Tests scalability to larger models with:
+        - 3 latent variables
+        - Full drift matrix (9 parameters)
+        - Single subject with 120 time points
+        """
+        from dsem_agent.models.ctsem import CTSEMModel, CTSEMSpec
+
+        ro = r_ctsem["ro"]
+        numpy2ri = r_ctsem["numpy2ri"]
+        localconverter = r_ctsem["localconverter"]
+
+        # True parameters for 3x3 system
+        true_drift = np.array([
+            [-0.6, 0.1, 0.05],
+            [0.15, -0.7, 0.1],
+            [-0.1, 0.2, -0.5]
+        ])
+        true_diffusion_diag = 0.35
+        n_timepoints = 150  # More data for 3x3 system
+
+        # Generate data with ctsem
+        r_code = """
+        function(n_timepoints, drift_matrix, diffusion_diag, seed) {
+            library(ctsem)
+            set.seed(seed)
+
+            n_latent <- 3
+            DIFFUSION_chol <- diag(diffusion_diag, n_latent)
+
+            gm <- ctModel(
+                Tpoints = n_timepoints,
+                n.latent = n_latent,
+                n.manifest = n_latent,
+                DRIFT = drift_matrix,
+                DIFFUSION = DIFFUSION_chol,
+                MANIFESTVAR = diag(0.1, n_latent),
+                LAMBDA = diag(1, n_latent),
+                CINT = matrix(0, nrow=n_latent),
+                T0MEANS = matrix(0, nrow=n_latent),
+                T0VAR = diag(1, n_latent)
+            )
+
+            data <- ctGenerate(gm, n.subjects=1, burnin=30, dtmean=0.5)
+            return(data)
+        }
+        """
+        r_generate = ro.r(r_code)
+
+        with localconverter(ro.default_converter + numpy2ri.converter):
+            data_long = np.asarray(r_generate(
+                n_timepoints,
+                true_drift, true_diffusion_diag,
+                456  # seed
+            ))
+
+        # Prepare data for NumPyro
+        times = data_long[:, 1]
+        Y = data_long[:, 2:5]
+
+        # Fit with NumPyro
+        spec = CTSEMSpec(
+            n_latent=3,
+            n_manifest=3,
+            lambda_mat=jnp.eye(3),
+        )
+        model = CTSEMModel(spec)
+
+        mcmc = model.fit(
+            observations=jnp.array(Y),
+            times=jnp.array(times),
+            num_warmup=500,
+            num_samples=500,
+            num_chains=1,
+        )
+
+        samples = mcmc.get_samples()
+        py_drift_diag = np.mean(samples["drift_diag_pop"], axis=0)
+
+        # Verify recovery of true diagonal
+        true_drift_diag = np.diag(true_drift)
+        np.testing.assert_allclose(
+            np.sort(py_drift_diag),
+            np.sort(true_drift_diag),
+            atol=0.5,
+            err_msg=f"NumPyro drift diagonal recovery (3x3): estimated={py_drift_diag}, true={true_drift_diag}",
         )
 
 
