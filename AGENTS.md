@@ -77,41 +77,13 @@ Patterns: [docs/guides/exa.md](docs/guides/exa.md)
 # y0 (Causal Identification)
 
 Docs: https://y0.readthedocs.io/
+Theory: [docs/modeling/assumptions.md](docs/modeling/assumptions.md) (A3a for temporal unrolling)
 
-## Design Principle: DAGs First, Time-Unroll, Project to ADMG
+## Design Principle
 
-- **User-facing**: Always specify causal structure as DAGs with explicit latent confounders
-- **Internally**: Unroll temporal DAG to 2 timesteps (per A3a), then project to ADMG
-- Never ask users to specify bidirected edges directly
-- Lagged confounding (U_{t-1} -> X_t, U_{t-1} -> Y_t) is properly handled via unrolling
-
-## Time-Unrolling for Temporal Identification
-
-Under AR(1) (A3) and bounded latent reach (A3a), a 2-timestep unrolling suffices
-to decide identifiability (per arXiv:2504.20172). This correctly handles lagged
-confounding that would otherwise be missed.
-
-```python
-# unroll_temporal_dag() creates nodes like X_t, X_{t-1}
-# with AR(1) edges for OBSERVED constructs only
-# Lagged edges become: cause_{t-1} -> effect_t
-# Contemporaneous edges become: cause_t -> effect_t
-```
-
-## Why AR(1) is Excluded for Hidden Constructs
-
-Following the standard ADMG representation (Jahn et al. 2025, Shpitser & Pearl 2008):
-- Latent confounders are "marginalized out" into bidirected edges
-- The internal dynamics of latents (AR(1)) are irrelevant for identification
-- What matters is WHERE confounding appears (which observed variables), not HOW the latent evolves
-- Including AR(1) for hidden nodes causes y0's `from_latent_variable_dag()` to incorrectly
-  include hidden nodes in the ADMG (bug workaround)
-
-Example: If U is unobserved and confounds X,Y:
-- We model: U_t -> X_t, U_t -> Y_t (confounding edges)
-- We DON'T model: U_{t-1} -> U_t (AR(1) on hidden)
-- y0 projects to: X_t <-> Y_t (bidirected edge)
-- The identification decision is the same either way
+- **User-facing**: DAGs with explicit latent confounders (never ADMGs)
+- **Internally**: Unroll to 2 timesteps, project to ADMG for ID algorithm
+- See A3a in assumptions.md for why this works
 
 ## Identification Pattern
 
@@ -119,11 +91,5 @@ Example: If U is unobserved and confounds X,Y:
 from dsem_agent.utils.identifiability import check_identifiability
 
 result = check_identifiability(latent_model, measurement_model)
-# Internally:
-# 1. Unrolls to 2-timestep DAG with X_t, X_{t-1} nodes
-# 2. Projects to ADMG via y0's from_latent_variable_dag()
-# 3. Checks P(Y_t | do(X_t)) identifiability
+# See src/dsem_agent/utils/identifiability.py for implementation
 ```
-
-See `src/dsem_agent/utils/identifiability.py` for `dag_to_admg()` and
-`unroll_temporal_dag()` implementations.
