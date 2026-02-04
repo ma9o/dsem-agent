@@ -9,7 +9,6 @@ transformation in CT-SEM models:
 4. Discrete CINT: c_dt = A^{-1}*(exp(A*dt) - I)*c
 """
 
-import jax
 import jax.numpy as jnp
 import jax.scipy.linalg as jla
 from jax import lax

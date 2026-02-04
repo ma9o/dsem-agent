@@ -57,7 +57,7 @@ def validate_prior_predictive(
 
     # Return valid results for all parameters
     results: list[PriorValidationResult] = []
-    for param_name in priors_dict.keys():
+    for param_name in priors_dict:
         results.append(PriorValidationResult(
             parameter=param_name,
             is_valid=True,

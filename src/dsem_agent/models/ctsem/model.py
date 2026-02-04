@@ -16,7 +16,7 @@ import jax.numpy as jnp
 import jax.random as random
 import numpyro
 import numpyro.distributions as dist
-from jax import lax, vmap
+from jax import vmap
 from numpyro.infer import MCMC, NUTS
 
 from dsem_agent.models.ctsem.kalman import kalman_log_likelihood

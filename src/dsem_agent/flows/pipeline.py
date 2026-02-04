@@ -21,23 +21,23 @@ from dsem_agent.utils.effects import (
 )
 
 from .stages import (
-    # Stage 1a
-    propose_latent_model,
     # Stage 1b
     build_dsem_model,
+    # Stage 3
+    combine_worker_results,
+    # Stage 5
+    fit_model,
     load_orchestrator_chunks,
-    propose_measurement_with_identifiability_fix,
     # Stage 2
     load_worker_chunks,
     populate_indicators,
-    # Stage 3
-    combine_worker_results,
-    validate_extraction,
+    # Stage 1a
+    propose_latent_model,
+    propose_measurement_with_identifiability_fix,
+    run_interventions,
     # Stage 4
     stage4_orchestrated_flow,
-    # Stage 5
-    fit_model,
-    run_interventions,
+    validate_extraction,
 )
 
 
@@ -205,7 +205,7 @@ def causal_inference_pipeline(
     results = run_interventions(fitted, treatments, dsem_model)
 
     # TODO: Rank by effect size
-    print(f"\n=== Treatment Ranking by Effect Size ===")
+    print("\n=== Treatment Ranking by Effect Size ===")
     print("(To be implemented: ranking of all treatments by their effect on the outcome)")
 
     return results

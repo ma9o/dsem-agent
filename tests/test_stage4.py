@@ -6,7 +6,6 @@ import pytest
 
 from dsem_agent.models.prior_predictive import (
     _get_constraint_from_distribution,
-    _validate_parameter,
     _validate_prior_predictive_samples,
     format_validation_report,
 )
@@ -30,7 +29,6 @@ from dsem_agent.workers.schemas_prior import (
     PriorValidationResult,
     RawPriorSample,
 )
-
 
 # --- Fixtures ---
 
