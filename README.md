@@ -31,6 +31,7 @@ See [`docs/index.md`](docs/index.md) for the full documentation structure.
 - **[Modeling](docs/modeling/)** - Theoretical foundations: scope, DSEM overview, assumptions, theory
 - **[Reference](docs/reference/)** - Technical specifications: schemas, pipeline stages
 - **[Guides](docs/guides/)** - Practical usage: quickstart, data workflow, running evals
+- **[DSEM Parity](docs/reference/dsem-parity.md)** - Feature comparison with Asparouhov et al. (2017)
 
 ## Structure
 
@@ -43,8 +44,9 @@ dsem-agent/
 │   └── eval/          # Example DAGs for evals
 ├── docs/
 │   ├── modeling/      # Theoretical foundations (scope, DSEM, assumptions, theory)
-│   ├── reference/     # Technical specs (schemas, pipeline)
-│   └── guides/        # Practical usage (quickstart, data, evals)
+│   ├── reference/     # Technical specs (schemas, pipeline, dsem-parity)
+│   ├── guides/        # Practical usage (quickstart, data, evals)
+│   └── papers/        # Reference papers (Asparouhov 2017, etc.)
 ├── evals/             # Inspect AI evals (eval{N}_{name}.py) + scripts/
 │   └── deprecated/    # Deprecated evals
 ├── src/dsem_agent/
