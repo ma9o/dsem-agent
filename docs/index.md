@@ -23,6 +23,7 @@ docs/
 **Implementing or modifying:**
 - `reference/schema.md` for Pydantic models and validation
 - `reference/pipeline.md` for stage-by-stage breakdown
+- `reference/dsem-parity.md` for feature comparison with Asparouhov et al. (2017) Mplus DSEM
 
 **Running the system:**
 - `guides/quickstart.md` for installation and first run
