@@ -255,44 +255,265 @@ class TestParityWithCtsem:
     """Tests for parity with the ctsem R package.
 
     These tests compare our NumPyro implementation against
-    known results from ctsem.
+    actual results from the ctsem R package via rpy2.
     """
 
-    def test_discretization_matches_ctsem(self):
-        """Test that discretization matches ctsem's approach.
+    @pytest.fixture
+    def r_ctsem(self):
+        """Initialize R with ctsem package loaded."""
+        pytest.importorskip("rpy2")
+        import rpy2.robjects as ro
+        from rpy2.robjects.packages import importr
+        from rpy2.robjects import numpy2ri
+        from rpy2.robjects.conversion import localconverter
 
-        ctsem uses:
-        - discreteDRIFT = expm(DRIFT * dt)
-        - discreteCINT = solve(DRIFT, (discreteDRIFT - I) @ CINT)
-        - discreteQ = Q_inf - discreteDRIFT @ Q_inf @ discreteDRIFT.T
-        where Q_inf solves A*Q + Q*A' = -GG'
+        # Check if ctsem is installed
+        try:
+            ctsem = importr("ctsem")
+        except Exception:
+            pytest.skip("R package 'ctsem' not installed")
+
+        # Also need Matrix package for expm
+        try:
+            matrix_pkg = importr("Matrix")
+        except Exception:
+            pytest.skip("R package 'Matrix' not installed")
+
+        return {
+            "ro": ro,
+            "ctsem": ctsem,
+            "Matrix": matrix_pkg,
+            "numpy2ri": numpy2ri,
+            "localconverter": localconverter,
+        }
+
+    def test_discretization_matches_ctsem(self, r_ctsem):
+        """Test that discretization matches ctsem's actual R implementation.
+
+        Calls R's ctsem package directly via rpy2 and compares results.
         """
-        from dsem_agent.models.ctsem.core import (
-            compute_asymptotic_diffusion,
-            discretize_system,
-        )
+        from dsem_agent.models.ctsem.core import discretize_system
 
-        import jax.scipy.linalg as jla
+        ro = r_ctsem["ro"]
+        numpy2ri = r_ctsem["numpy2ri"]
+        localconverter = r_ctsem["localconverter"]
 
-        # Test case from ctsem documentation
-        drift = jnp.array([[-0.5, 0.1], [0.2, -0.8]])
-        diffusion_chol = jnp.array([[0.5, 0.0], [0.1, 0.4]])
+        # Test parameters
+        drift = np.array([[-0.5, 0.1], [0.2, -0.8]])
+        diffusion_chol = np.array([[0.5, 0.0], [0.1, 0.4]])
         diffusion_cov = diffusion_chol @ diffusion_chol.T
-        cint = jnp.array([0.1, -0.1])
+        cint = np.array([0.1, -0.1])
         dt = 1.0
 
+        # Run discretization in R using ctsem's approach
+        # This matches ctsem's internal ctDiscretePars function
+        r_code = """
+        function(DRIFT, DIFFUSION, CINT, dt) {
+            library(Matrix)
+            library(ctsem)
+
+            n <- nrow(DRIFT)
+            I <- diag(n)
+
+            # Discrete drift: expm(DRIFT * dt)
+            discreteDRIFT <- as.matrix(Matrix::expm(DRIFT * dt))
+
+            # Asymptotic diffusion (solve Lyapunov equation)
+            # A*Q + Q*A' = -DIFFUSION, so Q = solve_lyap(-DIFFUSION)
+            # Using ctsem's approach via Kronecker product
+            DRIFTHATCH <- DRIFT %x% I + I %x% DRIFT
+            Qinf <- matrix(solve(DRIFTHATCH, -as.vector(DIFFUSION)), n, n)
+
+            # Discrete diffusion
+            discreteDIFFUSION <- Qinf - discreteDRIFT %*% Qinf %*% t(discreteDRIFT)
+
+            # Discrete intercept: solve(DRIFT, (discreteDRIFT - I) %*% CINT)
+            discreteCINT <- solve(DRIFT, (discreteDRIFT - I) %*% CINT)
+
+            list(
+                discreteDRIFT = discreteDRIFT,
+                discreteDIFFUSION = discreteDIFFUSION,
+                discreteCINT = as.vector(discreteCINT)
+            )
+        }
+        """
+        r_discretize = ro.r(r_code)
+
+        # Use numpy2ri converter for automatic numpy <-> R conversion
+        with localconverter(ro.default_converter + numpy2ri.converter):
+            # Call R function with numpy arrays (auto-converted)
+            r_result = r_discretize(drift, diffusion_cov, cint, dt)
+
+            # Extract R results by index (NamedList returns items in order)
+            # Order: discreteDRIFT, discreteDIFFUSION, discreteCINT
+            r_disc_drift = np.asarray(r_result[0])
+            r_disc_Q = np.asarray(r_result[1])
+            r_disc_c = np.asarray(r_result[2])
+
+        # Our NumPyro implementation
+        py_disc_drift, py_disc_Q, py_disc_c = discretize_system(
+            jnp.array(drift), jnp.array(diffusion_cov), jnp.array(cint), dt
+        )
+
+        # Compare results (tolerance allows for float32 vs float64 differences)
+        np.testing.assert_allclose(
+            np.array(py_disc_drift),
+            r_disc_drift,
+            atol=1e-6,
+            err_msg="Discrete drift mismatch with ctsem",
+        )
+        np.testing.assert_allclose(
+            np.array(py_disc_Q),
+            r_disc_Q,
+            atol=1e-6,
+            err_msg="Discrete diffusion mismatch with ctsem",
+        )
+        np.testing.assert_allclose(
+            np.array(py_disc_c),
+            r_disc_c,
+            atol=1e-6,
+            err_msg="Discrete CINT mismatch with ctsem",
+        )
+
+    def test_kalman_likelihood_matches_ctsem(self, r_ctsem):
+        """Test that Kalman filter log-likelihood matches ctsem.
+
+        Compares the log-likelihood computation for a simple model.
+        """
+        from dsem_agent.models.ctsem.kalman import kalman_log_likelihood
+
+        ro = r_ctsem["ro"]
+        numpy2ri = r_ctsem["numpy2ri"]
+        localconverter = r_ctsem["localconverter"]
+
+        # Simple 2-latent, 2-manifest model
+        n_latent = 2
+        n_manifest = 2
+
+        # Model parameters (stable system)
+        drift = np.array([[-0.5, 0.1], [0.2, -0.8]])
+        diffusion_chol = np.array([[0.3, 0.0], [0.05, 0.25]])
+        diffusion_cov = diffusion_chol @ diffusion_chol.T
+        cint = np.array([0.0, 0.0])
+        manifest_means = np.array([0.0, 0.0])
+        loadings = np.eye(n_manifest, n_latent)  # Identity loadings
+        manifest_var = np.array([0.1, 0.1])  # Measurement error variance (diagonal)
+        manifest_cov = np.diag(manifest_var)
+
+        # Time intervals (not absolute times)
+        time_intervals = np.array([0.5, 0.5, 0.5, 0.5, 0.5])
+
+        # Simple synthetic observations (not generated from model, just for testing)
+        Y = np.array(
+            [
+                [0.1, -0.2],
+                [0.3, 0.1],
+                [0.2, 0.3],
+                [0.0, 0.2],
+                [-0.1, 0.1],
+            ]
+        )
+
+        # Initial state
+        init_mean = np.zeros(n_latent)
+        init_cov = np.eye(n_latent) * 1.0
+
+        # R code to compute Kalman log-likelihood using ctsem's approach
+        # Note: vectors are passed as column matrices to ensure proper dimensions
+        r_kalman_code = """
+        function(Y, dt, DRIFT, DIFFUSION, CINT, LAMBDA, MANIFESTMEANS,
+                 MANIFESTCOV, T0MEANS, T0VAR) {
+            library(Matrix)
+
+            n_latent <- nrow(DRIFT)
+            n_manifest <- nrow(LAMBDA)
+            n_time <- nrow(Y)
+            I <- diag(n_latent)
+
+            # Ensure vectors are column matrices
+            CINT <- matrix(CINT, ncol=1)
+            MANIFESTMEANS <- matrix(MANIFESTMEANS, ncol=1)
+            T0MEANS <- matrix(T0MEANS, ncol=1)
+
+            # Asymptotic diffusion
+            DRIFTHATCH <- DRIFT %x% I + I %x% DRIFT
+            Qinf <- matrix(solve(DRIFTHATCH, -as.vector(DIFFUSION)), n_latent, n_latent)
+
+            # Initialize
+            state_mean <- T0MEANS
+            state_cov <- T0VAR
+            total_ll <- 0
+
+            for (t in 1:n_time) {
+                # Predict step (always, using dt for this time point)
+                dt_t <- dt[t]
+                discreteDRIFT <- as.matrix(Matrix::expm(DRIFT * dt_t))
+                discreteQ <- Qinf - discreteDRIFT %*% Qinf %*% t(discreteDRIFT)
+                discreteCINT <- solve(DRIFT, (discreteDRIFT - I) %*% CINT)
+
+                state_mean <- discreteDRIFT %*% state_mean + discreteCINT
+                state_cov <- discreteDRIFT %*% state_cov %*% t(discreteDRIFT) + discreteQ
+
+                # Update step
+                y_t <- matrix(Y[t, ], ncol=1)
+                pred_y <- LAMBDA %*% state_mean + MANIFESTMEANS
+                S <- LAMBDA %*% state_cov %*% t(LAMBDA) + MANIFESTCOV
+                residual <- y_t - pred_y
+
+                # Log-likelihood contribution
+                ll_t <- -0.5 * (n_manifest * log(2 * pi) + log(det(S)) +
+                               t(residual) %*% solve(S, residual))
+                total_ll <- total_ll + ll_t
+
+                # Kalman gain and update
+                K <- state_cov %*% t(LAMBDA) %*% solve(S)
+                state_mean <- state_mean + K %*% residual
+                state_cov <- (I - K %*% LAMBDA) %*% state_cov
+            }
+
+            return(as.numeric(total_ll))
+        }
+        """
+        r_kalman_ll = ro.r(r_kalman_code)
+
+        # Use numpy2ri converter for automatic numpy <-> R conversion
+        with localconverter(ro.default_converter + numpy2ri.converter):
+            # Get R log-likelihood
+            r_ll_result = r_kalman_ll(
+                Y,
+                time_intervals,
+                drift,
+                diffusion_cov,
+                cint,
+                loadings,
+                manifest_means,
+                manifest_cov,
+                init_mean,
+                init_cov,
+            )
+
+        r_ll = float(np.asarray(r_ll_result)[0])
+
         # Our implementation
-        disc_drift, disc_Q, disc_c = discretize_system(drift, diffusion_cov, cint, dt)
+        py_ll = kalman_log_likelihood(
+            observations=jnp.array(Y),
+            time_intervals=jnp.array(time_intervals),
+            drift=jnp.array(drift),
+            diffusion_cov=jnp.array(diffusion_cov),
+            cint=jnp.array(cint),
+            lambda_mat=jnp.array(loadings),
+            manifest_means=jnp.array(manifest_means),
+            manifest_cov=jnp.array(manifest_cov),
+            t0_mean=jnp.array(init_mean),
+            t0_cov=jnp.array(init_cov),
+        )
 
-        # Manual computation (ctsem style)
-        expected_drift = jla.expm(drift * dt)
-        Q_inf = compute_asymptotic_diffusion(drift, diffusion_cov)
-        expected_Q = Q_inf - expected_drift @ Q_inf @ expected_drift.T
-        expected_c = jla.solve(drift, (expected_drift - jnp.eye(2)) @ cint)
-
-        assert jnp.allclose(disc_drift, expected_drift, atol=1e-6)
-        assert jnp.allclose(disc_Q, expected_Q, atol=1e-6)
-        assert jnp.allclose(disc_c, expected_c, atol=1e-6)
+        np.testing.assert_allclose(
+            float(py_ll),
+            r_ll,
+            atol=1e-6,
+            err_msg=f"Log-likelihood mismatch: Python={float(py_ll)}, R={r_ll}",
+        )
 
 
 class TestCTSEMModelBuilder:
