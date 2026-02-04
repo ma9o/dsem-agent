@@ -36,8 +36,7 @@ from .stages import (
     # Stage 4
     stage4_orchestrated_flow,
     # Stage 5
-    fit_model,
-    run_interventions,
+    stage5_inference_flow,
 )
 
 
@@ -220,20 +219,45 @@ def causal_inference_pipeline(
         print(f"⚠️  Stage 4 model build failed: {model_info.get('error')}")
 
     # ══════════════════════════════════════════════════════════════════════════
-    # Stage 5: Fit and intervene (with identifiability awareness)
+    # Stage 5: Fit CT-SEM and extract treatment effects
     # ══════════════════════════════════════════════════════════════════════════
-    print("\n=== Stage 5: Inference ===")
+    print("\n=== Stage 5: CT-SEM Inference ===")
     print(f"Estimating effects of {len(treatments)} treatments on {outcome}")
-    fitted = fit_model(stage4_result, worker_chunks)
 
-    # Run interventions for all treatments
-    results = run_interventions(fitted, treatments, dsem_model)
+    stage5_result = stage5_inference_flow(
+        stage4_result=stage4_result,
+        measurements_data=measurements_data,
+        treatments=treatments,
+        dsem_model=dsem_model,
+    )
 
-    # TODO: Rank by effect size
+    fit_result = stage5_result.get("fit_result", {})
+    if fit_result.get("fit_successful"):
+        print(f"Model fit successful with {fit_result.get('n_samples')} samples")
+    else:
+        print(f"⚠️  Model fit failed: {fit_result.get('error')}")
+
+    # Display treatment effects ranked by effect size
+    treatment_effects = stage5_result.get("treatment_effects", [])
     print(f"\n=== Treatment Ranking by Effect Size ===")
-    print("(To be implemented: ranking of all treatments by their effect on the outcome)")
+    for i, effect in enumerate(treatment_effects, 1):
+        treatment = effect.get("treatment")
+        effect_size = effect.get("effect_size")
+        identifiable = effect.get("identifiable", True)
+        warning = effect.get("warning", "")
 
-    return results
+        if effect_size is not None:
+            ci = effect.get("credible_interval", [None, None])
+            ci_str = f"[{ci[0]:.3f}, {ci[1]:.3f}]" if ci[0] is not None else ""
+            id_marker = "" if identifiable else " ⚠️"
+            print(f"  {i}. {treatment}: {effect_size:.3f} {ci_str}{id_marker}")
+            if warning:
+                print(f"     {warning}")
+        else:
+            note = effect.get("note", "No estimate available")
+            print(f"  {i}. {treatment}: {note}")
+
+    return stage5_result
 
 
 if __name__ == "__main__":

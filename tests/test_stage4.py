@@ -4,11 +4,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dsem_agent.models.dsem_model_builder import DSEMModelBuilder
+from dsem_agent.models.ctsem_builder import CTSEMModelBuilder
 from dsem_agent.models.prior_predictive import (
-    _get_constraint_from_distribution,
-    _validate_parameter,
-    _validate_prior_predictive_samples,
+    _get_constraint_from_param_name,
+    _validate_parameter_samples,
     format_validation_report,
 )
 from dsem_agent.orchestrator.schemas_glmm import (
@@ -91,11 +90,11 @@ def simple_priors() -> dict:
         },
         "rho_mood": {
             "parameter": "rho_mood",
-            "distribution": "Beta",
-            "params": {"alpha": 2.0, "beta": 2.0},
+            "distribution": "Normal",
+            "params": {"mu": -0.5, "sigma": 0.5},
             "sources": [],
             "confidence": 0.5,
-            "reasoning": "Weakly informative for AR coefficient",
+            "reasoning": "Weakly informative for drift diagonal",
         },
         "sigma_mood_score": {
             "parameter": "sigma_mood_score",
@@ -110,12 +109,11 @@ def simple_priors() -> dict:
 
 @pytest.fixture
 def simple_data() -> pd.DataFrame:
-    """Simple test data with lagged columns."""
+    """Simple test data with time column."""
     n = 50
     return pd.DataFrame({
         "mood_score": np.random.randn(n) * 1.5 + 5,
-        "mood_score_lag1": np.random.randn(n) * 1.5 + 5,
-        "subject_id": np.repeat(np.arange(5), 10),
+        "time": np.arange(n, dtype=float),
     })
 
 
@@ -174,92 +172,39 @@ class TestSchemas:
         assert len(proposal.sources) == 1
 
 
-# --- DSEMModelBuilder Tests ---
+# --- CTSEMModelBuilder Tests ---
 
 
-class TestDSEMModelBuilder:
-    """Test PyMC model building."""
+class TestCTSEMModelBuilder:
+    """Test NumPyro CT-SEM model building."""
 
-    def test_builder_init(self, simple_glmm_spec, simple_priors):
-        """Builder initializes with spec and priors."""
-        builder = DSEMModelBuilder(
-            glmm_spec=simple_glmm_spec,
-            priors=simple_priors,
-        )
-        assert builder._model_type == "DSEM"
+    def test_builder_init(self, simple_priors):
+        """Builder initializes with priors."""
+        builder = CTSEMModelBuilder(priors=simple_priors)
+        assert builder._model_type == "CT-SEM"
         assert builder.version == "0.1.0"
 
-    def test_build_model(self, simple_glmm_spec, simple_priors, simple_data):
-        """Builder creates a valid PyMC model."""
-        builder = DSEMModelBuilder(
-            glmm_spec=simple_glmm_spec,
-            priors=simple_priors,
-        )
+    def test_build_model(self, simple_priors, simple_data):
+        """Builder creates a valid NumPyro CT-SEM model."""
+        builder = CTSEMModelBuilder(priors=simple_priors)
         model = builder.build_model(simple_data)
 
         assert model is not None
-        assert "intercept_mood_score" in model.named_vars
-        assert "rho_mood" in model.named_vars
-        assert "sigma_mood_score" in model.named_vars
-        assert "mood_score" in model.named_vars  # likelihood
+        assert builder._spec is not None
+        assert builder._spec.n_manifest >= 1
 
-    def test_output_var(self, simple_glmm_spec, simple_priors):
-        """output_var returns the first likelihood variable."""
-        builder = DSEMModelBuilder(
-            glmm_spec=simple_glmm_spec,
-            priors=simple_priors,
-        )
-        assert builder.output_var == "mood_score"
-
-    def test_create_distribution_normal(self, simple_glmm_spec, simple_priors, simple_data):
-        """Normal distribution created correctly."""
-        builder = DSEMModelBuilder(
-            glmm_spec=simple_glmm_spec,
-            priors=simple_priors,
-        )
-        builder.build_model(simple_data)
-        # Check the intercept is Normal
-        var = builder.model.named_vars["intercept_mood_score"]
-        assert "normal" in str(var.type).lower() or var is not None
-
-    def test_create_distribution_halfnormal(self, simple_glmm_spec, simple_priors, simple_data):
-        """HalfNormal distribution created correctly."""
-        builder = DSEMModelBuilder(
-            glmm_spec=simple_glmm_spec,
-            priors=simple_priors,
-        )
-        builder.build_model(simple_data)
-        var = builder.model.named_vars["sigma_mood_score"]
-        assert var is not None
-
-    def test_create_distribution_beta(self, simple_glmm_spec, simple_priors, simple_data):
-        """Beta distribution created correctly."""
-        builder = DSEMModelBuilder(
-            glmm_spec=simple_glmm_spec,
-            priors=simple_priors,
-        )
-        builder.build_model(simple_data)
-        var = builder.model.named_vars["rho_mood"]
-        assert var is not None
-
-    def test_sample_prior_predictive(self, simple_glmm_spec, simple_priors, simple_data):
+    def test_sample_prior_predictive(self, simple_priors, simple_data):
         """Prior predictive sampling works."""
-        builder = DSEMModelBuilder(
-            glmm_spec=simple_glmm_spec,
-            priors=simple_priors,
-        )
+        builder = CTSEMModelBuilder(priors=simple_priors)
         builder.build_model(simple_data)
-        idata = builder.sample_prior_predictive(samples=10)
+        samples = builder.sample_prior_predictive(samples=10)
 
-        assert hasattr(idata, "prior")
-        assert "intercept_mood_score" in idata.prior
+        assert "drift" in samples
+        assert samples["drift"].shape[0] == 10
 
-    def test_sample_prior_predictive_without_build_raises(self, simple_glmm_spec, simple_priors):
+    def test_sample_prior_predictive_without_build_raises(self, simple_priors):
         """sample_prior_predictive raises if model not built."""
-        builder = DSEMModelBuilder(
-            glmm_spec=simple_glmm_spec,
-            priors=simple_priors,
-        )
+        builder = CTSEMModelBuilder(priors=simple_priors)
         with pytest.raises(ValueError, match="Model must be built"):
             builder.sample_prior_predictive()
 
@@ -271,47 +216,41 @@ class TestPriorValidation:
     """Test prior predictive validation helpers."""
 
     def test_get_constraint_positive(self):
-        """HalfNormal implies positive constraint."""
-        assert _get_constraint_from_distribution("HalfNormal") == "positive"
-        assert _get_constraint_from_distribution("Gamma") == "positive"
-        assert _get_constraint_from_distribution("Exponential") == "positive"
+        """Diffusion/sigma parameters imply positive constraint."""
+        assert _get_constraint_from_param_name("diffusion_diag") == "positive"
+        assert _get_constraint_from_param_name("sigma_x") == "positive"
+        assert _get_constraint_from_param_name("sd_random") == "positive"
 
     def test_get_constraint_unit_interval(self):
-        """Beta implies unit_interval constraint."""
-        assert _get_constraint_from_distribution("Beta") == "unit_interval"
+        """Loading/correlation parameters imply unit_interval constraint."""
+        assert _get_constraint_from_param_name("loading_x") == "unit_interval"
+        assert _get_constraint_from_param_name("corr_xy") == "unit_interval"
 
     def test_get_constraint_none(self):
-        """Normal has no implicit constraint."""
-        assert _get_constraint_from_distribution("Normal") == "none"
-        assert _get_constraint_from_distribution("Unknown") == "none"
+        """Drift parameters have no implicit constraint."""
+        assert _get_constraint_from_param_name("drift_diag") == "none"
+        assert _get_constraint_from_param_name("beta_x") == "none"
 
-    def test_validate_prior_predictive_samples_valid(self):
+    def test_validate_parameter_samples_valid(self):
         """Valid samples pass validation."""
-        samples = np.random.randn(100) + 5
-        result = _validate_prior_predictive_samples("mood", samples, "Normal")
+        samples = np.random.randn(100)
+        result = _validate_parameter_samples("drift_diag", samples)
         assert result.is_valid
         assert result.issue is None
 
-    def test_validate_prior_predictive_samples_nan(self):
+    def test_validate_parameter_samples_nan(self):
         """NaN samples fail validation."""
         samples = np.array([1.0, 2.0, np.nan, 4.0])
-        result = _validate_prior_predictive_samples("mood", samples, "Normal")
+        result = _validate_parameter_samples("drift_diag", samples)
         assert not result.is_valid
         assert "NaN/Inf" in result.issue
 
-    def test_validate_prior_predictive_samples_negative_poisson(self):
-        """Negative samples fail for Poisson."""
+    def test_validate_parameter_samples_negative_positive(self):
+        """Negative samples fail for positive-constrained params."""
         samples = np.array([1.0, 2.0, -1.0, 4.0])
-        result = _validate_prior_predictive_samples("count", samples, "Poisson")
+        result = _validate_parameter_samples("diffusion_diag", samples)
         assert not result.is_valid
         assert "negative" in result.issue
-
-    def test_validate_prior_predictive_samples_outside_beta(self):
-        """Samples outside [0,1] fail for Beta."""
-        samples = np.array([0.5, 0.8, 1.5, 0.2])
-        result = _validate_prior_predictive_samples("prob", samples, "Beta")
-        assert not result.is_valid
-        assert "outside [0, 1]" in result.issue
 
     def test_format_validation_report_passed(self):
         """Report formats correctly for passed validation."""

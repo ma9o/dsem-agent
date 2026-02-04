@@ -1,9 +1,9 @@
 """Stage 4: Model Specification & Prior Elicitation.
 
-Orchestrator-Worker architecture with PyMC grounding:
+Orchestrator-Worker architecture with NumPyro CT-SEM grounding:
 1. Orchestrator proposes GLMM specification
 2. Workers research priors in parallel (one per parameter via Exa + LLM)
-3. PyMC model is built as grounding step (validates priors compile)
+3. NumPyro CT-SEM model is built as grounding step (validates priors compile)
 4. Prior predictive checks validate reasonableness
 
 See docs/modeling/functional_spec.md for design rationale.
@@ -144,13 +144,13 @@ def validate_priors_task(
     }
 
 
-@task(task_run_name="build-dsem-model")
+@task(task_run_name="build-ctsem-model")
 def build_model_task(
     glmm_spec: dict,
     priors: dict[str, dict],
     measurements_data: dict[str, pl.DataFrame],
 ) -> dict:
-    """Build DSEMModelBuilder from spec and priors.
+    """Build CTSEMModelBuilder from spec and priors.
 
     Args:
         glmm_spec: GLMM specification
@@ -162,11 +162,9 @@ def build_model_task(
     """
     import pandas as pd
 
-    from dsem_agent.models.dsem_model_builder import DSEMModelBuilder
+    from dsem_agent.models.ctsem_builder import CTSEMModelBuilder
 
     try:
-        builder = DSEMModelBuilder(glmm_spec=glmm_spec, priors=priors)
-
         dfs = []
         for granularity, df in measurements_data.items():
             if granularity != "time_invariant" and df.height > 0:
@@ -174,13 +172,13 @@ def build_model_task(
 
         X = dfs[0] if dfs else pd.DataFrame({"x": [0.0]})
 
+        builder = CTSEMModelBuilder(glmm_spec=glmm_spec, priors=priors)
         builder.build_model(X)
 
         return {
             "model_built": True,
             "model_type": builder._model_type,
             "version": builder.version,
-            "output_var": builder.output_var,
         }
 
     except Exception as e:
@@ -202,7 +200,7 @@ def stage4_orchestrated_flow(
     1. Orchestrator proposes GLMM specification
     2. Workers research priors in parallel (one per parameter)
     3. Validate via prior predictive checks
-    4. Build PyMC model
+    4. Build NumPyro CT-SEM model
 
     Args:
         dsem_model: Full DSEM model dict
@@ -245,7 +243,7 @@ def stage4_orchestrated_flow(
     validation = validate_priors_task(glmm_spec, priors, measurements_data)
     validation_result = validation.result() if hasattr(validation, "result") else validation
 
-    # 4. Build PyMC model
+    # 4. Build NumPyro CT-SEM model
     model_info = build_model_task(glmm_spec, priors, measurements_data)
     model_result = model_info.result() if hasattr(model_info, "result") else model_info
 

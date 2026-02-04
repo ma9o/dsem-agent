@@ -20,8 +20,9 @@ from .stage4_model import (
     stage4_orchestrated_flow,
 )
 from .stage5_inference import (
-    fit_model,
-    run_interventions,
+    stage5_inference_flow,
+    fit_model_task,
+    extract_effects_task,
 )
 
 __all__ = [
@@ -40,6 +41,7 @@ __all__ = [
     # Stage 4
     "stage4_orchestrated_flow",
     # Stage 5
-    "fit_model",
-    "run_interventions",
+    "stage5_inference_flow",
+    "fit_model_task",
+    "extract_effects_task",
 ]

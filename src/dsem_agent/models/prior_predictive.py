@@ -7,7 +7,7 @@ and checking for domain violations (NaN/Inf, wrong sign for constrained params).
 import numpy as np
 import polars as pl
 
-from dsem_agent.models.dsem_model_builder import DSEMModelBuilder
+from dsem_agent.models.ctsem_builder import CTSEMModelBuilder
 from dsem_agent.orchestrator.schemas_glmm import GLMMSpec
 from dsem_agent.workers.schemas_prior import PriorProposal, PriorValidationResult
 
@@ -54,32 +54,19 @@ def validate_prior_predictive(
     X = _build_minimal_dataframe(measurements_data)
 
     try:
-        # Build the model
-        builder = DSEMModelBuilder(glmm_spec=glmm_dict, priors=priors_dict)
+        # Build the CT-SEM model
+        builder = CTSEMModelBuilder(glmm_spec=glmm_dict, priors=priors_dict)
         builder.build_model(X)
 
         # Sample from prior predictive
-        idata = builder.sample_prior_predictive(samples=n_samples)
+        prior_samples = builder.sample_prior_predictive(samples=n_samples)
 
-        # Check each parameter
-        for param_name, prior_spec in priors_dict.items():
-            result = _validate_parameter(param_name, prior_spec, idata)
+        # Check each sampled parameter
+        for param_name in prior_samples.keys():
+            result = _validate_parameter_samples(param_name, prior_samples[param_name])
             results.append(result)
             if not result.is_valid:
                 all_valid = False
-
-        # Check prior predictive of observed variables
-        for lik_spec in glmm_dict.get("likelihoods", []):
-            var_name = lik_spec.get("variable")
-            if var_name and hasattr(idata, 'prior_predictive') and var_name in idata.prior_predictive:
-                result = _validate_prior_predictive_samples(
-                    var_name,
-                    idata.prior_predictive[var_name].values,
-                    lik_spec.get("distribution", "Normal"),
-                )
-                results.append(result)
-                if not result.is_valid:
-                    all_valid = False
 
     except Exception as e:
         # Model building failed - report as validation failure
@@ -107,21 +94,12 @@ def _build_minimal_dataframe(
     return pd.DataFrame({"x": [0.0]})
 
 
-def _validate_parameter(
+def _validate_parameter_samples(
     param_name: str,
-    prior_spec: dict,
-    idata: "InferenceData",
+    samples: np.ndarray,
 ) -> PriorValidationResult:
-    """Validate a single parameter's prior samples."""
-    if param_name not in idata.prior:
-        return PriorValidationResult(
-            parameter=param_name,
-            is_valid=True,
-            issue=None,
-            suggested_adjustment=None,
-        )
-
-    samples = idata.prior[param_name].values.flatten()
+    """Validate samples from prior predictive."""
+    samples = np.asarray(samples).flatten()
 
     # Check for NaN/Inf
     n_invalid = np.sum(~np.isfinite(samples))
@@ -134,9 +112,8 @@ def _validate_parameter(
             suggested_adjustment=None,
         )
 
-    # Check domain violations based on distribution
-    dist_name = prior_spec.get("distribution", "Normal")
-    constraint = _get_constraint_from_distribution(dist_name)
+    # Check domain violations based on parameter name
+    constraint = _get_constraint_from_param_name(param_name)
 
     if constraint == "positive":
         n_negative = np.sum(samples < 0)
@@ -168,76 +145,19 @@ def _validate_parameter(
     )
 
 
-def _validate_prior_predictive_samples(
-    var_name: str,
-    samples: np.ndarray,
-    distribution: str,
-) -> PriorValidationResult:
-    """Validate prior predictive samples for an observed variable."""
-    samples = samples.flatten()
+def _get_constraint_from_param_name(param_name: str) -> str:
+    """Infer constraint from parameter name."""
+    name_lower = param_name.lower()
 
-    # Check for NaN/Inf
-    n_invalid = np.sum(~np.isfinite(samples))
-    if n_invalid > 0:
-        pct = 100 * n_invalid / len(samples)
-        return PriorValidationResult(
-            parameter=f"prior_pred_{var_name}",
-            is_valid=False,
-            issue=f"{pct:.1f}% of prior predictive samples are NaN/Inf",
-            suggested_adjustment=None,
-        )
-
-    # Check domain violations based on distribution
-    valid = samples[np.isfinite(samples)]
-    if len(valid) == 0:
-        return PriorValidationResult(
-            parameter=f"prior_pred_{var_name}",
-            is_valid=False,
-            issue="No valid samples",
-            suggested_adjustment=None,
-        )
-
-    if distribution in ("Poisson", "NegativeBinomial", "Gamma"):
-        n_negative = np.sum(valid < 0)
-        if n_negative > 0:
-            pct = 100 * n_negative / len(valid)
-            return PriorValidationResult(
-                parameter=f"prior_pred_{var_name}",
-                is_valid=False,
-                issue=f"{pct:.1f}% of samples are negative (should be positive)",
-                suggested_adjustment=None,
-            )
-
-    elif distribution in ("Bernoulli", "Beta"):
-        n_outside = np.sum((valid < 0) | (valid > 1))
-        if n_outside > 0:
-            pct = 100 * n_outside / len(valid)
-            return PriorValidationResult(
-                parameter=f"prior_pred_{var_name}",
-                is_valid=False,
-                issue=f"{pct:.1f}% of samples outside [0, 1]",
-                suggested_adjustment=None,
-            )
-
-    return PriorValidationResult(
-        parameter=f"prior_pred_{var_name}",
-        is_valid=True,
-        issue=None,
-        suggested_adjustment=None,
-    )
-
-
-def _get_constraint_from_distribution(dist_name: str) -> str:
-    """Get the implicit constraint from distribution name."""
-    positive_dists = {"HalfNormal", "Gamma", "InverseGamma", "Exponential", "HalfCauchy"}
-    unit_interval_dists = {"Beta"}
-
-    if dist_name in positive_dists:
+    # Positive-constrained parameters
+    if any(s in name_lower for s in ["diffusion", "sigma", "sd", "var", "scale"]):
         return "positive"
-    elif dist_name in unit_interval_dists:
+
+    # Unit interval parameters (loadings, correlations)
+    if any(s in name_lower for s in ["corr", "loading"]):
         return "unit_interval"
-    else:
-        return "none"
+
+    return "none"
 
 
 def format_validation_report(
