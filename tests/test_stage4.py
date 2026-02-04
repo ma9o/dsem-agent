@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dsem_agent.models.dsem_model_builder import DSEMModelBuilder
 from dsem_agent.models.prior_predictive import (
     _get_constraint_from_distribution,
     _validate_parameter,
@@ -174,94 +173,35 @@ class TestSchemas:
         assert len(proposal.sources) == 1
 
 
-# --- DSEMModelBuilder Tests ---
+# --- CTSEMModelBuilder Tests ---
+# NOTE: Full tests will be added when implementation is merged from numpyro-ctsem
 
 
-class TestDSEMModelBuilder:
-    """Test PyMC model building."""
+class TestCTSEMModelBuilder:
+    """Test CT-SEM model building."""
 
     def test_builder_init(self, simple_glmm_spec, simple_priors):
         """Builder initializes with spec and priors."""
-        builder = DSEMModelBuilder(
+        from dsem_agent.models.ctsem_builder import CTSEMModelBuilder
+
+        builder = CTSEMModelBuilder(
             glmm_spec=simple_glmm_spec,
             priors=simple_priors,
         )
-        assert builder._model_type == "DSEM"
+        assert builder._model_type == "CT-SEM"
         assert builder.version == "0.1.0"
 
-    def test_build_model(self, simple_glmm_spec, simple_priors, simple_data):
-        """Builder creates a valid PyMC model."""
-        builder = DSEMModelBuilder(
+    def test_builder_builds_model(self, simple_glmm_spec, simple_priors, simple_data):
+        """Builder creates a CT-SEM model."""
+        from dsem_agent.models.ctsem_builder import CTSEMModelBuilder
+
+        builder = CTSEMModelBuilder(
             glmm_spec=simple_glmm_spec,
             priors=simple_priors,
         )
         model = builder.build_model(simple_data)
-
         assert model is not None
-        assert "intercept_mood_score" in model.named_vars
-        assert "rho_mood" in model.named_vars
-        assert "sigma_mood_score" in model.named_vars
-        assert "mood_score" in model.named_vars  # likelihood
-
-    def test_output_var(self, simple_glmm_spec, simple_priors):
-        """output_var returns the first likelihood variable."""
-        builder = DSEMModelBuilder(
-            glmm_spec=simple_glmm_spec,
-            priors=simple_priors,
-        )
-        assert builder.output_var == "mood_score"
-
-    def test_create_distribution_normal(self, simple_glmm_spec, simple_priors, simple_data):
-        """Normal distribution created correctly."""
-        builder = DSEMModelBuilder(
-            glmm_spec=simple_glmm_spec,
-            priors=simple_priors,
-        )
-        builder.build_model(simple_data)
-        # Check the intercept is Normal
-        var = builder.model.named_vars["intercept_mood_score"]
-        assert "normal" in str(var.type).lower() or var is not None
-
-    def test_create_distribution_halfnormal(self, simple_glmm_spec, simple_priors, simple_data):
-        """HalfNormal distribution created correctly."""
-        builder = DSEMModelBuilder(
-            glmm_spec=simple_glmm_spec,
-            priors=simple_priors,
-        )
-        builder.build_model(simple_data)
-        var = builder.model.named_vars["sigma_mood_score"]
-        assert var is not None
-
-    def test_create_distribution_beta(self, simple_glmm_spec, simple_priors, simple_data):
-        """Beta distribution created correctly."""
-        builder = DSEMModelBuilder(
-            glmm_spec=simple_glmm_spec,
-            priors=simple_priors,
-        )
-        builder.build_model(simple_data)
-        var = builder.model.named_vars["rho_mood"]
-        assert var is not None
-
-    def test_sample_prior_predictive(self, simple_glmm_spec, simple_priors, simple_data):
-        """Prior predictive sampling works."""
-        builder = DSEMModelBuilder(
-            glmm_spec=simple_glmm_spec,
-            priors=simple_priors,
-        )
-        builder.build_model(simple_data)
-        idata = builder.sample_prior_predictive(samples=10)
-
-        assert hasattr(idata, "prior")
-        assert "intercept_mood_score" in idata.prior
-
-    def test_sample_prior_predictive_without_build_raises(self, simple_glmm_spec, simple_priors):
-        """sample_prior_predictive raises if model not built."""
-        builder = DSEMModelBuilder(
-            glmm_spec=simple_glmm_spec,
-            priors=simple_priors,
-        )
-        with pytest.raises(ValueError, match="Model must be built"):
-            builder.sample_prior_predictive()
+        assert model.spec.n_manifest == 1  # mood_score only
 
 
 # --- Prior Validation Tests ---
