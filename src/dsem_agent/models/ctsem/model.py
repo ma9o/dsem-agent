@@ -10,6 +10,7 @@ Supports:
 """
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any, Literal
 
 import jax.numpy as jnp
@@ -20,6 +21,19 @@ from jax import vmap
 from numpyro.infer import MCMC, NUTS
 
 from dsem_agent.models.ctsem.kalman import kalman_log_likelihood
+
+
+class NoiseFamily(StrEnum):
+    """Supported noise distribution families for state-space models.
+
+    Used to specify process noise (diffusion) and observation noise (manifest)
+    distributions for strategy selection.
+    """
+
+    GAUSSIAN = "gaussian"  # Standard Gaussian - enables Kalman/UKF
+    STUDENT_T = "student_t"  # Heavy-tailed - requires particle filter
+    POISSON = "poisson"  # Count data - requires particle filter
+    GAMMA = "gamma"  # Positive continuous - requires particle filter
 
 
 @dataclass
@@ -50,6 +64,11 @@ class CTSEMSpec:
     manifest_var: jnp.ndarray | Literal["free", "diag"] = "diag"
     t0_means: jnp.ndarray | Literal["free"] = "free"
     t0_var: jnp.ndarray | Literal["free", "diag"] = "free"
+
+    # Distribution families for strategy selection
+    # Used by select_strategy() to choose Kalman vs UKF vs Particle filter
+    diffusion_dist: NoiseFamily = NoiseFamily.GAUSSIAN  # Process noise family
+    manifest_dist: NoiseFamily = NoiseFamily.GAUSSIAN  # Observation noise family
 
     # Hierarchical structure
     hierarchical: bool = False
@@ -144,6 +163,26 @@ class CTSEMModel:
         """
         self.spec = spec
         self.priors = priors or CTSEMPriors()
+        self._strategy = None  # Cached strategy selection
+
+    def get_inference_strategy(self):
+        """Get the inference strategy for this model.
+
+        Returns the appropriate marginalization strategy (Kalman/UKF/Particle)
+        based on the model specification's dynamics and distribution families.
+
+        Returns:
+            InferenceStrategy enum value
+
+        Example:
+            >>> model = CTSEMModel(CTSEMSpec(n_latent=2, n_manifest=2))
+            >>> model.get_inference_strategy()
+            <InferenceStrategy.KALMAN: 'kalman'>
+        """
+        if self._strategy is None:
+            from dsem_agent.models.strategy_selector import select_strategy
+            self._strategy = select_strategy(self.spec)
+        return self._strategy
 
     def _sample_drift(
         self, spec: CTSEMSpec, n_subjects: int = 1, hierarchical: bool = False
@@ -483,6 +522,12 @@ class CTSEMModel:
         t0_cov = t0_chol @ t0_chol.T
 
         # Compute log-likelihood
+        # NOTE: Currently uses Kalman filter directly. When UKF/Particle backends
+        # are implemented, use:
+        #   strategy = self.get_inference_strategy()
+        #   backend = get_likelihood_backend(strategy)
+        #   ll = backend.compute_log_likelihood(ct_params, meas_params, init, obs, dt)
+        # See docs/modeling/inference-strategies.md for strategy selection rules.
         if not hierarchical or n_subjects == 1:
             # Single subject
             time_intervals = jnp.diff(times, prepend=times[0])
