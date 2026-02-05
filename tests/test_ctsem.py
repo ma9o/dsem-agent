@@ -52,7 +52,7 @@ class TestCoreUtilities:
 
     def test_solve_lyapunov_simple(self):
         """Test Lyapunov solver with simple 2x2 case."""
-        from dsem_agent.models.ctsem.core import solve_lyapunov
+        from dsem_agent.models.ctsem.discretization import solve_lyapunov
 
         # Simple stable drift matrix
         A = jnp.array([[-1.0, 0.0], [0.0, -2.0]])
@@ -66,7 +66,7 @@ class TestCoreUtilities:
 
     def test_solve_lyapunov_coupled(self):
         """Test Lyapunov solver with coupled system."""
-        from dsem_agent.models.ctsem.core import solve_lyapunov
+        from dsem_agent.models.ctsem.discretization import solve_lyapunov
 
         # Coupled drift
         A = jnp.array([[-1.0, 0.5], [0.3, -2.0]])
@@ -83,7 +83,7 @@ class TestCoreUtilities:
 
     def test_discretize_system_identity(self):
         """Test that dt=0 gives identity transformation."""
-        from dsem_agent.models.ctsem.core import discretize_system
+        from dsem_agent.models.ctsem.discretization import discretize_system
 
         A = jnp.array([[-1.0, 0.0], [0.0, -2.0]])
         Q = jnp.array([[1.0, 0.0], [0.0, 1.0]])
@@ -99,7 +99,7 @@ class TestCoreUtilities:
         """Test discretization at dt=1."""
         import jax.scipy.linalg as jla
 
-        from dsem_agent.models.ctsem.core import discretize_system
+        from dsem_agent.models.ctsem.discretization import discretize_system
 
         A = jnp.array([[-1.0, 0.0], [0.0, -2.0]])
         Q = jnp.array([[1.0, 0.0], [0.0, 1.0]])
@@ -117,7 +117,7 @@ class TestCoreUtilities:
 
     def test_compute_asymptotic_diffusion(self):
         """Test asymptotic diffusion computation."""
-        from dsem_agent.models.ctsem.core import compute_asymptotic_diffusion
+        from dsem_agent.models.ctsem.discretization import compute_asymptotic_diffusion
 
         A = jnp.array([[-1.0, 0.0], [0.0, -1.0]])
         G = jnp.array([[1.0, 0.0], [0.0, 1.0]])
@@ -325,7 +325,7 @@ class TestParityWithCtsem:
 
         Calls R's ctsem package directly via rpy2 and compares results.
         """
-        from dsem_agent.models.ctsem.core import discretize_system
+        from dsem_agent.models.ctsem.discretization import discretize_system
 
         ro = r_ctsem["ro"]
         numpy2ri = r_ctsem["numpy2ri"]
@@ -582,7 +582,7 @@ class TestParityDimensionScaling:
     @pytest.mark.parametrize("n_latent", [3, 5])
     def test_discretization_scaling(self, r_ctsem, n_latent):
         """Discretization matches ctsem for nxn systems."""
-        from dsem_agent.models.ctsem.core import discretize_system
+        from dsem_agent.models.ctsem.discretization import discretize_system
 
         ro = r_ctsem["ro"]
         numpy2ri = r_ctsem["numpy2ri"]
@@ -792,7 +792,7 @@ class TestParityEdgeCases:
 
     def test_near_singular_drift(self, r_ctsem):
         """Eigenvalues close to 0 (slow dynamics)."""
-        from dsem_agent.models.ctsem.core import discretize_system
+        from dsem_agent.models.ctsem.discretization import discretize_system
 
         ro = r_ctsem["ro"]
         numpy2ri = r_ctsem["numpy2ri"]
@@ -855,7 +855,7 @@ class TestParityEdgeCases:
     @pytest.mark.parametrize("dt", [0.001, 10.0, 100.0])
     def test_extreme_time_intervals(self, r_ctsem, dt):
         """Very small and very large dt values."""
-        from dsem_agent.models.ctsem.core import discretize_system
+        from dsem_agent.models.ctsem.discretization import discretize_system
 
         ro = r_ctsem["ro"]
         numpy2ri = r_ctsem["numpy2ri"]
@@ -924,7 +924,7 @@ class TestParityEdgeCases:
 
     def test_ill_conditioned_diffusion(self, r_ctsem):
         """High condition number diffusion covariance."""
-        from dsem_agent.models.ctsem.core import discretize_system
+        from dsem_agent.models.ctsem.discretization import discretize_system
 
         ro = r_ctsem["ro"]
         numpy2ri = r_ctsem["numpy2ri"]

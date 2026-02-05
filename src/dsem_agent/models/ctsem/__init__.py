@@ -8,7 +8,8 @@ The CT-SEM model uses stochastic differential equations to model
 continuous-time dynamics, allowing for irregularly spaced observations.
 """
 
-from dsem_agent.models.ctsem.core import (
+from dsem_agent.models.ctsem.core import cholesky_of_diffusion, ensure_stability
+from dsem_agent.models.ctsem.discretization import (
     compute_asymptotic_diffusion,
     compute_discrete_cint,
     compute_discrete_diffusion,
@@ -17,10 +18,18 @@ from dsem_agent.models.ctsem.core import (
     solve_lyapunov,
 )
 from dsem_agent.models.ctsem.kalman import kalman_filter, kalman_log_likelihood
-from dsem_agent.models.ctsem.model import CTSEMModel, CTSEMPriors, CTSEMSpec
+from dsem_agent.models.ctsem.model import (
+    CTSEMModel,
+    CTSEMPriors,
+    CTSEMSpec,
+    NoiseFamily,
+)
 
 __all__ = [
     # Core utilities
+    "cholesky_of_diffusion",
+    "ensure_stability",
+    # Discretization
     "solve_lyapunov",
     "compute_asymptotic_diffusion",
     "compute_discrete_diffusion",
@@ -34,4 +43,5 @@ __all__ = [
     "CTSEMModel",
     "CTSEMPriors",
     "CTSEMSpec",
+    "NoiseFamily",
 ]
