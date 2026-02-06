@@ -14,7 +14,7 @@ to support different inference strategies.
 
 import jax.numpy as jnp
 import jax.scipy.linalg as jla
-from jax import lax
+from jax import lax, vmap
 
 
 def solve_lyapunov(A: jnp.ndarray, Q: jnp.ndarray) -> jnp.ndarray:
@@ -278,3 +278,68 @@ def discretize_system(
         discrete_cint = compute_discrete_cint(drift, cint, dt)
 
     return discrete_drift, discrete_Q, discrete_cint
+
+
+def _discretize_system_with_cint(
+    drift: jnp.ndarray,
+    diffusion_cov: jnp.ndarray,
+    cint: jnp.ndarray,
+    dt: float,
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """Discretize with cint always present (vmap-compatible).
+
+    Unlike discretize_system, this always computes discrete_cint,
+    making it safe for use with jax.vmap over the dt axis.
+    """
+    discrete_drift = jla.expm(drift * dt)
+    discrete_Q = compute_discrete_diffusion(drift, diffusion_cov, dt)
+    discrete_cint = compute_discrete_cint(drift, cint, dt)
+    return discrete_drift, discrete_Q, discrete_cint
+
+
+def _discretize_system_no_cint(
+    drift: jnp.ndarray,
+    diffusion_cov: jnp.ndarray,
+    dt: float,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Discretize without cint (vmap-compatible)."""
+    discrete_drift = jla.expm(drift * dt)
+    discrete_Q = compute_discrete_diffusion(drift, diffusion_cov, dt)
+    return discrete_drift, discrete_Q
+
+
+def discretize_system_batched(
+    drift: jnp.ndarray,
+    diffusion_cov: jnp.ndarray,
+    cint: jnp.ndarray | None,
+    dt_array: jnp.ndarray,
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray | None]:
+    """Batch-discretize CT system over an array of time intervals.
+
+    Uses jax.vmap over the dt dimension. For T timesteps, produces
+    (T, n, n) arrays for drift and Q, and (T, n) for cint.
+
+    Args:
+        drift: (n, n) continuous drift matrix A
+        diffusion_cov: (n, n) diffusion covariance (G*G')
+        cint: (n,) continuous intercept or None
+        dt_array: (T,) array of time intervals
+
+    Returns:
+        Ad: (T, n, n) discrete drift matrices
+        Qd: (T, n, n) discrete process noise covariances
+        cd: (T, n) discrete intercepts, or None if cint is None
+    """
+    if cint is not None:
+        Ad, Qd, cd = vmap(
+            lambda dt: _discretize_system_with_cint(drift, diffusion_cov, cint, dt)
+        )(dt_array)
+        # cd comes out as (T, n, 1) from compute_discrete_cint — squeeze
+        if cd.ndim == 3:
+            cd = cd.squeeze(-1)
+        return Ad, Qd, cd
+    else:
+        Ad, Qd = vmap(
+            lambda dt: _discretize_system_no_cint(drift, diffusion_cov, dt)
+        )(dt_array)
+        return Ad, Qd, None
