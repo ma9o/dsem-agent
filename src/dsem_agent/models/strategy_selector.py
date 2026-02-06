@@ -6,8 +6,8 @@ model structure (linearity of dynamics, distribution families).
 Decision tree:
 | Dynamics        | Observations | Strategy | Backend  |
 |-----------------|--------------|----------|----------|
-| Linear          | Gaussian     | Kalman   | dynamax  |
-| Mildly nonlinear| Gaussian     | UKF      | dynamax  |
+| Linear          | Gaussian     | Kalman   | cuthbert |
+| Mildly nonlinear| Gaussian     | Moments  | cuthbert |
 | Nonlinear       | Gaussian     | Particle | cuthbert |
 | Linear          | Non-Gaussian | Particle*| cuthbert |
 | Nonlinear       | Non-Gaussian | Particle | cuthbert |
@@ -30,8 +30,8 @@ if TYPE_CHECKING:
 class InferenceStrategy(Enum):
     """Available inference strategies for state-space models."""
 
-    KALMAN = "kalman"  # Exact: dynamax Kalman filter
-    UKF = "ukf"  # Approximate: dynamax unscented Kalman filter
+    KALMAN = "kalman"  # Exact: cuthbert Kalman filter
+    UKF = "ukf"  # Approximate: cuthbert moments filter (Jacobian-based linearization)
     PARTICLE = "particle"  # General: cuthbert particle filter
 
 
@@ -203,7 +203,7 @@ def get_likelihood_backend(strategy: InferenceStrategy, **kwargs):
 
     Args:
         strategy: InferenceStrategy enum value (KALMAN or UKF)
-        **kwargs: Backend-specific configuration (e.g., alpha/beta/kappa for UKF)
+        **kwargs: Backend-specific configuration (e.g., dynamics_fn/measurement_fn for UKF)
 
     Returns:
         Instantiated likelihood backend (KalmanLikelihood or UKFLikelihood)

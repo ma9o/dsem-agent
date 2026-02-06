@@ -85,9 +85,9 @@ class LikelihoodBackend(Protocol):
         numpyro.factor("ssm", backend.compute_log_likelihood(...))
 
     Example implementations:
-    - KalmanLikelihood: Exact for linear-Gaussian (dynamax)
-    - UKFLikelihood: Approximate for mildly nonlinear (dynamax)
-    - ParticleLikelihood: General nonlinear/non-Gaussian (cuthbert)
+    - KalmanLikelihood: Exact for linear-Gaussian (cuthbert)
+    - UKFLikelihood: Approximate for mildly nonlinear (cuthbert moments)
+    - ParticleLikelihood: General nonlinear/non-Gaussian (cuthbert SMC)
     """
 
     def compute_log_likelihood(

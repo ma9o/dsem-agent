@@ -4,8 +4,8 @@ Each backend implements compute_log_likelihood() to integrate out latent states
 and return p(y|θ) for use in NumPyro via numpyro.factor().
 
 Available backends:
-- kalman: Exact inference for linear-Gaussian models (dynamax)
-- ukf: Unscented Kalman filter for mildly nonlinear models (dynamax)
+- kalman: Exact inference for linear-Gaussian models (cuthbert)
+- ukf: Moments filter for mildly nonlinear models (cuthbert)
 
 For particle-based inference, use dsem_agent.models.pmmh (PMMH path).
 """
