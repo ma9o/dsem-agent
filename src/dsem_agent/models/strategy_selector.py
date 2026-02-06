@@ -197,19 +197,21 @@ def _is_mildly_nonlinear(matrix_spec) -> bool:  # noqa: ARG001
 def get_likelihood_backend(strategy: InferenceStrategy, **kwargs):
     """Get the likelihood backend for a given strategy.
 
+    Returns a LikelihoodBackend for use with numpyro.factor() in NUTS inference.
+    Only supports KALMAN and UKF strategies. PARTICLE strategy uses a completely
+    separate PMMH inference path (see dsem_agent.models.pmmh).
+
     Args:
-        strategy: InferenceStrategy enum value
-        **kwargs: Backend-specific configuration (e.g., n_particles for particle filter)
+        strategy: InferenceStrategy enum value (KALMAN or UKF)
+        **kwargs: Backend-specific configuration (e.g., alpha/beta/kappa for UKF)
 
     Returns:
-        Instantiated likelihood backend
+        Instantiated likelihood backend (KalmanLikelihood or UKFLikelihood)
 
-    Note:
-        UKF and Particle backends are stub implementations that will raise
-        NotImplementedError until dynamax/cuthbert dependencies are added.
+    Raises:
+        ValueError: If PARTICLE strategy is requested (use PMMH instead)
     """
     from dsem_agent.models.likelihoods.kalman import KalmanLikelihood
-    from dsem_agent.models.likelihoods.particle import ParticleLikelihood
     from dsem_agent.models.likelihoods.ukf import UKFLikelihood
 
     if strategy == InferenceStrategy.KALMAN:
@@ -217,6 +219,9 @@ def get_likelihood_backend(strategy: InferenceStrategy, **kwargs):
     elif strategy == InferenceStrategy.UKF:
         return UKFLikelihood(**kwargs)
     elif strategy == InferenceStrategy.PARTICLE:
-        return ParticleLikelihood(**kwargs)
+        raise ValueError(
+            "PARTICLE strategy uses PMMH inference, not a likelihood backend. "
+            "Use dsem_agent.models.pmmh.run_pmmh() for particle-based inference."
+        )
     else:
         raise ValueError(f"Unknown strategy: {strategy}")

@@ -19,7 +19,8 @@ import numpyro.distributions as dist
 from jax import vmap
 from numpyro.infer import MCMC, NUTS
 
-from dsem_agent.models.ssm.kalman import kalman_log_likelihood
+from dsem_agent.models.likelihoods.base import CTParams, InitialStateParams, MeasurementParams
+from dsem_agent.models.strategy_selector import InferenceStrategy, get_likelihood_backend
 
 
 class NoiseFamily(StrEnum):
@@ -520,43 +521,42 @@ class SSMModel:
         manifest_cov = manifest_chol @ manifest_chol.T
         t0_cov = t0_chol @ t0_chol.T
 
-        # Compute log-likelihood
-        # NOTE: Currently uses Kalman filter directly. When UKF/Particle backends
-        # are implemented, use:
-        #   strategy = self.get_inference_strategy()
-        #   backend = get_likelihood_backend(strategy)
-        #   ll = backend.compute_log_likelihood(ct_params, meas_params, init, obs, dt)
-        # See docs/modeling/inference-strategies.md for strategy selection rules.
+        # Compute log-likelihood via selected backend (Kalman or UKF)
+        # PARTICLE strategy uses PMMH (separate inference path, not NumPyro).
+        strategy = self.get_inference_strategy()
+        if strategy == InferenceStrategy.PARTICLE:
+            raise ValueError(
+                "PARTICLE strategy requires PMMH inference. "
+                "Use fit() which auto-dispatches, or call run_pmmh() directly."
+            )
+        backend = get_likelihood_backend(strategy)
+
+        ct_params = CTParams(drift=drift, diffusion_cov=diffusion_cov, cint=cint)
+        meas_params = MeasurementParams(
+            lambda_mat=lambda_mat,
+            manifest_means=manifest_means,
+            manifest_cov=manifest_cov,
+        )
+
         if not hierarchical or n_subjects == 1:
             # Single subject
             time_intervals = jnp.diff(times, prepend=times[0])
             time_intervals = time_intervals.at[0].set(1e-6)
 
-            ll = kalman_log_likelihood(
-                observations=observations,
-                time_intervals=time_intervals,
-                drift=drift,
-                diffusion_cov=diffusion_cov,
-                cint=cint,
-                lambda_mat=lambda_mat,
-                manifest_means=manifest_means,
-                manifest_cov=manifest_cov,
-                t0_mean=t0_means,
-                t0_cov=t0_cov,
+            init = InitialStateParams(mean=t0_means, cov=t0_cov)
+            ll = backend.compute_log_likelihood(
+                ct_params, meas_params, init, observations, time_intervals
             )
         else:
             # Multiple subjects with hierarchical structure
             ll = self._hierarchical_likelihood(
+                backend,
+                ct_params,
+                meas_params,
                 observations,
                 times,
                 subject_ids,
                 n_subjects,
-                drift,
-                diffusion_cov,
-                cint,
-                lambda_mat,
-                manifest_means,
-                manifest_cov,
                 t0_means,
                 t0_cov,
             )
@@ -565,37 +565,39 @@ class SSMModel:
 
     def _hierarchical_likelihood(
         self,
+        backend,
+        ct_params: CTParams,
+        meas_params: MeasurementParams,
         observations: jnp.ndarray,
         times: jnp.ndarray,
         subject_ids: jnp.ndarray,
         n_subjects: int,
-        drift: jnp.ndarray,
-        diffusion_cov: jnp.ndarray,
-        cint: jnp.ndarray | None,
-        lambda_mat: jnp.ndarray,
-        manifest_means: jnp.ndarray,
-        manifest_cov: jnp.ndarray,
         t0_means: jnp.ndarray,
         t0_cov: jnp.ndarray,
     ) -> float:
         """Compute log-likelihood for hierarchical model with subject-varying params."""
 
         def subject_ll(subj_idx):
-            # Get subject-specific parameters
-            subj_drift = drift[subj_idx] if drift.ndim == 3 else drift
-            subj_diff_cov = diffusion_cov[subj_idx] if diffusion_cov.ndim == 3 else diffusion_cov
-            subj_cint = cint[subj_idx] if cint is not None and cint.ndim == 2 else cint
+            # Get subject-specific CT params
+            subj_drift = ct_params.drift[subj_idx] if ct_params.drift.ndim == 3 else ct_params.drift
+            subj_diff_cov = (
+                ct_params.diffusion_cov[subj_idx]
+                if ct_params.diffusion_cov.ndim == 3
+                else ct_params.diffusion_cov
+            )
+            subj_cint = (
+                ct_params.cint[subj_idx]
+                if ct_params.cint is not None and ct_params.cint.ndim == 2
+                else ct_params.cint
+            )
             subj_t0_mean = t0_means[subj_idx] if t0_means.ndim == 2 else t0_means
+
+            subj_ct = CTParams(drift=subj_drift, diffusion_cov=subj_diff_cov, cint=subj_cint)
+            subj_init = InitialStateParams(mean=subj_t0_mean, cov=t0_cov)
 
             # Get subject's observations
             mask = subject_ids == subj_idx
-            # Use where to get a fixed-size slice (JAX compatible)
-            # This requires padding, handled by the caller
-            subj_obs = jnp.where(
-                mask[:, None],
-                observations,
-                jnp.nan,
-            )
+            subj_obs = jnp.where(mask[:, None], observations, jnp.nan)
             subj_times = jnp.where(mask, times, jnp.inf)
 
             # Sort by time and filter
@@ -610,18 +612,9 @@ class SSMModel:
             time_intervals = jnp.diff(subj_times_sorted, prepend=subj_times_sorted[0])
             time_intervals = time_intervals.at[0].set(1e-6)
 
-            # Compute likelihood
-            ll = kalman_log_likelihood(
-                observations=subj_obs_sorted,
-                time_intervals=time_intervals,
-                drift=subj_drift,
-                diffusion_cov=subj_diff_cov,
-                cint=subj_cint,
-                lambda_mat=lambda_mat,
-                manifest_means=manifest_means,
-                manifest_cov=manifest_cov,
-                t0_mean=subj_t0_mean,
-                t0_cov=t0_cov,
+            # Compute likelihood via backend
+            ll = backend.compute_log_likelihood(
+                subj_ct, meas_params, subj_init, subj_obs_sorted, time_intervals
             )
 
             # Only count if subject has observations
@@ -644,6 +637,13 @@ class SSMModel:
     ) -> MCMC:
         """Fit the model using MCMC.
 
+        Automatically dispatches to the appropriate inference engine:
+        - KALMAN/UKF: NumPyro NUTS (gradient-based HMC)
+        - PARTICLE: PMMH (particle marginal Metropolis-Hastings)
+
+        For PARTICLE strategy, use fit_pmmh() directly for full control
+        over particle filter and proposal settings.
+
         Args:
             observations: (N, n_manifest) observed data
             times: (N,) observation times
@@ -655,8 +655,20 @@ class SSMModel:
             **mcmc_kwargs: Additional MCMC arguments
 
         Returns:
-            MCMC object with posterior samples
+            MCMC object with posterior samples (for KALMAN/UKF)
+
+        Raises:
+            ValueError: If PARTICLE strategy is selected (use fit_pmmh instead)
         """
+        strategy = self.get_inference_strategy()
+
+        if strategy == InferenceStrategy.PARTICLE:
+            raise ValueError(
+                "PARTICLE strategy requires PMMH inference which has a different API. "
+                "Use fit_pmmh() for particle-based inference, or use run_pmmh() "
+                "directly from dsem_agent.models.pmmh for full control."
+            )
+
         kernel = NUTS(self.model)
         mcmc = MCMC(
             kernel,
