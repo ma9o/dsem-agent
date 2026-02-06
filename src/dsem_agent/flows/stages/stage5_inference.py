@@ -50,12 +50,22 @@ def fit_model(stage4_result: dict, raw_data: pl.DataFrame) -> Any:
         if "timestamp" in X.columns:
             X = X.rename(columns={"timestamp": "time"})
 
-        # Fit the model
-        mcmc_result = builder.fit(X)
+        # Fit the model — may return MCMC or PMMHResult
+        from dsem_agent.models.pmmh import PMMHResult
 
+        result = builder.fit(X)
+
+        if isinstance(result, PMMHResult):
+            return {
+                "fitted": True,
+                "inference_type": "pmmh",
+                "pmmh_result": result,
+                "builder": builder,
+            }
         return {
             "fitted": True,
-            "mcmc": mcmc_result,
+            "inference_type": "nuts",
+            "mcmc": result,
             "builder": builder,
         }
 
