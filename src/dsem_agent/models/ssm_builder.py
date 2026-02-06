@@ -11,7 +11,6 @@ import numpy as np
 import pandas as pd
 from numpyro.infer import MCMC
 
-from dsem_agent.models.pmmh import PMMHResult
 from dsem_agent.models.ssm import NoiseFamily, SSMModel, SSMPriors, SSMSpec
 from dsem_agent.orchestrator.schemas_model import DistributionFamily, ModelSpec, ParameterRole
 from dsem_agent.workers.schemas_prior import PriorProposal
@@ -53,7 +52,7 @@ class SSMModelBuilder:
             model_spec: Model specification from orchestrator (will be converted)
             priors: Prior proposals for each parameter
             ssm_spec: Direct SSMSpec (overrides model_spec conversion)
-            model_config: Override model configuration
+            model_config: Override model configuration (n_particles, pf_seed)
             sampler_config: Override sampler configuration
         """
         self._model_spec = model_spec
@@ -64,7 +63,6 @@ class SSMModelBuilder:
 
         self._model: SSMModel | None = None
         self._mcmc: MCMC | None = None
-        self._pmmh_result: PMMHResult | None = None
 
     @staticmethod
     def get_default_sampler_config() -> dict:
@@ -76,9 +74,7 @@ class SSMModelBuilder:
             "seed": 0,
         }
 
-    def _convert_spec_to_ssm(
-        self, model_spec: ModelSpec | dict, data: pd.DataFrame
-    ) -> SSMSpec:
+    def _convert_spec_to_ssm(self, model_spec: ModelSpec | dict, data: pd.DataFrame) -> SSMSpec:
         """Convert ModelSpec to SSMSpec.
 
         This is a heuristic conversion that maps the ModelSpec
@@ -93,6 +89,7 @@ class SSMModelBuilder:
         """
         if isinstance(model_spec, dict):
             from dsem_agent.orchestrator.schemas_model import ModelSpec
+
             model_spec = ModelSpec.model_validate(model_spec)
 
         # Extract dimensions from data
@@ -101,9 +98,7 @@ class SSMModelBuilder:
 
         # Infer latent structure from parameters
         # Look for AR coefficients to determine number of latent processes
-        ar_params = [
-            p for p in model_spec.parameters if p.role == ParameterRole.AR_COEFFICIENT
-        ]
+        ar_params = [p for p in model_spec.parameters if p.role == ParameterRole.AR_COEFFICIENT]
         n_latent = max(len(ar_params), 1)
 
         # Check for hierarchical structure
@@ -160,6 +155,7 @@ class SSMModelBuilder:
         # Skip ModelSpec validation if empty or None - just use priors directly
         if model_spec and isinstance(model_spec, dict) and model_spec.get("likelihoods"):
             from dsem_agent.orchestrator.schemas_model import ModelSpec
+
             model_spec = ModelSpec.model_validate(model_spec)
 
         # Map AR coefficients to drift diagonal
@@ -209,7 +205,8 @@ class SSMModelBuilder:
         else:
             # Auto-detect from data
             manifest_cols = [
-                c for c in X.columns
+                c
+                for c in X.columns
                 if c not in ["time", "time_bucket", "subject_id", "subject"]
                 and not c.endswith("_lag1")
             ]
@@ -224,8 +221,10 @@ class SSMModelBuilder:
         # Convert priors
         priors = self._convert_priors_to_ssm(self._priors, self._model_spec or {})
 
-        # Create model
-        self._model = SSMModel(spec, priors)
+        # Create model with PF config from model_config
+        n_particles = self._model_config.get("n_particles", 200)
+        pf_seed = self._model_config.get("pf_seed", 0)
+        self._model = SSMModel(spec, priors, n_particles=n_particles, pf_seed=pf_seed)
         self._spec = spec
 
         return self._model
@@ -235,11 +234,8 @@ class SSMModelBuilder:
         X: pd.DataFrame,
         y: pd.Series | np.ndarray | None = None,
         **kwargs: Any,
-    ) -> MCMC | PMMHResult:
+    ) -> MCMC:
         """Fit the SSM model to data.
-
-        Automatically dispatches to NUTS (Kalman/UKF) or PMMH (Particle)
-        based on the model's noise families.
 
         Args:
             X: Data with indicator columns, time, and optional subject_id
@@ -247,7 +243,7 @@ class SSMModelBuilder:
             **kwargs: Additional arguments passed to MCMC
 
         Returns:
-            MCMC object (for Kalman/UKF) or PMMHResult (for Particle)
+            MCMC object with posterior samples
         """
         if self._model is None:
             self.build_model(X, y)
@@ -258,7 +254,7 @@ class SSMModelBuilder:
         # Merge sampler config with kwargs
         sampler_config = {**self._sampler_config, **kwargs}
 
-        # Fit — may return MCMC or PMMHResult
+        # Fit — always returns MCMC
         result = self._model.fit(
             observations=observations,
             times=times,
@@ -266,16 +262,10 @@ class SSMModelBuilder:
             **sampler_config,
         )
 
-        if isinstance(result, PMMHResult):
-            self._pmmh_result = result
-        else:
-            self._mcmc = result
-
+        self._mcmc = result
         return result
 
-    def _prepare_data(
-        self, X: pd.DataFrame
-    ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray | None]:
+    def _prepare_data(self, X: pd.DataFrame) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray | None]:
         """Prepare data for SSM fitting.
 
         Args:
@@ -289,7 +279,8 @@ class SSMModelBuilder:
             manifest_cols = self._spec.manifest_names
         else:
             manifest_cols = [
-                c for c in X.columns
+                c
+                for c in X.columns
                 if c not in ["time", "time_bucket", "subject_id", "subject"]
                 and not c.endswith("_lag1")
             ]
@@ -309,9 +300,7 @@ class SSMModelBuilder:
         subject_col = "subject_id" if "subject_id" in X.columns else "subject"
         if subject_col in X.columns:
             # Convert to 0-indexed integers
-            subject_ids = jnp.array(
-                pd.factorize(X[subject_col])[0], dtype=jnp.int32
-            )
+            subject_ids = jnp.array(pd.factorize(X[subject_col])[0], dtype=jnp.int32)
         else:
             subject_ids = None
 
@@ -336,11 +325,8 @@ class SSMModelBuilder:
         """Get posterior samples.
 
         Returns:
-            Dict of posterior samples (from MCMC or PMMH)
+            Dict of posterior samples
         """
-        if self._pmmh_result is not None:
-            # Return raw PMMH samples as a single array keyed by "theta"
-            return {"theta": self._pmmh_result.samples}
         if self._mcmc is not None:
             return self._mcmc.get_samples()
         raise ValueError("Model must be fit before getting samples")
@@ -351,34 +337,25 @@ class SSMModelBuilder:
         Returns:
             DataFrame with summary statistics
         """
-        if self._mcmc is None and self._pmmh_result is None:
+        if self._mcmc is None:
             raise ValueError("Model must be fit before getting summary")
 
-        if self._mcmc is not None:
-            self._mcmc.print_summary()
+        self._mcmc.print_summary()
 
         # Also return as DataFrame
         samples = self.get_samples()
         summary_data = []
         for name, values in samples.items():
             if values.ndim == 1:
-                summary_data.append({
-                    "parameter": name,
-                    "mean": float(jnp.mean(values)),
-                    "std": float(jnp.std(values)),
-                    "5%": float(jnp.percentile(values, 5)),
-                    "95%": float(jnp.percentile(values, 95)),
-                })
-            elif values.ndim == 2:
-                # PMMH samples: (n_samples, d) — summarize each dimension
-                for i in range(values.shape[1]):
-                    summary_data.append({
-                        "parameter": f"{name}[{i}]",
-                        "mean": float(jnp.mean(values[:, i])),
-                        "std": float(jnp.std(values[:, i])),
-                        "5%": float(jnp.percentile(values[:, i], 5)),
-                        "95%": float(jnp.percentile(values[:, i], 95)),
-                    })
+                summary_data.append(
+                    {
+                        "parameter": name,
+                        "mean": float(jnp.mean(values)),
+                        "std": float(jnp.std(values)),
+                        "5%": float(jnp.percentile(values, 5)),
+                        "95%": float(jnp.percentile(values, 95)),
+                    }
+                )
         return pd.DataFrame(summary_data)
 
 
@@ -405,9 +382,7 @@ def model_spec_to_ssm_spec(
         n_manifest = len(model_spec.likelihoods)
 
     if n_latent is None:
-        ar_params = [
-            p for p in model_spec.parameters if p.role == ParameterRole.AR_COEFFICIENT
-        ]
+        ar_params = [p for p in model_spec.parameters if p.role == ParameterRole.AR_COEFFICIENT]
         n_latent = max(len(ar_params), n_manifest)
 
     # Check for hierarchical structure

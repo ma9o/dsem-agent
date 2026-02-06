@@ -58,12 +58,14 @@ def validate_prior_predictive(
     # Return valid results for all parameters
     results: list[PriorValidationResult] = []
     for param_name in priors_dict:
-        results.append(PriorValidationResult(
-            parameter=param_name,
-            is_valid=True,
-            issue=None,
-            suggested_adjustment=None,
-        ))
+        results.append(
+            PriorValidationResult(
+                parameter=param_name,
+                is_valid=True,
+                issue=None,
+                suggested_adjustment=None,
+            )
+        )
 
     return True, results
 
