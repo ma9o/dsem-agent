@@ -106,9 +106,7 @@ def solve_lyapunov_iterative(
     return X
 
 
-def compute_asymptotic_diffusion(
-    drift: jnp.ndarray, diffusion_cov: jnp.ndarray
-) -> jnp.ndarray:
+def compute_asymptotic_diffusion(drift: jnp.ndarray, diffusion_cov: jnp.ndarray) -> jnp.ndarray:
     """Compute asymptotic (stationary) diffusion covariance.
 
     Solves: A*Q_inf + Q_inf*A' = -G*G'
@@ -159,9 +157,7 @@ def compute_discrete_diffusion(
     return Q_dt
 
 
-def compute_discrete_cint(
-    drift: jnp.ndarray, cint: jnp.ndarray, dt: float
-) -> jnp.ndarray:
+def compute_discrete_cint(drift: jnp.ndarray, cint: jnp.ndarray, dt: float) -> jnp.ndarray:
     """Compute discrete-time intercept for time interval dt.
 
     c_dt = A^{-1} * (exp(A*dt) - I) * c
@@ -331,15 +327,13 @@ def discretize_system_batched(
         cd: (T, n) discrete intercepts, or None if cint is None
     """
     if cint is not None:
-        Ad, Qd, cd = vmap(
-            lambda dt: _discretize_system_with_cint(drift, diffusion_cov, cint, dt)
-        )(dt_array)
+        Ad, Qd, cd = vmap(lambda dt: _discretize_system_with_cint(drift, diffusion_cov, cint, dt))(
+            dt_array
+        )
         # cd comes out as (T, n, 1) from compute_discrete_cint — squeeze
         if cd.ndim == 3:
             cd = cd.squeeze(-1)
         return Ad, Qd, cd
     else:
-        Ad, Qd = vmap(
-            lambda dt: _discretize_system_no_cint(drift, diffusion_cov, dt)
-        )(dt_array)
+        Ad, Qd = vmap(lambda dt: _discretize_system_no_cint(drift, diffusion_cov, dt))(dt_array)
         return Ad, Qd, None

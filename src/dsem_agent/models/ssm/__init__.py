@@ -3,7 +3,7 @@
 This module implements hierarchical Bayesian state-space models with:
 - Continuous-time dynamics via stochastic differential equations
 - Automatic CT→DT discretization for irregular time intervals
-- Multiple inference backends (Kalman, UKF via cuthbert moments filter; PMMH for particle)
+- Differentiable particle filter likelihood + NUTS inference
 """
 
 from dsem_agent.models.ssm.core import cholesky_of_diffusion, ensure_stability

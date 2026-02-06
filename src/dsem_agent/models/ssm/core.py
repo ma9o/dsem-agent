@@ -46,8 +46,6 @@ def ensure_stability(drift: jnp.ndarray, eps: float = 1e-6) -> jnp.ndarray:
     stable_eigenvalues = stable_real + 1j * jnp.imag(eigenvalues)
 
     # Reconstruct matrix
-    stable_drift = eigenvectors @ jnp.diag(stable_eigenvalues) @ jnp.linalg.inv(
-        eigenvectors
-    )
+    stable_drift = eigenvectors @ jnp.diag(stable_eigenvalues) @ jnp.linalg.inv(eigenvectors)
 
     return jnp.real(stable_drift)

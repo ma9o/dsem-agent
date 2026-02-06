@@ -1,44 +1,39 @@
 """NumPyro State-Space Model.
 
 Hierarchical Bayesian State-Space Model using NumPyro for inference.
+All models use differentiable particle filter + NUTS for inference.
 
 Supports:
 - Single-subject time series
 - Multi-subject panel data with shared parameters
 - Hierarchical models with individual variation in parameters
+- Any noise family (Gaussian, Poisson, Student-t, Gamma)
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
+import jax
 import jax.numpy as jnp
 import jax.random as random
 import numpyro
 import numpyro.distributions as dist
 from jax import lax, vmap
-from numpyro.infer import MCMC, NUTS
+from numpyro.infer import MCMC, NUTS, init_to_median
 
 from dsem_agent.models.likelihoods.base import CTParams, InitialStateParams, MeasurementParams
-from dsem_agent.models.strategy_selector import InferenceStrategy, get_likelihood_backend
-
-if TYPE_CHECKING:
-    from dsem_agent.models.pmmh import PMMHResult
 
 
 class NoiseFamily(StrEnum):
-    """Supported noise distribution families for state-space models.
+    """Supported noise distribution families for state-space models."""
 
-    Used to specify process noise (diffusion) and observation noise (manifest)
-    distributions for strategy selection.
-    """
-
-    GAUSSIAN = "gaussian"  # Standard Gaussian - enables Kalman/UKF
-    STUDENT_T = "student_t"  # Heavy-tailed - requires particle filter
-    POISSON = "poisson"  # Count data - requires particle filter
-    GAMMA = "gamma"  # Positive continuous - requires particle filter
+    GAUSSIAN = "gaussian"
+    STUDENT_T = "student_t"
+    POISSON = "poisson"
+    GAMMA = "gamma"
 
 
 @dataclass
@@ -70,10 +65,9 @@ class SSMSpec:
     t0_means: jnp.ndarray | Literal["free"] = "free"
     t0_var: jnp.ndarray | Literal["free", "diag"] = "free"
 
-    # Distribution families for strategy selection
-    # Used by select_strategy() to choose Kalman vs UKF vs Particle filter
-    diffusion_dist: NoiseFamily = NoiseFamily.GAUSSIAN  # Process noise family
-    manifest_dist: NoiseFamily = NoiseFamily.GAUSSIAN  # Observation noise family
+    # Distribution families for observation and process noise
+    diffusion_dist: NoiseFamily = NoiseFamily.GAUSSIAN
+    manifest_dist: NoiseFamily = NoiseFamily.GAUSSIAN
 
     # Hierarchical structure
     hierarchical: bool = False
@@ -96,98 +90,63 @@ class SSMPriors:
     """
 
     # Drift diagonal (auto-effects, typically negative for stability)
-    drift_diag: dict = field(
-        default_factory=lambda: {"mu": -0.5, "sigma": 1.0}
-    )
+    drift_diag: dict = field(default_factory=lambda: {"mu": -0.5, "sigma": 1.0})
     # Drift off-diagonal (cross-effects)
-    drift_offdiag: dict = field(
-        default_factory=lambda: {"mu": 0.0, "sigma": 0.5}
-    )
+    drift_offdiag: dict = field(default_factory=lambda: {"mu": 0.0, "sigma": 0.5})
 
     # Diffusion (log scale for positivity)
-    diffusion_diag: dict = field(
-        default_factory=lambda: {"sigma": 1.0}
-    )
-    diffusion_offdiag: dict = field(
-        default_factory=lambda: {"mu": 0.0, "sigma": 0.5}
-    )
+    diffusion_diag: dict = field(default_factory=lambda: {"sigma": 1.0})
+    diffusion_offdiag: dict = field(default_factory=lambda: {"mu": 0.0, "sigma": 0.5})
 
     # Continuous intercept
-    cint: dict = field(
-        default_factory=lambda: {"mu": 0.0, "sigma": 1.0}
-    )
+    cint: dict = field(default_factory=lambda: {"mu": 0.0, "sigma": 1.0})
 
     # Factor loadings
-    lambda_free: dict = field(
-        default_factory=lambda: {"mu": 0.5, "sigma": 0.5}
-    )
+    lambda_free: dict = field(default_factory=lambda: {"mu": 0.5, "sigma": 0.5})
 
     # Manifest means
-    manifest_means: dict = field(
-        default_factory=lambda: {"mu": 0.0, "sigma": 2.0}
-    )
+    manifest_means: dict = field(default_factory=lambda: {"mu": 0.0, "sigma": 2.0})
 
     # Manifest variance (measurement error)
-    manifest_var_diag: dict = field(
-        default_factory=lambda: {"sigma": 1.0}
-    )
+    manifest_var_diag: dict = field(default_factory=lambda: {"sigma": 1.0})
 
     # Initial state
-    t0_means: dict = field(
-        default_factory=lambda: {"mu": 0.0, "sigma": 2.0}
-    )
-    t0_var_diag: dict = field(
-        default_factory=lambda: {"sigma": 2.0}
-    )
+    t0_means: dict = field(default_factory=lambda: {"mu": 0.0, "sigma": 2.0})
+    t0_var_diag: dict = field(default_factory=lambda: {"sigma": 2.0})
 
     # Hierarchical (population-level SD for random effects)
-    pop_sd: dict = field(
-        default_factory=lambda: {"sigma": 1.0}
-    )
+    pop_sd: dict = field(default_factory=lambda: {"sigma": 1.0})
 
 
 class SSMModel:
-    """NumPyro state-space model.
+    """NumPyro state-space model with particle filter likelihood.
 
     Implements hierarchical Bayesian state-space model with:
     - Continuous-time dynamics via stochastic differential equations
-    - Kalman filter likelihood computation
-    - Optional hierarchical structure for multiple subjects with individual variation
+    - Differentiable particle filter for likelihood computation
+    - NUTS for posterior sampling (all noise families)
+    - Optional hierarchical structure for multiple subjects
     """
 
     def __init__(
         self,
         spec: SSMSpec,
         priors: SSMPriors | None = None,
+        n_particles: int = 200,
+        pf_seed: int = 0,
     ):
         """Initialize state-space model.
 
         Args:
             spec: Model specification
             priors: Prior distributions (uses defaults if None)
+            n_particles: Number of particles for bootstrap PF
+            pf_seed: Seed for fixed PF random key (deterministic for NUTS)
         """
         self.spec = spec
         self.priors = priors or SSMPriors()
-        self._strategy = None  # Cached strategy selection
-
-    def get_inference_strategy(self):
-        """Get the inference strategy for this model.
-
-        Returns the appropriate marginalization strategy (Kalman/UKF/Particle)
-        based on the model specification's dynamics and distribution families.
-
-        Returns:
-            InferenceStrategy enum value
-
-        Example:
-            >>> model = SSMModel(SSMSpec(n_latent=2, n_manifest=2))
-            >>> model.get_inference_strategy()
-            <InferenceStrategy.KALMAN: 'kalman'>
-        """
-        if self._strategy is None:
-            from dsem_agent.models.strategy_selector import select_strategy
-            self._strategy = select_strategy(self.spec)
-        return self._strategy
+        self.n_particles = n_particles
+        self.pf_key = jax.random.PRNGKey(pf_seed)
 
     def _sample_drift(
         self, spec: SSMSpec, n_subjects: int = 1, hierarchical: bool = False
@@ -212,9 +171,7 @@ class SSMModel:
         # Population-level diagonal (auto-effects)
         drift_diag_pop = numpyro.sample(
             "drift_diag_pop",
-            dist.Normal(
-                self.priors.drift_diag["mu"], self.priors.drift_diag["sigma"]
-            ).expand([n]),
+            dist.Normal(self.priors.drift_diag["mu"], self.priors.drift_diag["sigma"]).expand([n]),
         )
 
         # Population-level off-diagonal (cross-effects)
@@ -397,9 +354,9 @@ class SSMModel:
             n_free = (n_m - n_l) * n_l
             free_loadings = numpyro.sample(
                 "lambda_free",
-                dist.Normal(
-                    self.priors.lambda_free["mu"], self.priors.lambda_free["sigma"]
-                ).expand([n_free]),
+                dist.Normal(self.priors.lambda_free["mu"], self.priors.lambda_free["sigma"]).expand(
+                    [n_free]
+                ),
             )
 
             idx = 0
@@ -455,9 +412,9 @@ class SSMModel:
         else:
             t0_means_pop = numpyro.sample(
                 "t0_means_pop",
-                dist.Normal(
-                    self.priors.t0_means["mu"], self.priors.t0_means["sigma"]
-                ).expand([n_l]),
+                dist.Normal(self.priors.t0_means["mu"], self.priors.t0_means["sigma"]).expand(
+                    [n_l]
+                ),
             )
 
             if hierarchical and n_subjects > 1 and "t0_means" in spec.indvarying:
@@ -502,6 +459,8 @@ class SSMModel:
             times: (N,) observation times
             subject_ids: (N,) subject indices (0-indexed, for hierarchical models)
         """
+        from dsem_agent.models.likelihoods.particle import ParticleLikelihood
+
         spec = self.spec
         hierarchical = spec.hierarchical and subject_ids is not None
 
@@ -526,15 +485,24 @@ class SSMModel:
         manifest_cov = manifest_chol @ manifest_chol.T
         t0_cov = t0_chol @ t0_chol.T
 
-        # Compute log-likelihood via selected backend (Kalman or UKF)
-        # PARTICLE strategy uses PMMH (separate inference path, not NumPyro).
-        strategy = self.get_inference_strategy()
-        if strategy == InferenceStrategy.PARTICLE:
-            raise ValueError(
-                "PARTICLE strategy requires PMMH inference, not NumPyro model(). "
-                "Use fit() which auto-dispatches, or call fit_pmmh() directly."
-            )
-        backend = get_likelihood_backend(strategy)
+        # Sample noise family hyperparameters
+        extra_params = {}
+        if spec.manifest_dist == NoiseFamily.STUDENT_T:
+            extra_params["obs_df"] = numpyro.sample("obs_df", dist.Gamma(5.0, 1.0))
+        if spec.manifest_dist == NoiseFamily.GAMMA:
+            extra_params["obs_shape"] = numpyro.sample("obs_shape", dist.Gamma(2.0, 1.0))
+        if spec.diffusion_dist == NoiseFamily.STUDENT_T:
+            extra_params["proc_df"] = numpyro.sample("proc_df", dist.Gamma(5.0, 1.0))
+
+        # Create particle filter backend
+        backend = ParticleLikelihood(
+            n_latent=spec.n_latent,
+            n_manifest=spec.n_manifest,
+            n_particles=self.n_particles,
+            rng_key=self.pf_key,
+            manifest_dist=spec.manifest_dist.value,
+            diffusion_dist=spec.diffusion_dist.value,
+        )
 
         ct_params = CTParams(drift=drift, diffusion_cov=diffusion_cov, cint=cint)
         meas_params = MeasurementParams(
@@ -550,7 +518,12 @@ class SSMModel:
 
             init = InitialStateParams(mean=t0_means, cov=t0_cov)
             ll = backend.compute_log_likelihood(
-                ct_params, meas_params, init, observations, time_intervals
+                ct_params,
+                meas_params,
+                init,
+                observations,
+                time_intervals,
+                extra_params=extra_params if extra_params else None,
             )
         else:
             # Multiple subjects with hierarchical structure
@@ -564,6 +537,7 @@ class SSMModel:
                 n_subjects,
                 t0_means,
                 t0_cov,
+                extra_params=extra_params if extra_params else None,
             )
 
         numpyro.factor("log_likelihood", ll)
@@ -579,6 +553,7 @@ class SSMModel:
         n_subjects: int,
         t0_means: jnp.ndarray,
         t0_cov: jnp.ndarray,
+        extra_params: dict | None = None,
     ) -> float:
         """Compute log-likelihood for hierarchical model with subject-varying params."""
 
@@ -616,9 +591,7 @@ class SSMModel:
                 new_seen = seen | is_obs
                 return (new_last, new_seen), dt
 
-            (_, _), time_intervals = lax.scan(
-                scan_fn, (0.0, False), (times, mask)
-            )
+            (_, _), time_intervals = lax.scan(scan_fn, (0.0, False), (times, mask))
 
             # Compute likelihood via backend (masked)
             ll = backend.compute_log_likelihood(
@@ -628,6 +601,7 @@ class SSMModel:
                 observations,
                 time_intervals,
                 obs_mask=obs_mask,
+                extra_params=extra_params,
             )
 
             # Only count if subject has observations
@@ -646,16 +620,12 @@ class SSMModel:
         num_samples: int = 1000,
         num_chains: int = 4,
         seed: int = 0,
+        dense_mass: bool = False,
+        target_accept_prob: float = 0.85,
+        max_tree_depth: int = 8,
         **mcmc_kwargs: Any,
-    ) -> MCMC | PMMHResult:
-        """Fit the model using MCMC.
-
-        Automatically dispatches to the appropriate inference engine:
-        - KALMAN/UKF: NumPyro NUTS (gradient-based HMC) → returns MCMC
-        - PARTICLE: PMMH (particle marginal Metropolis-Hastings) → returns PMMHResult
-
-        For PARTICLE strategy, use fit_pmmh() directly for full control
-        over particle filter and proposal settings.
+    ) -> MCMC:
+        """Fit the model using NUTS with particle filter likelihood.
 
         Args:
             observations: (N, n_manifest) observed data
@@ -665,23 +635,22 @@ class SSMModel:
             num_samples: Number of posterior samples
             num_chains: Number of MCMC chains
             seed: Random seed
+            dense_mass: Use dense mass matrix (for correlated posteriors)
+            target_accept_prob: Target acceptance probability (0.85 for PF noise)
+            max_tree_depth: Max tree depth (8 to limit cost with noisy PF gradients)
             **mcmc_kwargs: Additional MCMC arguments
 
         Returns:
-            MCMC object (for KALMAN/UKF) or PMMHResult (for PARTICLE)
+            MCMC object with posterior samples
         """
-        strategy = self.get_inference_strategy()
-
-        if strategy == InferenceStrategy.PARTICLE:
-            return self.fit_pmmh(
-                observations=observations,
-                times=times,
-                n_samples=num_samples,
-                n_warmup=num_warmup,
-                seed=seed,
-            )
-
-        kernel = NUTS(self.model)
+        kernel = NUTS(
+            self.model,
+            init_strategy=init_to_median(num_samples=15),
+            target_accept_prob=target_accept_prob,
+            max_tree_depth=max_tree_depth,
+            dense_mass=dense_mass,
+            regularize_mass_matrix=True,
+        )
         mcmc = MCMC(
             kernel,
             num_warmup=num_warmup,
@@ -695,298 +664,6 @@ class SSMModel:
 
         return mcmc
 
-    def fit_pmmh(
-        self,
-        observations: jnp.ndarray,
-        times: jnp.ndarray,
-        n_samples: int = 1000,
-        n_warmup: int = 500,
-        n_particles: int = 1000,
-        proposal_cov: jnp.ndarray | None = None,
-        seed: int = 0,
-    ) -> PMMHResult:
-        """Fit the model using Particle Marginal Metropolis-Hastings (PMMH).
-
-        Builds parameter layout, priors, and unpack function from SSMSpec,
-        then delegates to run_pmmh(). Use this for non-Gaussian observation
-        models (Poisson, Student-t, Gamma) where Kalman/UKF are not applicable.
-
-        Args:
-            observations: (T, n_manifest) observed data
-            times: (T,) observation times
-            n_samples: Number of posterior samples (after warmup)
-            n_warmup: Number of warmup samples (discarded)
-            n_particles: Number of particles for bootstrap filter
-            proposal_cov: (d, d) proposal covariance (auto-scaled if None)
-            seed: Random seed
-
-        Returns:
-            PMMHResult with posterior samples and diagnostics
-
-        Raises:
-            NotImplementedError: If hierarchical model or full diffusion matrix
-        """
-        from dsem_agent.models.pmmh import SSMAdapter, run_pmmh
-
-        spec = self.spec
-        priors = self.priors
-
-        if spec.hierarchical and spec.n_subjects > 1:
-            raise NotImplementedError(
-                "PMMH does not yet support hierarchical models. "
-                "Use single-subject data or Kalman/UKF for hierarchical."
-            )
-
-        if spec.diffusion == "free":
-            raise NotImplementedError(
-                "PMMH only supports diagonal diffusion (diffusion='diag'). "
-                "Full lower-triangular diffusion is not yet supported."
-            )
-
-        n = spec.n_latent
-        n_m = spec.n_manifest
-
-        # --- Build parameter layout ---
-        # Each segment: (name, size, transform_to_model, prior_log_prob)
-        segments: list[tuple[str, int]] = []
-
-        # drift_diag: (n,) — negative abs for stability
-        if not isinstance(spec.drift, jnp.ndarray):
-            segments.append(("drift_diag", n))
-            n_offdiag = n * n - n
-            if n_offdiag > 0:
-                segments.append(("drift_offdiag", n_offdiag))
-
-        # diffusion_diag: (n,) — abs, squared for cov
-        if not isinstance(spec.diffusion, jnp.ndarray):
-            segments.append(("diffusion_diag", n))
-
-        # cint: (n,) — unconstrained
-        if spec.cint == "free":
-            segments.append(("cint", n))
-
-        # t0_means: (n,) — unconstrained
-        if not isinstance(spec.t0_means, jnp.ndarray) and spec.t0_means == "free":
-            segments.append(("t0_means", n))
-
-        # manifest_var_diag: (n_m,) — abs, squared for cov
-        if not isinstance(spec.manifest_var, jnp.ndarray):
-            segments.append(("manifest_var_diag", n_m))
-
-        # lambda_free: free loadings beyond identity block
-        if not isinstance(spec.lambda_mat, jnp.ndarray) and spec.lambda_mat == "free" and n_m > n:
-            n_lambda_free = (n_m - n) * n
-            segments.append(("lambda_free", n_lambda_free))
-
-        # manifest_means
-        if isinstance(spec.manifest_means, str) and spec.manifest_means == "free":
-            segments.append(("manifest_means", n_m))
-
-        # Compute offsets
-        offsets: dict[str, tuple[int, int]] = {}
-        pos = 0
-        for name, size in segments:
-            offsets[name] = (pos, pos + size)
-            pos += size
-
-        # --- Build unpack_fn ---
-        def unpack_fn(theta: jnp.ndarray) -> dict:
-            params: dict[str, Any] = {}
-
-            # Drift
-            if isinstance(spec.drift, jnp.ndarray):
-                params["drift"] = spec.drift
-            else:
-                s, e = offsets["drift_diag"]
-                drift_diag = -jnp.abs(theta[s:e])
-                drift = jnp.diag(drift_diag)
-                if "drift_offdiag" in offsets:
-                    s, e = offsets["drift_offdiag"]
-                    offdiag = theta[s:e]
-                    offdiag_idx = 0
-                    for i in range(n):
-                        for j in range(n):
-                            if i != j:
-                                drift = drift.at[i, j].set(offdiag[offdiag_idx])
-                                offdiag_idx += 1
-                params["drift"] = drift
-
-            # Diffusion covariance
-            if isinstance(spec.diffusion, jnp.ndarray):
-                params["diffusion_cov"] = spec.diffusion @ spec.diffusion.T
-            else:
-                s, e = offsets["diffusion_diag"]
-                diff_chol_diag = jnp.abs(theta[s:e])
-                params["diffusion_cov"] = jnp.diag(diff_chol_diag ** 2)
-
-            # CINT
-            if spec.cint is None:
-                params["cint"] = None
-            elif isinstance(spec.cint, jnp.ndarray):
-                params["cint"] = spec.cint
-            else:
-                s, e = offsets["cint"]
-                params["cint"] = theta[s:e]
-
-            # Lambda matrix
-            if isinstance(spec.lambda_mat, jnp.ndarray):
-                params["lambda_mat"] = spec.lambda_mat
-            else:
-                lambda_mat = jnp.eye(n_m, n)
-                if "lambda_free" in offsets and n_m > n:
-                    s, e = offsets["lambda_free"]
-                    free_loadings = theta[s:e]
-                    idx = 0
-                    for i in range(n, n_m):
-                        for j in range(n):
-                            lambda_mat = lambda_mat.at[i, j].set(free_loadings[idx])
-                            idx += 1
-                params["lambda_mat"] = lambda_mat
-
-            # Manifest means
-            if spec.manifest_means is None:
-                params["manifest_means"] = jnp.zeros(n_m)
-            elif isinstance(spec.manifest_means, jnp.ndarray):
-                params["manifest_means"] = spec.manifest_means
-            elif "manifest_means" in offsets:
-                s, e = offsets["manifest_means"]
-                params["manifest_means"] = theta[s:e]
-            else:
-                params["manifest_means"] = jnp.zeros(n_m)
-
-            # Manifest covariance
-            if isinstance(spec.manifest_var, jnp.ndarray):
-                params["manifest_cov"] = spec.manifest_var @ spec.manifest_var.T
-            else:
-                s, e = offsets["manifest_var_diag"]
-                var_chol_diag = jnp.abs(theta[s:e])
-                params["manifest_cov"] = jnp.diag(var_chol_diag ** 2)
-
-            # T0 params (mean estimated, cov fixed at identity)
-            if isinstance(spec.t0_means, jnp.ndarray):
-                params["t0_mean"] = spec.t0_means
-            elif "t0_means" in offsets:
-                s, e = offsets["t0_means"]
-                params["t0_mean"] = theta[s:e]
-            else:
-                params["t0_mean"] = jnp.zeros(n)
-            params["t0_cov"] = jnp.eye(n)
-
-            return params
-
-        # --- Build log_prior_fn ---
-        def log_prior_fn(theta: jnp.ndarray) -> float:
-            lp = 0.0
-
-            if "drift_diag" in offsets:
-                s, e = offsets["drift_diag"]
-                vals = theta[s:e]
-                mu = priors.drift_diag["mu"]
-                sigma = priors.drift_diag["sigma"]
-                lp = lp + jnp.sum(-0.5 * ((vals - mu) / sigma) ** 2 - jnp.log(sigma))
-
-            if "drift_offdiag" in offsets:
-                s, e = offsets["drift_offdiag"]
-                vals = theta[s:e]
-                mu = priors.drift_offdiag["mu"]
-                sigma = priors.drift_offdiag["sigma"]
-                lp = lp + jnp.sum(-0.5 * ((vals - mu) / sigma) ** 2 - jnp.log(sigma))
-
-            if "diffusion_diag" in offsets:
-                s, e = offsets["diffusion_diag"]
-                vals = jnp.abs(theta[s:e])
-                sigma = priors.diffusion_diag["sigma"]
-                # HalfNormal: log p(x) = -x^2/(2*sigma^2) + const (for x>0)
-                lp = lp + jnp.sum(-0.5 * (vals / sigma) ** 2 - jnp.log(sigma))
-
-            if "cint" in offsets:
-                s, e = offsets["cint"]
-                vals = theta[s:e]
-                mu = priors.cint["mu"]
-                sigma = priors.cint["sigma"]
-                lp = lp + jnp.sum(-0.5 * ((vals - mu) / sigma) ** 2 - jnp.log(sigma))
-
-            if "t0_means" in offsets:
-                s, e = offsets["t0_means"]
-                vals = theta[s:e]
-                mu = priors.t0_means["mu"]
-                sigma = priors.t0_means["sigma"]
-                lp = lp + jnp.sum(-0.5 * ((vals - mu) / sigma) ** 2 - jnp.log(sigma))
-
-            if "manifest_var_diag" in offsets:
-                s, e = offsets["manifest_var_diag"]
-                vals = jnp.abs(theta[s:e])
-                sigma = priors.manifest_var_diag["sigma"]
-                lp = lp + jnp.sum(-0.5 * (vals / sigma) ** 2 - jnp.log(sigma))
-
-            if "lambda_free" in offsets:
-                s, e = offsets["lambda_free"]
-                vals = theta[s:e]
-                mu = priors.lambda_free["mu"]
-                sigma = priors.lambda_free["sigma"]
-                lp = lp + jnp.sum(-0.5 * ((vals - mu) / sigma) ** 2 - jnp.log(sigma))
-
-            if "manifest_means" in offsets:
-                s, e = offsets["manifest_means"]
-                vals = theta[s:e]
-                mu = priors.manifest_means["mu"]
-                sigma = priors.manifest_means["sigma"]
-                lp = lp + jnp.sum(-0.5 * ((vals - mu) / sigma) ** 2 - jnp.log(sigma))
-
-            return lp
-
-        # --- Build init_theta from prior means ---
-        init_parts = []
-        for name, size in segments:
-            if name == "drift_diag":
-                init_parts.append(jnp.full(size, priors.drift_diag["mu"]))
-            elif name == "drift_offdiag":
-                init_parts.append(jnp.full(size, priors.drift_offdiag["mu"]))
-            elif name == "diffusion_diag":
-                init_parts.append(jnp.full(size, priors.diffusion_diag["sigma"] * 0.5))
-            elif name == "cint":
-                init_parts.append(jnp.full(size, priors.cint["mu"]))
-            elif name == "t0_means":
-                init_parts.append(jnp.full(size, priors.t0_means["mu"]))
-            elif name == "manifest_var_diag":
-                init_parts.append(jnp.full(size, priors.manifest_var_diag["sigma"] * 0.5))
-            elif name == "lambda_free":
-                init_parts.append(jnp.full(size, priors.lambda_free["mu"]))
-            elif name == "manifest_means":
-                init_parts.append(jnp.full(size, priors.manifest_means["mu"]))
-        init_theta = jnp.concatenate(init_parts) if init_parts else jnp.array([])
-
-        # --- Compute time intervals ---
-        time_intervals = jnp.diff(times, prepend=times[0])
-        time_intervals = time_intervals.at[0].set(1e-6)
-
-        # --- Observation mask ---
-        obs_mask = ~jnp.isnan(observations)
-        clean_obs = jnp.nan_to_num(observations, nan=0.0)
-
-        # --- Create SSMAdapter ---
-        adapter = SSMAdapter(
-            n_latent=n,
-            n_manifest=n_m,
-            manifest_dist=spec.manifest_dist.value,
-            diffusion_dist=spec.diffusion_dist.value,
-        )
-
-        return run_pmmh(
-            model=adapter,
-            observations=clean_obs,
-            time_intervals=time_intervals,
-            obs_mask=obs_mask,
-            log_prior_fn=log_prior_fn,
-            unpack_fn=unpack_fn,
-            init_theta=init_theta,
-            n_samples=n_samples,
-            n_warmup=n_warmup,
-            n_particles=n_particles,
-            proposal_cov=proposal_cov,
-            seed=seed,
-        )
-
     def prior_predictive(
         self,
         times: jnp.ndarray,
@@ -994,6 +671,9 @@ class SSMModel:
         seed: int = 0,
     ) -> dict[str, jnp.ndarray]:
         """Sample from the prior predictive distribution.
+
+        Uses handlers.block to skip the PF likelihood computation,
+        which is unnecessary and expensive for prior sampling.
 
         Args:
             times: (T,) time points
@@ -1003,10 +683,12 @@ class SSMModel:
         Returns:
             Dict of prior predictive samples
         """
+        from numpyro import handlers
         from numpyro.infer import Predictive
 
         rng_key = random.PRNGKey(seed)
-        predictive = Predictive(self.model, num_samples=num_samples)
+        blocked_model = handlers.block(self.model, hide=["log_likelihood"])
+        predictive = Predictive(blocked_model, num_samples=num_samples)
 
         # Create dummy observations
         dummy_obs = jnp.zeros((len(times), self.spec.n_manifest))
@@ -1021,6 +703,8 @@ def build_ssm_model(
     hierarchical: bool = False,
     n_subjects: int = 1,
     indvarying: list[str] | None = None,
+    n_particles: int = 200,
+    pf_seed: int = 0,
 ) -> SSMModel:
     """Convenience function to build a state-space model.
 
@@ -1031,6 +715,8 @@ def build_ssm_model(
         hierarchical: Whether to use hierarchical structure
         n_subjects: Number of subjects (for hierarchical)
         indvarying: Which parameters vary across individuals
+        n_particles: Number of particles for bootstrap PF
+        pf_seed: Seed for fixed PF random key
 
     Returns:
         SSMModel instance
@@ -1043,4 +729,4 @@ def build_ssm_model(
         n_subjects=n_subjects,
         indvarying=indvarying or ["t0_means"],
     )
-    return SSMModel(spec)
+    return SSMModel(spec, n_particles=n_particles, pf_seed=pf_seed)
