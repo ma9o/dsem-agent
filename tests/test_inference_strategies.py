@@ -18,6 +18,7 @@ import jax.numpy as jnp
 import jax.random as random
 import numpy as np
 import pytest
+from numpyro.infer import MCMC
 
 from dsem_agent.models.likelihoods.base import (
     CTParams,
@@ -1144,6 +1145,245 @@ class TestParameterRecoveryUKF:
                 f"UKF Drift[{i}] posterior mean {float(posterior_mean):.3f} "
                 f"far from true {float(true_val):.3f}"
             )
+
+
+# =============================================================================
+# fit_pmmh() Integration Tests
+# =============================================================================
+
+
+class TestFitPMMH:
+    """Test SSMModel.fit_pmmh() end-to-end wiring."""
+
+    def test_fit_pmmh_basic(self):
+        """fit_pmmh() runs and returns finite PMMHResult on Poisson model."""
+        from dsem_agent.models.pmmh import PMMHResult
+        from dsem_agent.models.ssm import SSMModel
+
+        spec = SSMSpec(
+            n_latent=2,
+            n_manifest=2,
+            lambda_mat=jnp.eye(2),
+            diffusion="diag",
+            manifest_dist=NoiseFamily.POISSON,
+        )
+        model = SSMModel(spec)
+
+        T = 20
+        key = random.PRNGKey(42)
+        # Generate count data
+        observations = random.poisson(key, jnp.ones((T, 2)) * 3.0).astype(jnp.float32)
+        times = jnp.arange(T, dtype=jnp.float32) * 0.5
+
+        result = model.fit_pmmh(
+            observations=observations,
+            times=times,
+            n_samples=50,
+            n_warmup=20,
+            n_particles=100,
+            seed=42,
+        )
+
+        assert isinstance(result, PMMHResult)
+        assert result.samples.shape[0] == 50
+        assert jnp.all(jnp.isfinite(result.log_likelihoods))
+
+    def test_fit_auto_dispatches_to_pmmh(self):
+        """fit() with Poisson manifest_dist auto-dispatches to PMMH."""
+        from dsem_agent.models.pmmh import PMMHResult
+        from dsem_agent.models.ssm import SSMModel
+
+        spec = SSMSpec(
+            n_latent=1,
+            n_manifest=1,
+            lambda_mat=jnp.eye(1),
+            diffusion="diag",
+            manifest_dist=NoiseFamily.POISSON,
+        )
+        model = SSMModel(spec)
+
+        T = 15
+        key = random.PRNGKey(0)
+        observations = random.poisson(key, jnp.ones((T, 1)) * 5.0).astype(jnp.float32)
+        times = jnp.arange(T, dtype=jnp.float32)
+
+        result = model.fit(
+            observations=observations,
+            times=times,
+            num_warmup=10,
+            num_samples=20,
+            seed=0,
+        )
+
+        assert isinstance(result, PMMHResult)
+
+    def test_fit_auto_dispatches_to_nuts(self):
+        """fit() with Gaussian manifest_dist returns MCMC (not PMMHResult)."""
+        from dsem_agent.models.ssm import SSMModel
+
+        spec = SSMSpec(
+            n_latent=2,
+            n_manifest=2,
+            lambda_mat=jnp.eye(2),
+            diffusion="diag",
+            manifest_dist=NoiseFamily.GAUSSIAN,
+        )
+        model = SSMModel(spec)
+
+        T = 15
+        key = random.PRNGKey(0)
+        observations = random.normal(key, (T, 2)) * 0.5
+        times = jnp.arange(T, dtype=jnp.float32) * 0.5
+
+        result = model.fit(
+            observations=observations,
+            times=times,
+            num_warmup=10,
+            num_samples=20,
+            num_chains=1,
+            seed=0,
+        )
+
+        assert isinstance(result, MCMC)
+
+    def test_fit_pmmh_hierarchical_raises(self):
+        """fit_pmmh() raises NotImplementedError for hierarchical models."""
+        from dsem_agent.models.ssm import SSMModel
+
+        spec = SSMSpec(
+            n_latent=2,
+            n_manifest=2,
+            lambda_mat=jnp.eye(2),
+            diffusion="diag",
+            manifest_dist=NoiseFamily.POISSON,
+            hierarchical=True,
+            n_subjects=3,
+        )
+        model = SSMModel(spec)
+
+        T = 10
+        observations = jnp.ones((T, 2))
+        times = jnp.arange(T, dtype=jnp.float32)
+
+        with pytest.raises(NotImplementedError, match="hierarchical"):
+            model.fit_pmmh(observations=observations, times=times)
+
+    def test_fit_pmmh_full_diffusion_raises(self):
+        """fit_pmmh() raises NotImplementedError for full diffusion."""
+        from dsem_agent.models.ssm import SSMModel
+
+        spec = SSMSpec(
+            n_latent=2,
+            n_manifest=2,
+            lambda_mat=jnp.eye(2),
+            diffusion="free",
+            manifest_dist=NoiseFamily.POISSON,
+        )
+        model = SSMModel(spec)
+
+        T = 10
+        observations = jnp.ones((T, 2))
+        times = jnp.arange(T, dtype=jnp.float32)
+
+        with pytest.raises(NotImplementedError, match="diagonal"):
+            model.fit_pmmh(observations=observations, times=times)
+
+
+# =============================================================================
+# Builder Noise Family Wiring Tests
+# =============================================================================
+
+
+class TestBuilderNoiseFamilyWiring:
+    """Test that SSMModelBuilder wires noise families from ModelSpec."""
+
+    def test_convert_spec_sets_poisson_noise_family(self):
+        """ModelSpec with Poisson likelihood → SSMSpec has POISSON manifest_dist."""
+        from dsem_agent.models.ssm_builder import SSMModelBuilder
+        from dsem_agent.orchestrator.schemas_model import (
+            DistributionFamily,
+            LikelihoodSpec,
+            LinkFunction,
+            ModelSpec,
+            ParameterConstraint,
+            ParameterRole,
+            ParameterSpec,
+        )
+
+        model_spec = ModelSpec(
+            likelihoods=[
+                LikelihoodSpec(
+                    variable="count_var",
+                    distribution=DistributionFamily.POISSON,
+                    link=LinkFunction.LOG,
+                    reasoning="Count data",
+                ),
+            ],
+            parameters=[
+                ParameterSpec(
+                    name="rho_count",
+                    role=ParameterRole.AR_COEFFICIENT,
+                    constraint=ParameterConstraint.UNIT_INTERVAL,
+                    description="AR coeff",
+                    search_context="autoregressive",
+                ),
+            ],
+            model_clock="daily",
+            reasoning="test",
+        )
+
+        import pandas as pd
+
+        data = pd.DataFrame({"count_var": [1, 2, 3], "time": [0, 1, 2]})
+
+        builder = SSMModelBuilder(model_spec=model_spec)
+        ssm_spec = builder._convert_spec_to_ssm(model_spec, data)
+
+        assert ssm_spec.manifest_dist == NoiseFamily.POISSON
+
+    def test_convert_spec_sets_gaussian_for_normal(self):
+        """ModelSpec with Normal likelihood → SSMSpec has GAUSSIAN manifest_dist."""
+        from dsem_agent.models.ssm_builder import SSMModelBuilder
+        from dsem_agent.orchestrator.schemas_model import (
+            DistributionFamily,
+            LikelihoodSpec,
+            LinkFunction,
+            ModelSpec,
+            ParameterConstraint,
+            ParameterRole,
+            ParameterSpec,
+        )
+
+        model_spec = ModelSpec(
+            likelihoods=[
+                LikelihoodSpec(
+                    variable="continuous_var",
+                    distribution=DistributionFamily.NORMAL,
+                    link=LinkFunction.IDENTITY,
+                    reasoning="Continuous data",
+                ),
+            ],
+            parameters=[
+                ParameterSpec(
+                    name="rho_cont",
+                    role=ParameterRole.AR_COEFFICIENT,
+                    constraint=ParameterConstraint.UNIT_INTERVAL,
+                    description="AR coeff",
+                    search_context="autoregressive",
+                ),
+            ],
+            model_clock="daily",
+            reasoning="test",
+        )
+
+        import pandas as pd
+
+        data = pd.DataFrame({"continuous_var": [1.0, 2.0, 3.0], "time": [0, 1, 2]})
+
+        builder = SSMModelBuilder(model_spec=model_spec)
+        ssm_spec = builder._convert_spec_to_ssm(model_spec, data)
+
+        assert ssm_spec.manifest_dist == NoiseFamily.GAUSSIAN
 
 
 if __name__ == "__main__":
