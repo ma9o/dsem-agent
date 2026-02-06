@@ -3,7 +3,7 @@
 This module implements hierarchical Bayesian state-space models with:
 - Continuous-time dynamics via stochastic differential equations
 - Automatic CT→DT discretization for irregular time intervals
-- Multiple inference backends (Kalman, UKF, Particle filter)
+- Multiple inference backends (Kalman, UKF via dynamax; PMMH for particle)
 """
 
 from dsem_agent.models.ssm.core import cholesky_of_diffusion, ensure_stability
@@ -12,10 +12,10 @@ from dsem_agent.models.ssm.discretization import (
     compute_discrete_cint,
     compute_discrete_diffusion,
     discretize_system,
+    discretize_system_batched,
     matrix_fraction_decomposition,
     solve_lyapunov,
 )
-from dsem_agent.models.ssm.kalman import kalman_filter, kalman_log_likelihood
 from dsem_agent.models.ssm.model import (
     NoiseFamily,
     SSMModel,
@@ -34,10 +34,8 @@ __all__ = [
     "compute_discrete_diffusion",
     "compute_discrete_cint",
     "discretize_system",
+    "discretize_system_batched",
     "matrix_fraction_decomposition",
-    # Kalman filter
-    "kalman_filter",
-    "kalman_log_likelihood",
     # Model
     "SSMModel",
     "SSMPriors",
