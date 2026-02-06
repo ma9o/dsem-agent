@@ -50,13 +50,13 @@ def fit_model(stage4_result: dict, raw_data: pl.DataFrame) -> Any:
         if "timestamp" in X.columns:
             X = X.rename(columns={"timestamp": "time"})
 
-        # Fit the model — always returns MCMC (PF+NUTS)
+        # Fit the model — returns InferenceResult (default: SVI)
         result = builder.fit(X)
 
         return {
             "fitted": True,
-            "inference_type": "nuts",
-            "mcmc": result,
+            "inference_type": result.method,
+            "result": result,
             "builder": builder,
         }
 
@@ -74,7 +74,7 @@ def fit_model(stage4_result: dict, raw_data: pl.DataFrame) -> Any:
 
 @task
 def run_interventions(
-    fitted_model: Any,
+    fitted_model: Any,  # noqa: ARG001
     treatments: list[str],
     dsem_model: dict | None = None,
 ) -> list[dict]:

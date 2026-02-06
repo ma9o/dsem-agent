@@ -9,9 +9,8 @@ from typing import Any
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
-from numpyro.infer import MCMC
 
-from dsem_agent.models.ssm import NoiseFamily, SSMModel, SSMPriors, SSMSpec
+from dsem_agent.models.ssm import InferenceResult, NoiseFamily, SSMModel, SSMPriors, SSMSpec, fit
 from dsem_agent.orchestrator.schemas_model import DistributionFamily, ModelSpec, ParameterRole
 from dsem_agent.workers.schemas_prior import PriorProposal
 
@@ -62,7 +61,7 @@ class SSMModelBuilder:
         self._sampler_config = sampler_config or self.get_default_sampler_config()
 
         self._model: SSMModel | None = None
-        self._mcmc: MCMC | None = None
+        self._result: InferenceResult | None = None
 
     @staticmethod
     def get_default_sampler_config() -> dict:
@@ -234,16 +233,16 @@ class SSMModelBuilder:
         X: pd.DataFrame,
         y: pd.Series | np.ndarray | None = None,
         **kwargs: Any,
-    ) -> MCMC:
+    ) -> InferenceResult:
         """Fit the SSM model to data.
 
         Args:
             X: Data with indicator columns, time, and optional subject_id
             y: Optional target (if not in X)
-            **kwargs: Additional arguments passed to MCMC
+            **kwargs: Additional arguments passed to inference
 
         Returns:
-            MCMC object with posterior samples
+            InferenceResult with posterior samples
         """
         if self._model is None:
             self.build_model(X, y)
@@ -254,15 +253,19 @@ class SSMModelBuilder:
         # Merge sampler config with kwargs
         sampler_config = {**self._sampler_config, **kwargs}
 
-        # Fit — always returns MCMC
-        result = self._model.fit(
+        # Extract method (default to svi)
+        method = sampler_config.pop("method", "svi")
+
+        result = fit(
+            self._model,
             observations=observations,
             times=times,
             subject_ids=subject_ids,
+            method=method,
             **sampler_config,
         )
 
-        self._mcmc = result
+        self._result = result
         return result
 
     def _prepare_data(self, X: pd.DataFrame) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray | None]:
@@ -315,11 +318,13 @@ class SSMModelBuilder:
         Returns:
             Prior predictive samples
         """
+        from dsem_agent.models.ssm.inference import prior_predictive
+
         if self._model is None:
             raise ValueError("Model must be built before sampling prior predictive")
 
         times = jnp.arange(10, dtype=jnp.float32)
-        return self._model.prior_predictive(times, num_samples=samples)
+        return prior_predictive(self._model, times, num_samples=samples)
 
     def get_samples(self) -> dict[str, jnp.ndarray]:
         """Get posterior samples.
@@ -327,8 +332,8 @@ class SSMModelBuilder:
         Returns:
             Dict of posterior samples
         """
-        if self._mcmc is not None:
-            return self._mcmc.get_samples()
+        if self._result is not None:
+            return self._result.get_samples()
         raise ValueError("Model must be fit before getting samples")
 
     def summary(self) -> pd.DataFrame:
@@ -337,10 +342,10 @@ class SSMModelBuilder:
         Returns:
             DataFrame with summary statistics
         """
-        if self._mcmc is None:
+        if self._result is None:
             raise ValueError("Model must be fit before getting summary")
 
-        self._mcmc.print_summary()
+        self._result.print_summary()
 
         # Also return as DataFrame
         samples = self.get_samples()
