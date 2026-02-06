@@ -32,6 +32,7 @@ build-backend = "uv_build"
 dev = [
     "ipykernel>=7.1.0",
     "pytest>=9.0.2",
+    "pytest-xdist>=3.6.1",
     "ruff>=0.9.0",
     "streamlit>=1.52.2",
     "streamlit-agraph>=0.0.45",
@@ -84,6 +85,7 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 
 [tool.pytest.ini_options]
+addopts = "-n auto"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
 ]

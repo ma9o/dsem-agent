@@ -10,8 +10,6 @@ ALWAYS THINK VERY HARD
 
 5. Every time you make a change to the file structure make sure to report it under Structure in the README
 
-6. Every time you use a new function of a tool you need to look up the documented best practice way of doing it, and then add it to the CLAUDE.md instructions under that tool section:
-
 7. NEVER edit files under `data/` during refactoring. These are evaluation/example data files, not source code.
 
 8. NEVER run evals (`inspect eval`, `uv run inspect eval`, etc.) unless explicitly asked. Evals cost money. Only run `uv run pytest tests/` for testing.
