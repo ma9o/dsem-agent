@@ -84,7 +84,7 @@ class SSMAdapter:
         """Sample η_0 ~ N(t0_mean, t0_cov)."""
         t0_mean = params["t0_mean"]
         t0_cov = params["t0_cov"]
-        chol = jla.cholesky(t0_cov + jnp.eye(self.n_latent) * 1e-8, lower=True)
+        chol = jla.cholesky(t0_cov + jnp.eye(self.n_latent) * 1e-6, lower=True)
         return t0_mean + chol @ random.normal(key, (self.n_latent,))
 
     def transition_sample(
@@ -101,7 +101,7 @@ class SSMAdapter:
         mean = Ad @ x_prev
         if cd is not None:
             mean = mean + cd.flatten()
-        chol = jla.cholesky(Qd + jnp.eye(self.n_latent) * 1e-8, lower=True)
+        chol = jla.cholesky(Qd + jnp.eye(self.n_latent) * 1e-6, lower=True)
 
         if self.diffusion_dist == "student_t":
             df = params.get("proc_df", 5.0)
