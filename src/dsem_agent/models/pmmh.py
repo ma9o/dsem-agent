@@ -238,6 +238,87 @@ def bootstrap_filter(
     )
 
 
+def cuthbert_bootstrap_filter(
+    model: CTSEMAdapter,
+    params: dict,
+    observations: jnp.ndarray,
+    time_intervals: jnp.ndarray,
+    obs_mask: jnp.ndarray,
+    n_particles: int,
+    key: jax.Array,
+    ess_threshold: float = 0.5,
+) -> PFResult:
+    """Bootstrap particle filter via cuthbert library.
+
+    Production implementation using cuthbert's Feynman-Kac particle filter
+    with systematic resampling. Same interface as bootstrap_filter() for
+    drop-in replacement.
+
+    Args:
+        model: SSMProtocol-compatible model adapter
+        params: dict of model parameters
+        observations: (T, n_manifest) observed data
+        time_intervals: (T,) time intervals
+        obs_mask: (T, n_manifest) boolean mask
+        n_particles: number of particles
+        key: JAX random key
+        ess_threshold: resample when ESS/N < threshold
+
+    Returns:
+        PFResult with log-likelihood, final particles and weights
+    """
+    from cuthbert.filtering import filter as cuthbert_filter
+    from cuthbert.smc.particle_filter import build_filter
+    from cuthbertlib.resampling.systematic import resampling
+
+    # Clean NaN observations
+    clean_obs = jnp.nan_to_num(observations, nan=0.0)
+
+    # Build Feynman-Kac model closures (close over model + params)
+    def init_sample(key, _model_inputs):
+        """Sample from initial state distribution M_0(x_0)."""
+        return model.initial_sample(key, params)
+
+    def propagate_sample(key, state, model_inputs):
+        """Propagate state via CT->DT dynamics M_t(x_t | x_{t-1})."""
+        dt = model_inputs["dt"]
+        return model.transition_sample(key, state, params, dt)
+
+    def log_potential(_state_prev, state, model_inputs):
+        """Observation log-likelihood as potential G_t(x_{t-1}, x_t)."""
+        obs = model_inputs["observation"]
+        mask = model_inputs["obs_mask"]
+        return model.observation_log_prob(obs, state, params, mask)
+
+    # Build model_inputs with leading temporal dimension T.
+    # cuthbert slices: model_inputs[0] for init, model_inputs[1:] for filtering.
+    model_inputs = {
+        "observation": clean_obs,  # (T, n_manifest)
+        "dt": time_intervals,  # (T,)
+        "obs_mask": obs_mask.astype(jnp.float32),  # (T, n_manifest)
+    }
+
+    # Build and run filter
+    filter_obj = build_filter(
+        init_sample=init_sample,
+        propagate_sample=propagate_sample,
+        log_potential=log_potential,
+        n_filter_particles=n_particles,
+        resampling_fn=resampling,
+        ess_threshold=ess_threshold,
+    )
+
+    states = cuthbert_filter(filter_obj, model_inputs, key=key)
+
+    # states has leading dim T (init + T-1 filter steps concatenated)
+    # log_normalizing_constant[-1] = cumulative log marginal likelihood
+    return PFResult(
+        log_likelihood=states.log_normalizing_constant[-1],
+        final_particles=states.particles[-1],  # (n_particles, n_latent)
+        final_log_weights=states.log_weights[-1],  # (n_particles,)
+    )
+
+
 # =============================================================================
 # PMMH Kernel
 # =============================================================================
@@ -269,6 +350,7 @@ def pmmh_kernel(
     unpack_fn,
     n_particles: int = 1000,
     proposal_cov: jnp.ndarray | None = None,
+    filter_fn=None,
 ):
     """Create PMMH init and step functions.
 
@@ -281,14 +363,17 @@ def pmmh_kernel(
         unpack_fn: flat θ vector -> params_dict
         n_particles: number of particles for PF
         proposal_cov: (d, d) random-walk proposal covariance
+        filter_fn: particle filter function (default: cuthbert_bootstrap_filter).
+            Must have same signature as bootstrap_filter().
 
     Returns:
         (init_fn, step_fn) tuple
     """
+    _filter = filter_fn if filter_fn is not None else cuthbert_bootstrap_filter
 
     def _compute_log_likelihood(theta, key):
         params = unpack_fn(theta)
-        result = bootstrap_filter(
+        result = _filter(
             model,
             params,
             observations,
@@ -368,6 +453,7 @@ def run_pmmh(
     n_particles: int = 1000,
     proposal_cov: jnp.ndarray | None = None,
     seed: int = 0,
+    filter_fn=None,
 ) -> PMMHResult:
     """Run PMMH sampler.
 
@@ -384,6 +470,8 @@ def run_pmmh(
         n_particles: particles for PF
         proposal_cov: (d, d) proposal covariance
         seed: random seed
+        filter_fn: particle filter function (default: cuthbert_bootstrap_filter).
+            Must have same signature as bootstrap_filter().
 
     Returns:
         PMMHResult with samples and diagnostics
@@ -397,6 +485,7 @@ def run_pmmh(
         unpack_fn,
         n_particles=n_particles,
         proposal_cov=proposal_cov,
+        filter_fn=filter_fn,
     )
 
     key = random.PRNGKey(seed)

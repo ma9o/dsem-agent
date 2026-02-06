@@ -317,6 +317,176 @@ class TestPMMHBootstrapFilter:
         assert max_deviation / abs(mean_ll) < 0.2
 
 
+class TestCuthbertBootstrapFilter:
+    """Test cuthbert-backed bootstrap particle filter."""
+
+    def test_cuthbert_filter_finite_likelihood(self):
+        """Cuthbert filter should produce finite log-likelihood."""
+        import jax.random as random
+
+        from dsem_agent.models.pmmh import CTSEMAdapter, cuthbert_bootstrap_filter
+
+        n_latent, n_manifest, T = 2, 2, 5
+
+        model = CTSEMAdapter(n_latent, n_manifest)
+        params = {
+            "drift": jnp.array([[-1.0, 0.0], [0.0, -1.0]]),
+            "diffusion_cov": 0.1 * jnp.eye(n_latent),
+            "lambda_mat": jnp.eye(n_manifest, n_latent),
+            "manifest_means": jnp.zeros(n_manifest),
+            "manifest_cov": 0.5 * jnp.eye(n_manifest),
+            "t0_mean": jnp.zeros(n_latent),
+            "t0_cov": jnp.eye(n_latent),
+        }
+
+        observations = jnp.ones((T, n_manifest)) * 0.5
+        time_intervals = jnp.ones(T)
+        obs_mask = ~jnp.isnan(observations)
+
+        result = cuthbert_bootstrap_filter(
+            model,
+            params,
+            observations,
+            time_intervals,
+            obs_mask,
+            n_particles=500,
+            key=random.PRNGKey(42),
+        )
+
+        assert jnp.isfinite(result.log_likelihood)
+        assert result.final_particles.shape == (500, n_latent)
+        assert result.final_log_weights.shape == (500,)
+
+    def test_cuthbert_filter_consistency_across_seeds(self):
+        """Cuthbert filter should give similar results across seeds."""
+        import jax.random as random
+
+        from dsem_agent.models.pmmh import CTSEMAdapter, cuthbert_bootstrap_filter
+
+        n_latent, n_manifest, T = 2, 2, 5
+
+        model = CTSEMAdapter(n_latent, n_manifest)
+        params = {
+            "drift": jnp.array([[-0.5, 0.0], [0.0, -0.5]]),
+            "diffusion_cov": 0.1 * jnp.eye(n_latent),
+            "lambda_mat": jnp.eye(n_manifest, n_latent),
+            "manifest_means": jnp.zeros(n_manifest),
+            "manifest_cov": 0.5 * jnp.eye(n_manifest),
+            "t0_mean": jnp.zeros(n_latent),
+            "t0_cov": jnp.eye(n_latent),
+        }
+
+        observations = jnp.array([[0.1, 0.2], [0.3, 0.4], [0.2, 0.1], [0.4, 0.3], [0.5, 0.5]])
+        time_intervals = jnp.ones(T)
+        obs_mask = ~jnp.isnan(observations)
+
+        lls = []
+        for seed in [0, 1, 2]:
+            result = cuthbert_bootstrap_filter(
+                model,
+                params,
+                observations,
+                time_intervals,
+                obs_mask,
+                n_particles=1000,
+                key=random.PRNGKey(seed),
+            )
+            lls.append(float(result.log_likelihood))
+
+        # Check variance is reasonable
+        mean_ll = sum(lls) / len(lls)
+        max_deviation = max(abs(ll - mean_ll) for ll in lls)
+        assert max_deviation / abs(mean_ll) < 0.2
+
+    def test_cuthbert_agrees_with_reference(self):
+        """Cuthbert and reference bootstrap filter should give similar log-likelihoods."""
+        import jax.random as random
+
+        from dsem_agent.models.pmmh import (
+            CTSEMAdapter,
+            bootstrap_filter,
+            cuthbert_bootstrap_filter,
+        )
+
+        n_latent, n_manifest, T = 2, 2, 5
+
+        model = CTSEMAdapter(n_latent, n_manifest)
+        params = {
+            "drift": jnp.array([[-0.5, 0.0], [0.0, -0.5]]),
+            "diffusion_cov": 0.1 * jnp.eye(n_latent),
+            "lambda_mat": jnp.eye(n_manifest, n_latent),
+            "manifest_means": jnp.zeros(n_manifest),
+            "manifest_cov": 0.5 * jnp.eye(n_manifest),
+            "t0_mean": jnp.zeros(n_latent),
+            "t0_cov": jnp.eye(n_latent),
+        }
+
+        observations = jnp.array([[0.1, 0.2], [0.3, 0.4], [0.2, 0.1], [0.4, 0.3], [0.5, 0.5]])
+        time_intervals = jnp.ones(T)
+        obs_mask = ~jnp.isnan(observations)
+
+        # Run both filters many times and compare means
+        n_runs = 5
+        ref_lls, cuth_lls = [], []
+        for seed in range(n_runs):
+            ref_result = bootstrap_filter(
+                model, params, observations, time_intervals, obs_mask,
+                n_particles=2000, key=random.PRNGKey(seed),
+            )
+            cuth_result = cuthbert_bootstrap_filter(
+                model, params, observations, time_intervals, obs_mask,
+                n_particles=2000, key=random.PRNGKey(seed + 100),
+            )
+            ref_lls.append(float(ref_result.log_likelihood))
+            cuth_lls.append(float(cuth_result.log_likelihood))
+
+        ref_mean = sum(ref_lls) / len(ref_lls)
+        cuth_mean = sum(cuth_lls) / len(cuth_lls)
+
+        # Both are unbiased estimators of the same quantity — means should be close
+        assert abs(ref_mean - cuth_mean) / abs(ref_mean) < 0.15
+
+    def test_pmmh_kernel_uses_cuthbert_by_default(self):
+        """PMMH kernel should use cuthbert filter by default."""
+        import jax.random as random
+
+        from dsem_agent.models.pmmh import CTSEMAdapter, pmmh_kernel
+
+        n_latent, n_manifest, T = 2, 2, 5
+
+        model = CTSEMAdapter(n_latent, n_manifest)
+        observations = jnp.ones((T, n_manifest)) * 0.5
+        time_intervals = jnp.ones(T)
+        obs_mask = ~jnp.isnan(observations)
+
+        def unpack(theta):
+            return {
+                "drift": jnp.array([[-theta[0], 0.0], [0.0, -theta[0]]]),
+                "diffusion_cov": 0.1 * jnp.eye(n_latent),
+                "lambda_mat": jnp.eye(n_manifest, n_latent),
+                "manifest_means": jnp.zeros(n_manifest),
+                "manifest_cov": 0.5 * jnp.eye(n_manifest),
+                "t0_mean": jnp.zeros(n_latent),
+                "t0_cov": jnp.eye(n_latent),
+            }
+
+        def log_prior(theta):
+            return -0.5 * jnp.sum(theta**2)
+
+        init_fn, step_fn = pmmh_kernel(
+            model, observations, time_intervals, obs_mask,
+            log_prior, unpack, n_particles=100,
+        )
+
+        # Should initialize without error (uses cuthbert internally)
+        state = init_fn(jnp.array([1.0]), random.PRNGKey(0))
+        assert jnp.isfinite(state.log_likelihood)
+
+        # Should step without error
+        new_state = step_fn(state, random.PRNGKey(1))
+        assert jnp.isfinite(new_state.log_likelihood)
+
+
 class TestNoiseFamily:
     """Test NoiseFamily enum."""
 

@@ -149,15 +149,18 @@ For linear-Gaussian and mildly nonlinear models. The likelihood backend (`Kalman
 ### Path 2: PMMH (Particle)
 
 ```
-SSMSpec → CTSEMAdapter → bootstrap_filter (log p̂(y|θ)) → PMMH kernel → posterior samples
+SSMSpec → CTSEMAdapter → cuthbert PF (log p̂(y|θ)) → PMMH kernel → posterior samples
 ```
 
 For non-Gaussian/strongly nonlinear models. Uses Particle Marginal Metropolis-Hastings (Andrieu et al., 2010). The bootstrap particle filter provides an unbiased log-likelihood *estimate*, which is valid for pseudo-marginal MCMC (Andrieu & Roberts, 2009). This path is completely separate from NumPyro.
 
+The particle filter uses **cuthbert** (Feynman-Kac particle filter library) for production filtering with systematic resampling. A pure-JAX reference implementation (`bootstrap_filter`) is also available for testing and fallback.
+
 Key components in `dsem_agent.models.pmmh`:
 - `CTSEMAdapter`: Maps CT-SEM SSMSpec into particle-filter-compatible functions
-- `bootstrap_filter`: Pure-JAX bootstrap PF with systematic resampling
-- `pmmh_kernel`: Random-walk MH with particle filter likelihood
+- `cuthbert_bootstrap_filter`: Production PF via cuthbert's Feynman-Kac machinery (default)
+- `bootstrap_filter`: Reference pure-JAX bootstrap PF (fallback)
+- `pmmh_kernel`: Random-walk MH with particle filter likelihood (accepts `filter_fn` parameter)
 - `run_pmmh`: Full sampler with warmup/sampling via `lax.scan`
 
 ## Library Mapping
@@ -166,9 +169,9 @@ Key components in `dsem_agent.models.pmmh`:
 |----------|---------|-----------------|-------|
 | Kalman | dynamax `lgssm_filter` | NumPyro NUTS | Exact, O(T·n³) |
 | UKF | dynamax `_predict`/`_condition_on` | NumPyro NUTS | Sigma-point propagation |
-| Particle | pure-JAX bootstrap PF | PMMH | Arbitrary models, O(T·n·P) |
+| Particle | cuthbert bootstrap PF | PMMH | Arbitrary models, O(T·n·P) |
 
-Kalman and UKF backends are pure JAX, composable with NumPyro via `numpyro.factor`. The particle path uses a custom PMMH sampler.
+Kalman and UKF backends are pure JAX, composable with NumPyro via `numpyro.factor`. The particle path uses cuthbert for likelihood estimation and a custom PMMH sampler for parameter inference.
 
 ## References
 

@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "blackjax>=1.2.0",
+    "cuthbert>=0.0.3",
     "dynamax>=1.0.1",
     "exa-py>=1.0.0",
     "google-genai>=1.56.0",
