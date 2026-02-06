@@ -1,8 +1,7 @@
-"""Unscented Kalman Filter likelihood backend using dynamax UKF building blocks.
+"""Moments filter likelihood backend wrapping cuthbert gaussian.moments.
 
-Approximate log-likelihood for mildly nonlinear Gaussian models.
-Uses dynamax's _predict and _condition_on for sigma point math,
-but runs its own scan loop to support time-varying Q (from varying dt).
+Approximate log-likelihood for mildly nonlinear Gaussian models via
+Jacobian-based linearization (EKF-like). For linear models this is exact.
 
 Use when:
 - Dynamics are nonlinear but smooth (no discontinuities)
@@ -11,21 +10,18 @@ Use when:
 - Measurement model may be nonlinear
 
 Convention: same as KalmanLikelihood — time_intervals[t] is the gap
-BEFORE observation t. We shift to dynamax's convention where dynamics[t]
-transitions AFTER observation t.
+BEFORE observation t. cuthbert handles time indexing directly.
+
+Note: This replaces the previous UKF (sigma-point) approach. For linear
+models the result is identical. For mildly nonlinear models (our use case)
+the accuracy is equivalent.
 """
 
 from collections.abc import Callable
 
 import jax.numpy as jnp
-from dynamax.nonlinear_gaussian_ssm.inference_ukf import (
-    UKFHyperParams,
-    _compute_lambda,
-    _compute_weights,
-    _condition_on,
-    _predict,
-)
-from jax import lax
+from cuthbert.filtering import filter as cuthbert_filter
+from cuthbert.gaussian.moments import build_filter
 
 from dsem_agent.models.likelihoods.base import (
     CTParams,
@@ -36,41 +32,44 @@ from dsem_agent.models.likelihoods.base import (
 from dsem_agent.models.ssm.discretization import discretize_system_batched
 
 
+def _safe_cholesky(M: jnp.ndarray) -> jnp.ndarray:
+    """Compute Cholesky factor with jitter for numerical stability.
+
+    Uses 1e-6 jitter to ensure cuthbert's internal QR decomposition
+    produces well-conditioned matrices for stable gradient propagation.
+    """
+    n = M.shape[-1]
+    return jnp.linalg.cholesky(M + jnp.eye(n) * 1e-6)
+
+
 class UKFLikelihood:
-    """Unscented Kalman Filter likelihood backend via dynamax building blocks.
+    """Moments filter likelihood backend via cuthbert.
 
-    Uses dynamax's _predict/_condition_on for sigma point propagation,
-    with a custom scan loop that supports time-varying Q from irregular dt.
+    Computes approximate log-likelihood using Jacobian-based linearization
+    around the current filter mean. For linear models this is exact.
 
-    For linear models, this is equivalent to the standard Kalman filter
-    but with slightly higher computational cost.
+    Supports optional custom dynamics and measurement functions for
+    nonlinear state-space models.
 
     Example:
-        backend = UKFLikelihood(alpha=1e-3, beta=2.0)
+        backend = UKFLikelihood()
         ll = backend.compute_log_likelihood(ct_params, meas_params, init, obs, dt)
         numpyro.factor("ssm", ll)
     """
 
     def __init__(
         self,
-        alpha: float = 1e-3,
-        beta: float = 2.0,
-        kappa: float = 0.0,
         dynamics_fn: Callable[[jnp.ndarray, jnp.ndarray, float], jnp.ndarray] | None = None,
         measurement_fn: Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray] | None = None,
     ):
-        """Initialize UKF with tuning parameters and optional custom functions.
+        """Initialize moments filter with optional custom functions.
 
         Args:
-            alpha: Spread of sigma points (small positive, e.g., 1e-3)
-            beta: Distribution parameter (2.0 optimal for Gaussian)
-            kappa: Secondary scaling (typically 0 or 3-n)
             dynamics_fn: Custom dynamics x_{t+1} = f(x_t, params, dt). If None,
                 uses linear dynamics from ct_params.
             measurement_fn: Custom measurement y = h(x, params). If None,
                 uses linear measurement from measurement_params.
         """
-        self.hyperparams = UKFHyperParams(alpha=alpha, beta=beta, kappa=kappa)
         self.custom_dynamics_fn = dynamics_fn
         self.custom_measurement_fn = measurement_fn
 
@@ -83,7 +82,7 @@ class UKFLikelihood:
         time_intervals: jnp.ndarray,
         obs_mask: jnp.ndarray | None = None,
     ) -> float:
-        """Compute log-likelihood via UKF with dynamax building blocks.
+        """Compute log-likelihood via cuthbert moments filter.
 
         Args:
             ct_params: Continuous-time dynamics (drift, diffusion_cov, cint)
@@ -96,12 +95,12 @@ class UKFLikelihood:
         Returns:
             Total log-likelihood (scalar)
         """
+        T = observations.shape[0]
         n_latent = initial_state.mean.shape[0]
 
-        # 1. Build shifted dynamics (same convention as KalmanLikelihood)
-        shifted_dt = jnp.concatenate([time_intervals[1:], time_intervals[-1:]])
+        # 1. Discretize dynamics for each time step
         Ad, Qd, cd = discretize_system_batched(
-            ct_params.drift, ct_params.diffusion_cov, ct_params.cint, shifted_dt
+            ct_params.drift, ct_params.diffusion_cov, ct_params.cint, time_intervals
         )
 
         # 2. Preprocess missing data
@@ -109,76 +108,98 @@ class UKFLikelihood:
             observations, measurement_params.manifest_cov, obs_mask
         )
 
-        # 3. Compute UKF weights (static, depends only on state dim)
-        alpha, beta, kappa = self.hyperparams
-        lamb = _compute_lambda(alpha, kappa, n_latent)
-        w_mean, w_cov = _compute_weights(n_latent, alpha, beta, lamb)
+        # 3. Compute Cholesky factors (cuthbert operates in square-root form)
+        chol_Qd = jnp.vectorize(_safe_cholesky, signature="(n,n)->(n,n)")(Qd)
+        chol_R = jnp.vectorize(_safe_cholesky, signature="(n,n)->(n,n)")(R_adjusted)
+        chol_P0 = _safe_cholesky(initial_state.cov)
 
-        # 4. Build dynamics function: f(x, u) -> x_next
-        #    u is unused (dummy input); timestep handled via scan index
-        if self.custom_dynamics_fn is not None:
-            custom_fn = self.custom_dynamics_fn
-
-            def make_dynamics(_Ad_t, _cd_t, dt_t):
-                def f(x, _u):
-                    return custom_fn(x, ct_params, dt_t)
-
-                return f
+        # 4. Build cd
+        if cd is not None:
+            dynamics_bias = cd  # (T, n_latent)
         else:
+            dynamics_bias = jnp.zeros((T, n_latent))
 
-            def make_dynamics(Ad_t, cd_t, _dt_t):
-                def f(x, _u):
-                    result = Ad_t @ x
-                    if cd_t is not None:
-                        result = result + cd_t
-                    return result
+        # 5. Broadcast static params to temporal dimension
+        H = jnp.broadcast_to(
+            measurement_params.lambda_mat, (T, *measurement_params.lambda_mat.shape)
+        )
+        d = jnp.broadcast_to(
+            measurement_params.manifest_means, (T, *measurement_params.manifest_means.shape)
+        )
 
-                return f
+        model_inputs = {
+            "Ad": Ad,              # (T, n_latent, n_latent)
+            "cd": dynamics_bias,   # (T, n_latent)
+            "chol_Qd": chol_Qd,   # (T, n_latent, n_latent)
+            "H": H,               # (T, n_manifest, n_latent)
+            "d": d,                # (T, n_manifest)
+            "chol_R": chol_R,      # (T, n_manifest, n_manifest)
+            "y": clean_obs,        # (T, n_manifest)
+            "m0": jnp.broadcast_to(initial_state.mean, (T, n_latent)),
+            "chol_P0": jnp.broadcast_to(chol_P0, (T, n_latent, n_latent)),
+            "dt": time_intervals,  # (T,) needed for custom dynamics
+        }
 
-        # 5. Build emission function: h(x, u) -> y_predicted
-        #    u is required by dynamax's vmap signature but unused here
-        if self.custom_measurement_fn is not None:
-            custom_meas = self.custom_measurement_fn
+        # 6. Define closures
+        custom_dynamics = self.custom_dynamics_fn
+        custom_measurement = self.custom_measurement_fn
+        _ct_params = ct_params
+        _meas_params = measurement_params
 
-            def emission_fn(x, _u):
-                return custom_meas(x, measurement_params)
-        else:
-            lambda_mat = measurement_params.lambda_mat
-            manifest_means = measurement_params.manifest_means
+        def get_init_params(mi):
+            return mi["m0"], mi["chol_P0"]
 
-            def emission_fn(x, _u):
-                return lambda_mat @ x + manifest_means
+        def get_dynamics_moments(state, mi):
+            Ad_t = mi["Ad"]
+            cd_t = mi["cd"]
+            chol_Qd_t = mi["chol_Qd"]
 
-        # 6. Scan: condition on obs, then predict next state
-        dummy_input = jnp.zeros(0)
+            if custom_dynamics is not None:
+                dt_t = mi["dt"]
 
-        def scan_fn(carry, t):
-            ll, pred_mean, pred_cov = carry
+                def mean_and_chol_cov(x):
+                    mean = custom_dynamics(x, _ct_params, dt_t)
+                    return mean, chol_Qd_t
 
-            Q_t = Qd[t]
-            R_t = R_adjusted[t]
-            y_t = clean_obs[t]
+            else:
 
-            # Condition on this emission
-            log_lik, filt_mean, filt_cov = _condition_on(
-                pred_mean, pred_cov, emission_fn, R_t, lamb, w_mean, w_cov, dummy_input, y_t
-            )
-            ll = ll + log_lik
+                def mean_and_chol_cov(x):
+                    mean = Ad_t @ x + cd_t
+                    return mean, chol_Qd_t
 
-            # Build per-step dynamics function
-            Ad_t = Ad[t]
-            cd_t = cd[t] if cd is not None else None
-            dt_t = shifted_dt[t]
-            dynamics_fn = make_dynamics(Ad_t, cd_t, dt_t)
+            linearization_point = state.mean
+            return mean_and_chol_cov, linearization_point
 
-            # Predict next state
-            next_mean, next_cov, _ = _predict(
-                filt_mean, filt_cov, dynamics_fn, Q_t, lamb, w_mean, w_cov, dummy_input
-            )
+        def get_observation_moments(state, mi):
+            H_t = mi["H"]
+            d_t = mi["d"]
+            chol_R_t = mi["chol_R"]
+            y_t = mi["y"]
 
-            return (ll, next_mean, next_cov), None
+            if custom_measurement is not None:
 
-        init_carry = (0.0, initial_state.mean, initial_state.cov)
-        (total_ll, _, _), _ = lax.scan(scan_fn, init_carry, jnp.arange(observations.shape[0]))
+                def mean_and_chol_cov(x):
+                    mean = custom_measurement(x, _meas_params)
+                    return mean, chol_R_t
 
-        return total_ll
+            else:
+
+                def mean_and_chol_cov(x):
+                    mean = H_t @ x + d_t
+                    return mean, chol_R_t
+
+            linearization_point = state.mean
+            return mean_and_chol_cov, linearization_point, y_t
+
+        # 7. Build and run filter (non-associative: linearization depends on state)
+        filter_obj = build_filter(
+            get_init_params=get_init_params,
+            get_dynamics_params=get_dynamics_moments,
+            get_observation_params=get_observation_moments,
+            associative=False,
+        )
+
+        states = cuthbert_filter(filter_obj, model_inputs)
+
+        # 8. Return cumulative log marginal likelihood
+        return states.log_normalizing_constant[-1]
