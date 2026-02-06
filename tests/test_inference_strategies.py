@@ -1,10 +1,10 @@
 """Comprehensive tests for inference strategy backends.
 
-Tests follow the strategy:
-1. Unit tests for strategy selection and expression parsing
-2. Cross-validation: Kalman as ground truth, UKF must match on linear-Gaussian
-3. Cuthbert particle filter: finite likelihood, consistency, Kalman cross-validation
-4. Parameter recovery: simulate → infer → check credible intervals (Kalman + PMMH)
+Tests cover:
+1. Cross-validation: Kalman as ground truth, UKF must match on linear-Gaussian
+2. Cuthbert particle filter: finite likelihood, consistency, Kalman cross-validation
+3. Parameter recovery: simulate → infer → check credible intervals (Kalman + PMMH)
+4. Backend integration with strategy selector routing
 
 Test Matrix:
 | Model Class                    | Strategies           | Ground Truth       |
@@ -25,153 +25,6 @@ from dsem_agent.models.likelihoods.base import (
     MeasurementParams,
 )
 from dsem_agent.models.ssm import NoiseFamily, SSMSpec
-
-# =============================================================================
-# Unit Tests: Strategy Selector
-# =============================================================================
-
-
-class TestStrategySelector:
-    """Unit tests for strategy selection logic."""
-
-    def test_linear_gaussian_selects_kalman(self):
-        """Linear dynamics + Gaussian noise → Kalman filter."""
-        from dsem_agent.models.strategy_selector import InferenceStrategy, select_strategy
-
-        spec = SSMSpec(
-            n_latent=2,
-            n_manifest=2,
-            drift="free",
-            diffusion="diag",
-            diffusion_dist=NoiseFamily.GAUSSIAN,
-            manifest_dist=NoiseFamily.GAUSSIAN,
-        )
-        assert select_strategy(spec) == InferenceStrategy.KALMAN
-
-    def test_fixed_matrices_selects_kalman(self):
-        """Fixed (ndarray) matrices are linear → Kalman filter."""
-        from dsem_agent.models.strategy_selector import InferenceStrategy, select_strategy
-
-        spec = SSMSpec(
-            n_latent=2,
-            n_manifest=2,
-            drift=jnp.array([[-0.5, 0.1], [0.2, -0.8]]),
-            diffusion=jnp.eye(2) * 0.3,
-            lambda_mat=jnp.eye(2),
-            diffusion_dist=NoiseFamily.GAUSSIAN,
-            manifest_dist=NoiseFamily.GAUSSIAN,
-        )
-        assert select_strategy(spec) == InferenceStrategy.KALMAN
-
-    def test_student_t_observation_selects_particle(self):
-        """Non-Gaussian observation noise → particle filter."""
-        from dsem_agent.models.strategy_selector import InferenceStrategy, select_strategy
-
-        spec = SSMSpec(
-            n_latent=2,
-            n_manifest=2,
-            diffusion_dist=NoiseFamily.GAUSSIAN,
-            manifest_dist=NoiseFamily.STUDENT_T,
-        )
-        assert select_strategy(spec) == InferenceStrategy.PARTICLE
-
-    def test_student_t_process_selects_particle(self):
-        """Non-Gaussian process noise → particle filter."""
-        from dsem_agent.models.strategy_selector import InferenceStrategy, select_strategy
-
-        spec = SSMSpec(
-            n_latent=2,
-            n_manifest=2,
-            diffusion_dist=NoiseFamily.STUDENT_T,
-            manifest_dist=NoiseFamily.GAUSSIAN,
-        )
-        assert select_strategy(spec) == InferenceStrategy.PARTICLE
-
-    def test_poisson_observation_selects_particle(self):
-        """Poisson (count) observations → particle filter."""
-        from dsem_agent.models.strategy_selector import InferenceStrategy, select_strategy
-
-        spec = SSMSpec(
-            n_latent=2,
-            n_manifest=2,
-            diffusion_dist=NoiseFamily.GAUSSIAN,
-            manifest_dist=NoiseFamily.POISSON,
-        )
-        assert select_strategy(spec) == InferenceStrategy.PARTICLE
-
-    def test_gamma_observation_selects_particle(self):
-        """Gamma (positive continuous) observations → particle filter."""
-        from dsem_agent.models.strategy_selector import InferenceStrategy, select_strategy
-
-        spec = SSMSpec(
-            n_latent=2,
-            n_manifest=2,
-            diffusion_dist=NoiseFamily.GAUSSIAN,
-            manifest_dist=NoiseFamily.GAMMA,
-        )
-        assert select_strategy(spec) == InferenceStrategy.PARTICLE
-
-
-class TestExpressionParser:
-    """Unit tests for state-dependent term detection."""
-
-    def test_ndarray_is_linear(self):
-        """Fixed numpy array is parameter-only (linear)."""
-        from dsem_agent.models.strategy_selector import _has_state_dependent_terms
-
-        assert not _has_state_dependent_terms(jnp.eye(2))
-
-    def test_free_string_is_linear(self):
-        """'free' string means estimated but linear."""
-        from dsem_agent.models.strategy_selector import _has_state_dependent_terms
-
-        assert not _has_state_dependent_terms("free")
-
-    def test_diag_string_is_linear(self):
-        """'diag' string means diagonal but linear."""
-        from dsem_agent.models.strategy_selector import _has_state_dependent_terms
-
-        assert not _has_state_dependent_terms("diag")
-
-    def test_none_is_linear(self):
-        """None (disabled parameter) is linear."""
-        from dsem_agent.models.strategy_selector import _has_state_dependent_terms
-
-        assert not _has_state_dependent_terms(None)
-
-    def test_state_reference_is_nonlinear(self):
-        """String referencing 'state' is nonlinear."""
-        from dsem_agent.models.strategy_selector import _has_state_dependent_terms
-
-        assert _has_state_dependent_terms("state[0] * param")
-
-    def test_ss_reference_is_nonlinear(self):
-        """String referencing 'ss[' is nonlinear (state-space indexing)."""
-        from dsem_agent.models.strategy_selector import _has_state_dependent_terms
-
-        assert _has_state_dependent_terms("ss[0] + ss[1]")
-
-    def test_nonlinear_function_is_nonlinear(self):
-        """String with nonlinear functions is nonlinear."""
-        from dsem_agent.models.strategy_selector import _has_state_dependent_terms
-
-        assert _has_state_dependent_terms("exp(state[0])")
-        assert _has_state_dependent_terms("sin(x)")
-        assert _has_state_dependent_terms("tanh(y)")
-
-    def test_numeric_constant_is_linear(self):
-        """Numeric constants (int, float) are linear."""
-        from dsem_agent.models.strategy_selector import _has_state_dependent_terms
-
-        assert not _has_state_dependent_terms(0.5)
-        assert not _has_state_dependent_terms(1)
-
-    def test_simple_param_string_is_linear(self):
-        """Simple parameter name string is linear."""
-        from dsem_agent.models.strategy_selector import _has_state_dependent_terms
-
-        assert not _has_state_dependent_terms("beta")
-        assert not _has_state_dependent_terms("sigma_obs")
 
 
 # =============================================================================
@@ -214,21 +67,6 @@ class TestCrossValidationLinearGaussian:
         observations = random.normal(key, (T, 2)) * 0.5
         time_intervals = jnp.ones(T) * 0.5
         return observations, time_intervals
-
-    def test_kalman_computes_finite_likelihood(self, linear_gaussian_params, simple_observations):
-        """Kalman filter produces finite log-likelihood."""
-        from dsem_agent.models.likelihoods.kalman import KalmanLikelihood
-
-        observations, time_intervals = simple_observations
-        backend = KalmanLikelihood()
-        ll = backend.compute_log_likelihood(
-            linear_gaussian_params["ct_params"],
-            linear_gaussian_params["meas_params"],
-            linear_gaussian_params["init_params"],
-            observations,
-            time_intervals,
-        )
-        assert jnp.isfinite(ll)
 
     def test_ukf_matches_kalman(self, linear_gaussian_params, simple_observations):
         """UKF log-likelihood matches Kalman within numerical tolerance."""
@@ -1061,25 +899,6 @@ class TestEdgeCases:
 
 class TestBackendIntegration:
     """Test that backends integrate correctly with strategy selector."""
-
-    def test_get_backend_returns_correct_type(self):
-        """get_likelihood_backend returns correct backend class."""
-        from dsem_agent.models.likelihoods.ukf import UKFLikelihood
-        from dsem_agent.models.strategy_selector import (
-            InferenceStrategy,
-            get_likelihood_backend,
-        )
-
-        kalman_backend = get_likelihood_backend(InferenceStrategy.KALMAN)
-        assert kalman_backend is not None
-        assert hasattr(kalman_backend, "compute_log_likelihood")
-
-        ukf_backend = get_likelihood_backend(InferenceStrategy.UKF)
-        assert isinstance(ukf_backend, UKFLikelihood)
-
-        # PARTICLE raises ValueError (uses PMMH path)
-        with pytest.raises(ValueError, match="PMMH"):
-            get_likelihood_backend(InferenceStrategy.PARTICLE)
 
     def test_model_strategy_method(self):
         """SSMModel.get_inference_strategy() works correctly."""

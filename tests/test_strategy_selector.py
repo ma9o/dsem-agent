@@ -32,6 +32,32 @@ class TestStrategySelection:
         )
         assert select_strategy(spec) == InferenceStrategy.PARTICLE
 
+    def test_student_t_observation_returns_particle(self):
+        """Student-t observation noise should use particle filter."""
+        from dsem_agent.models.ssm import NoiseFamily, SSMSpec
+        from dsem_agent.models.strategy_selector import InferenceStrategy, select_strategy
+
+        spec = SSMSpec(
+            n_latent=2,
+            n_manifest=2,
+            diffusion_dist=NoiseFamily.GAUSSIAN,
+            manifest_dist=NoiseFamily.STUDENT_T,
+        )
+        assert select_strategy(spec) == InferenceStrategy.PARTICLE
+
+    def test_gamma_observation_returns_particle(self):
+        """Gamma observation noise should use particle filter."""
+        from dsem_agent.models.ssm import NoiseFamily, SSMSpec
+        from dsem_agent.models.strategy_selector import InferenceStrategy, select_strategy
+
+        spec = SSMSpec(
+            n_latent=2,
+            n_manifest=2,
+            diffusion_dist=NoiseFamily.GAUSSIAN,
+            manifest_dist=NoiseFamily.GAMMA,
+        )
+        assert select_strategy(spec) == InferenceStrategy.PARTICLE
+
     def test_nongaussian_process_returns_particle(self):
         """Non-Gaussian process noise should use particle filter."""
         from dsem_agent.models.ssm import NoiseFamily, SSMSpec
@@ -44,6 +70,22 @@ class TestStrategySelection:
             manifest_dist=NoiseFamily.GAUSSIAN,
         )
         assert select_strategy(spec) == InferenceStrategy.PARTICLE
+
+    def test_fixed_matrices_returns_kalman(self):
+        """Fixed matrices imply linear dynamics → Kalman filter."""
+        from dsem_agent.models.ssm import NoiseFamily, SSMSpec
+        from dsem_agent.models.strategy_selector import InferenceStrategy, select_strategy
+
+        spec = SSMSpec(
+            n_latent=2,
+            n_manifest=2,
+            drift=jnp.array([[-0.5, 0.1], [0.2, -0.8]]),
+            diffusion=jnp.eye(2) * 0.3,
+            lambda_mat=jnp.eye(2),
+            diffusion_dist=NoiseFamily.GAUSSIAN,
+            manifest_dist=NoiseFamily.GAUSSIAN,
+        )
+        assert select_strategy(spec) == InferenceStrategy.KALMAN
 
     def test_default_spec_is_kalman(self):
         """Default SSMSpec (no explicit distributions) should use Kalman."""
@@ -88,6 +130,7 @@ class TestHasStateDependentTerms:
 
         assert _has_state_dependent_terms("drift_eta1 * state#eta1") is True
         assert _has_state_dependent_terms("state#latent_1 + param") is True
+        assert _has_state_dependent_terms("state[0] * param") is True
 
     def test_ss_reference_is_nonlinear(self):
         """Expressions with ss_ (state-space) references are nonlinear."""
@@ -95,6 +138,7 @@ class TestHasStateDependentTerms:
 
         assert _has_state_dependent_terms("param * ss_level") is True
         assert _has_state_dependent_terms("ss_slope + constant") is True
+        assert _has_state_dependent_terms("ss[0] + ss[1]") is True
 
     def test_nonlinear_function_is_nonlinear(self):
         """Expressions with nonlinear functions are nonlinear."""
@@ -111,6 +155,13 @@ class TestHasStateDependentTerms:
 
         assert _has_state_dependent_terms("drift_eta1") is False
         assert _has_state_dependent_terms("param_1 + param_2") is False
+
+    def test_numeric_constant_is_linear(self):
+        """Numeric constants (int, float) are linear."""
+        from dsem_agent.models.strategy_selector import _has_state_dependent_terms
+
+        assert _has_state_dependent_terms(0.5) is False
+        assert _has_state_dependent_terms(1) is False
 
 
 class TestGetLikelihoodBackend:
@@ -151,90 +202,6 @@ class TestGetLikelihoodBackend:
 
         with pytest.raises(ValueError, match="PMMH"):
             get_likelihood_backend(InferenceStrategy.PARTICLE)
-
-
-class TestUKFLikelihood:
-    """Test UKF likelihood computation."""
-
-    def test_ukf_log_likelihood_finite(self):
-        """UKF should produce finite log-likelihood on simple data."""
-        from dsem_agent.models.likelihoods.base import (
-            CTParams,
-            InitialStateParams,
-            MeasurementParams,
-        )
-        from dsem_agent.models.likelihoods.ukf import UKFLikelihood
-
-        # Simple 2-state, 2-observation model
-        n_latent, n_manifest, T = 2, 2, 10
-
-        ct_params = CTParams(
-            drift=jnp.array([[-1.0, 0.0], [0.0, -1.0]]),
-            diffusion_cov=0.1 * jnp.eye(n_latent),
-            cint=None,
-        )
-        meas_params = MeasurementParams(
-            lambda_mat=jnp.eye(n_manifest, n_latent),
-            manifest_means=jnp.zeros(n_manifest),
-            manifest_cov=0.5 * jnp.eye(n_manifest),
-        )
-        init_state = InitialStateParams(
-            mean=jnp.zeros(n_latent),
-            cov=jnp.eye(n_latent),
-        )
-
-        observations = jnp.ones((T, n_manifest)) * 0.5
-        time_intervals = jnp.ones(T)
-
-        backend = UKFLikelihood()
-        ll = backend.compute_log_likelihood(
-            ct_params, meas_params, init_state, observations, time_intervals
-        )
-
-        assert jnp.isfinite(ll)
-
-    def test_ukf_matches_kalman_on_linear(self):
-        """UKF should approximate Kalman on linear-Gaussian models."""
-        from dsem_agent.models.likelihoods.base import (
-            CTParams,
-            InitialStateParams,
-            MeasurementParams,
-        )
-        from dsem_agent.models.likelihoods.kalman import KalmanLikelihood
-        from dsem_agent.models.likelihoods.ukf import UKFLikelihood
-
-        n_latent, n_manifest, T = 2, 2, 5
-
-        ct_params = CTParams(
-            drift=jnp.array([[-0.5, 0.0], [0.0, -0.5]]),
-            diffusion_cov=0.1 * jnp.eye(n_latent),
-            cint=None,
-        )
-        meas_params = MeasurementParams(
-            lambda_mat=jnp.eye(n_manifest, n_latent),
-            manifest_means=jnp.zeros(n_manifest),
-            manifest_cov=0.5 * jnp.eye(n_manifest),
-        )
-        init_state = InitialStateParams(
-            mean=jnp.zeros(n_latent),
-            cov=jnp.eye(n_latent),
-        )
-
-        observations = jnp.array([[0.1, 0.2], [0.3, 0.4], [0.2, 0.1], [0.4, 0.3], [0.5, 0.5]])
-        time_intervals = jnp.ones(T)
-
-        kalman = KalmanLikelihood()
-        ukf = UKFLikelihood()
-
-        ll_kalman = kalman.compute_log_likelihood(
-            ct_params, meas_params, init_state, observations, time_intervals
-        )
-        ll_ukf = ukf.compute_log_likelihood(
-            ct_params, meas_params, init_state, observations, time_intervals
-        )
-
-        # UKF should be close to Kalman for linear models (within ~1%)
-        assert jnp.abs(ll_ukf - ll_kalman) / jnp.abs(ll_kalman) < 0.05
 
 
 class TestCuthbertBootstrapFilter:
