@@ -97,7 +97,7 @@ class TestCoreUtilities:
 
 
 class TestKalmanLikelihoodBackend:
-    """Test Kalman likelihood via dynamax backend."""
+    """Test Kalman likelihood via cuthbert backend."""
 
     def test_kalman_log_likelihood_finite(self):
         """Test that log-likelihood is finite for reasonable data."""

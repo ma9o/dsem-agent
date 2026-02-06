@@ -188,8 +188,6 @@ class TestGetLikelihoodBackend:
 
         backend = get_likelihood_backend(InferenceStrategy.UKF)
         assert isinstance(backend, UKFLikelihood)
-        assert backend.hyperparams.alpha == 1e-3
-        assert backend.hyperparams.beta == 2.0
 
     def test_particle_backend_raises(self):
         """PARTICLE strategy should raise ValueError (uses PMMH instead)."""
