@@ -24,7 +24,7 @@ from dsem_agent.models.likelihoods.base import (
     InitialStateParams,
     MeasurementParams,
 )
-from dsem_agent.models.ssm.discretization import discretize_system
+from dsem_agent.models.ssm.discretization import discretize_system, discretize_system_batched
 
 # =============================================================================
 # JAX-native systematic resampling (gradient-safe on all platforms)
@@ -274,16 +274,25 @@ class ParticleLikelihood:
         from cuthbert.filtering import filter as cuthbert_filter
         from cuthbert.smc.particle_filter import build_filter
 
+        n = self.n_latent
+
         if obs_mask is None:
             obs_mask = ~jnp.isnan(observations)
 
         clean_obs = jnp.nan_to_num(observations, nan=0.0)
 
-        # Build params dict from structured NamedTuples
+        # --- Pre-discretize CT→DT for all T timesteps (once, not per particle) ---
+        # This is the key optimization: matrix exponential + Lyapunov solve is
+        # O(n³) per timestep and identical across particles. Pre-computing avoids
+        # redundant work inside propagate_sample.
+        Ad, Qd, cd = discretize_system_batched(
+            ct_params.drift, ct_params.diffusion_cov, ct_params.cint, time_intervals
+        )
+        if cd is None:
+            cd = jnp.zeros((len(time_intervals), n))
+
+        # Build params dict for observation model + initial state
         params = {
-            "drift": ct_params.drift,
-            "diffusion_cov": ct_params.diffusion_cov,
-            "cint": ct_params.cint,
             "lambda_mat": measurement_params.lambda_mat,
             "manifest_means": measurement_params.manifest_means,
             "manifest_cov": measurement_params.manifest_cov,
@@ -293,7 +302,7 @@ class ParticleLikelihood:
         if extra_params:
             params.update(extra_params)
 
-        # Create SSMAdapter
+        # Create SSMAdapter (only used for init_sample and observation_log_prob)
         adapter = SSMAdapter(
             self.n_latent,
             self.n_manifest,
@@ -305,9 +314,27 @@ class ParticleLikelihood:
         def init_sample(key, _model_inputs):
             return adapter.initial_sample(key, params)
 
+        jitter = jnp.eye(n) * 1e-6
+
         def propagate_sample(key, state, model_inputs):
-            dt = model_inputs["dt"]
-            return adapter.transition_sample(key, state, params, dt)
+            # Use pre-discretized params from model_inputs — no discretize_system call.
+            # Cholesky is computed here (not pre-batched) for gradient stability.
+            Ad_t = model_inputs["Ad"]
+            cd_t = model_inputs["cd"]
+            Qd_t = model_inputs["Qd"]
+            chol_Qd_t = jla.cholesky(Qd_t + jitter, lower=True)
+            mean = Ad_t @ state + cd_t
+
+            if self.diffusion_dist == "student_t":
+                df = params.get("proc_df", 5.0)
+                df = jnp.maximum(df, 2.1)
+                key_z, key_chi2 = random.split(key)
+                z = random.normal(key_z, (n,))
+                chi2_sample = random.gamma(key_chi2, df / 2.0) * 2.0
+                scale = jnp.sqrt((df - 2.0) / chi2_sample)
+                return mean + chol_Qd_t @ (z * scale)
+            else:
+                return mean + chol_Qd_t @ random.normal(key, (n,))
 
         def log_potential(_state_prev, state, model_inputs):
             obs = model_inputs["observation"]
@@ -320,8 +347,10 @@ class ParticleLikelihood:
         # with dt[k] and weight against obs[k].
         model_inputs = {
             "observation": clean_obs,
-            "dt": time_intervals,
             "obs_mask": obs_mask.astype(jnp.float32),
+            "Ad": Ad,
+            "cd": cd,
+            "Qd": Qd,
         }
 
         # Build and run filter
