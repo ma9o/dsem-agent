@@ -285,7 +285,8 @@ class TestSSMModelBuilder:
         builder.fit(X)
 
         samples = builder.get_samples()
-        assert "drift_diag_pop" in samples
+        # Builder defaults to SVI, which returns deterministic sites
+        assert "drift" in samples
 
 
 class TestNoiseFamily:
