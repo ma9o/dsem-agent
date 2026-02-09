@@ -65,7 +65,6 @@ def _assemble_deterministics(
     assembly logic in SSMModel._sample_* but operates directly on the (N, ...)
     sample arrays, avoiding N sequential numpyro trace calls.
 
-    Only non-hierarchical models are supported (hessmc2 doesn't do hierarchical).
     """
     N = next(iter(samples.values())).shape[0]
     n_l, n_m = spec.n_latent, spec.n_manifest

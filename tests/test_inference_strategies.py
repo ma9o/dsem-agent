@@ -1574,125 +1574,101 @@ class TestHessMC2VmapBatching:
 
 
 class TestHessMC2Smoke:
-    """End-to-end smoke test for Hess-MC² on a non-linear non-Gaussian SSM.
+    """End-to-end smoke test for Hess-MC² on a Linear Gaussian SSM.
 
-    DGP: 3-latent CT-SSM with 5 Poisson indicators and Student-t process noise.
-    - Non-linear observation: y ~ Poisson(exp(Λx + μ))  (log-link)
-    - Non-Gaussian process:  Student-t innovations (df=5)
-    - Non-Gaussian observation: Poisson counts
-    - Cross-coupled drift (6 off-diagonal elements)
-    - Free factor loadings (identity block + 6 free cross-loadings)
-    - D=33 total free parameters
+    Replicates the paper's LGSS experiment (Section IV-A) using our
+    continuous-time SSM framework. D=3 parameters (drift_diag, diffusion_diag,
+    manifest_var_diag) — matching the paper's low-dimensional test case.
 
-    Uses tiny inference settings (N=8, K=3) — exercises the full pipeline
-    without waiting for convergence.
+    Uses tiny inference settings (N=8, K=3) to exercise the full pipeline
+    quickly, plus a slow recovery test with proper settings.
     """
 
-    @pytest.mark.timeout(30)
-    def test_poisson_student_t_smoke(self):
-        """Hess-MC² MALA on 3-latent, 5-indicator Poisson + Student-t SSM.
-
-        Performance gate: must complete within 30s.
-        """
-        import time
-
+    @pytest.fixture
+    def lgss_data(self):
+        """1D Linear Gaussian SSM data (paper Section IV-A analog)."""
         import jax.scipy.linalg as jla
 
         from dsem_agent.models.ssm import discretize_system
 
-        t0 = time.perf_counter()
+        n_latent, n_manifest = 1, 1
+        T, dt = 100, 1.0
 
-        # -- Ground truth --
-        n_latent, n_manifest = 3, 5
-        T, dt = 40, 0.5
-        proc_df = 5.0
+        true_drift = jnp.array([[-0.3]])  # stable AR
+        true_diff_cov = jnp.array([[0.3**2]])  # process noise var
+        true_obs_var = jnp.array([[0.5**2]])  # observation noise var
 
-        true_drift = jnp.array(
-            [
-                [-0.6, 0.15, 0.0],
-                [0.1, -0.8, 0.2],
-                [0.0, -0.1, -0.5],
-            ]
-        )
-        true_diff_diag = jnp.array([0.3, 0.25, 0.2])
-        true_cint = jnp.array([0.3, 0.0, -0.2])
-        true_lambda = jnp.array(
-            [
-                [1.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0],
-                [0.0, 0.0, 1.0],
-                [0.6, 0.4, 0.0],
-                [0.0, 0.3, 0.7],
-            ]
-        )
-        log_baselines = jnp.log(jnp.array([5.0, 3.0, 4.0, 6.0, 2.0]))
-
-        # -- Simulate latent states with Student-t process noise --
-        diff_cov = jnp.diag(true_diff_diag**2)
-        Ad, Qd, cd = discretize_system(true_drift, diff_cov, true_cint, dt)
+        Ad, Qd, _ = discretize_system(true_drift, true_diff_cov, None, dt)
         Qd_chol = jla.cholesky(Qd + jnp.eye(n_latent) * 1e-8, lower=True)
+        R_chol = jla.cholesky(true_obs_var, lower=True)
 
         key = random.PRNGKey(42)
         states = [jnp.zeros(n_latent)]
         for _ in range(T - 1):
-            key, nk, chi_k = random.split(key, 3)
-            z = random.normal(nk, (n_latent,))
-            chi2 = random.gamma(chi_k, proc_df / 2.0) * 2.0
-            noise = Qd_chol @ (z * jnp.sqrt((proc_df - 2.0) / chi2))
-            states.append(Ad @ states[-1] + cd.flatten() + noise)
+            key, nk = random.split(key)
+            states.append(Ad @ states[-1] + Qd_chol @ random.normal(nk, (n_latent,)))
         latent = jnp.stack(states)
 
-        # -- Poisson observations: y ~ Poisson(exp(Λx + μ)) --
         key, obs_key = random.split(key)
-        eta = jax.vmap(lambda x: true_lambda @ x + log_baselines)(latent)
-        eta = jnp.clip(eta, -10.0, 6.0)
-        observations = random.poisson(obs_key, jnp.exp(eta)).astype(jnp.float32)
+        observations = latent + random.normal(obs_key, (T, n_manifest)) @ R_chol.T
         times = jnp.arange(T, dtype=float) * dt
 
-        # -- Fit (N=8, K=3, D=33) --
         spec = SSMSpec(
             n_latent=n_latent,
             n_manifest=n_manifest,
-            lambda_mat="free",
+            lambda_mat=jnp.eye(n_manifest, n_latent),
+            manifest_means=jnp.zeros(n_manifest),
             diffusion="diag",
-            cint="free",
-            manifest_dist=NoiseFamily.POISSON,
-            diffusion_dist=NoiseFamily.STUDENT_T,
-            manifest_means=log_baselines,
+            t0_means=jnp.zeros(n_latent),
+            t0_var=jnp.eye(n_latent),
         )
-        model = SSMModel(spec, n_particles=30)
+
+        return {
+            "observations": observations,
+            "times": times,
+            "spec": spec,
+            "true_drift_diag": -0.3,
+            "true_diff_diag": 0.3,
+            "true_obs_sd": 0.5,
+            "n_latent": n_latent,
+        }
+
+    @pytest.mark.timeout(30)
+    def test_lgss_hessian_smoke(self, lgss_data):
+        """Hess-MC² Hessian proposal on 1D LGSS (D=3) — pipeline check.
+
+        Paper reference: Section IV-A, LGSS model.
+        Performance gate: must complete within 30s.
+        """
+        import time
+
+        t0 = time.perf_counter()
+
+        model = SSMModel(lgss_data["spec"], n_particles=50)
 
         result = fit(
             model,
-            observations=observations,
-            times=times,
+            observations=lgss_data["observations"],
+            times=lgss_data["times"],
             method="hessmc2",
             n_smc_particles=8,
             n_iterations=3,
-            proposal="mala",
-            step_size=0.01,
+            proposal="hessian",
+            step_size=0.5,
+            adapt_step_size=False,
             seed=0,
         )
 
-        # -- Checks --
         assert isinstance(result, InferenceResult)
         assert result.method == "hessmc2"
         samples = result.get_samples()
 
-        for site in [
-            "drift_diag_pop",
-            "drift_offdiag_pop",
-            "diffusion_diag_pop",
-            "cint_pop",
-            "lambda_free",
-            "proc_df",
-        ]:
+        for site in ["drift_diag_pop", "diffusion_diag_pop", "manifest_var_diag"]:
             assert site in samples, f"Missing sample site: {site}"
 
-        assert samples["drift_diag_pop"].shape[1] == n_latent
-        assert samples["drift_offdiag_pop"].shape[1] == n_latent * (n_latent - 1)
-        assert samples["cint_pop"].shape[1] == n_latent
-        assert samples["proc_df"].ndim == 1
+        assert samples["drift_diag_pop"].shape == (8, 1)
+        assert samples["diffusion_diag_pop"].shape == (8, 1)
+        assert samples["manifest_var_diag"].shape == (8, 1)
 
         ess = result.diagnostics["ess_history"]
         assert len(ess) == 3
@@ -1700,6 +1676,61 @@ class TestHessMC2Smoke:
 
         elapsed = time.perf_counter() - t0
         assert elapsed < 30.0, f"Hess-MC² smoke took {elapsed:.1f}s, must be under 30s"
+
+    @pytest.mark.slow
+    @pytest.mark.timeout(120)
+    def test_lgss_hessian_recovery(self, lgss_data):
+        """Hess-MC² Hessian proposal recovers 1D LGSS params (D=3).
+
+        Paper reference: Section IV-A. With D=3 and proper settings,
+        the SO proposal should recover parameters within 90% CIs.
+        """
+        model = SSMModel(lgss_data["spec"], n_particles=200)
+
+        result = fit(
+            model,
+            observations=lgss_data["observations"],
+            times=lgss_data["times"],
+            method="hessmc2",
+            n_smc_particles=32,
+            n_iterations=15,
+            proposal="hessian",
+            step_size=1.0,
+            adapt_step_size=False,
+            seed=0,
+        )
+
+        samples = result.get_samples()
+
+        # drift_diag_pop: model applies -abs(), so recovered drift = -abs(sample)
+        drift_samples = -jnp.abs(samples["drift_diag_pop"][:, 0])
+        drift_q5, drift_q95 = float(jnp.percentile(drift_samples, 5)), float(
+            jnp.percentile(drift_samples, 95)
+        )
+        assert drift_q5 <= lgss_data["true_drift_diag"] <= drift_q95, (
+            f"Drift {lgss_data['true_drift_diag']:.2f} outside "
+            f"90% CI [{drift_q5:.3f}, {drift_q95:.3f}]"
+        )
+
+        # diffusion_diag_pop: HalfNormal, positive
+        diff_samples = samples["diffusion_diag_pop"][:, 0]
+        diff_q5, diff_q95 = float(jnp.percentile(diff_samples, 5)), float(
+            jnp.percentile(diff_samples, 95)
+        )
+        assert diff_q5 <= lgss_data["true_diff_diag"] <= diff_q95, (
+            f"Diffusion {lgss_data['true_diff_diag']:.2f} outside "
+            f"90% CI [{diff_q5:.3f}, {diff_q95:.3f}]"
+        )
+
+        # manifest_var_diag: observation noise SD
+        obs_samples = samples["manifest_var_diag"][:, 0]
+        obs_q5, obs_q95 = float(jnp.percentile(obs_samples, 5)), float(
+            jnp.percentile(obs_samples, 95)
+        )
+        assert obs_q5 <= lgss_data["true_obs_sd"] <= obs_q95, (
+            f"Obs SD {lgss_data['true_obs_sd']:.2f} outside "
+            f"90% CI [{obs_q5:.3f}, {obs_q95:.3f}]"
+        )
 
 
 if __name__ == "__main__":

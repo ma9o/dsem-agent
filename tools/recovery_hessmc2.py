@@ -2,7 +2,7 @@
 
 Ground truth: 4 latent processes (Stress -> Fatigue -> Focus -> Performance)
 with off-diagonal drift, a 6-indicator measurement model, and continuous
-intercepts. Fits with SMC² using RW, MALA, and Hessian proposals.
+intercepts. Fits with SMC² using the Hessian (second-order) proposal.
 
 Usage:
     modal run tools/recovery_hessmc2.py            # remote GPU
@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent  # project root
 try:
     import modal
 
-    GPU = "L4"
+    GPU = "B200"
 
     image = (
         modal.Image.debian_slim(python_version="3.12")
@@ -203,15 +203,11 @@ def run(local: bool = False):
         N_SMC = 32
         K_ITER = 10
         N_PF = 200
-        STEP_SIZE_RW = 0.05
-        STEP_SIZE_MALA = 0.01
     else:
         T = 200
         N_SMC = 128
         K_ITER = 30
         N_PF = 500
-        STEP_SIZE_RW = 0.05
-        STEP_SIZE_MALA = 0.01
 
     print(f"T={T}, N_smc={N_SMC}, K={K_ITER}, N_pf={N_PF}")
     print()
@@ -320,66 +316,32 @@ def run(local: bool = False):
         "names": names,
         "n_latent": n_latent,
     }
-    summary = {}
 
     # ==================================================================
-    # 4a. SMC² with MALA proposal (PF likelihood)
+    # 4. SMC² with Hessian (second-order) proposal
     # ==================================================================
-    header("FIT: SMC² MALA")
+    header("FIT: SMC² HESSIAN")
     model = SSMModel(spec, priors=priors, n_particles=N_PF, pf_seed=42)
 
     t0 = time.perf_counter()
-    result_mala = fit(
+    result = fit(
         model,
         observations=obs,
         times=times,
         method="hessmc2",
         n_smc_particles=N_SMC,
         n_iterations=K_ITER,
-        proposal="mala",
-        step_size=STEP_SIZE_MALA,
+        proposal="hessian",
+        step_size=1.0,
+        adapt_step_size=False,
         seed=0,
     )
     elapsed = time.perf_counter() - t0
     print(f"Done in {elapsed:.1f}s")
     print()
 
-    rmse, corr = report_recovery("SMC² MALA", result_mala.get_samples(), **report_args)
-    summary["SMC²-MALA"] = (elapsed, rmse, corr)
-
-    # ==================================================================
-    # 4b. SMC² with RW proposal (baseline)
-    # ==================================================================
-    header("FIT: SMC² RW")
-    model = SSMModel(spec, priors=priors, n_particles=N_PF, pf_seed=42)
-
-    t0 = time.perf_counter()
-    result_rw = fit(
-        model,
-        observations=obs,
-        times=times,
-        method="hessmc2",
-        n_smc_particles=N_SMC,
-        n_iterations=K_ITER,
-        proposal="rw",
-        step_size=STEP_SIZE_RW,
-        seed=0,
-    )
-    elapsed = time.perf_counter() - t0
-    print(f"Done in {elapsed:.1f}s")
-    print()
-
-    rmse, corr = report_recovery("SMC² RW", result_rw.get_samples(), **report_args)
-    summary["SMC²-RW"] = (elapsed, rmse, corr)
-
-    # ==================================================================
-    # 5. Comparison
-    # ==================================================================
-    header("COMPARISON")
-    print(f"{'Method':<15s}  {'Time(s)':>8s}  {'RMSE':>8s}  {'Corr':>8s}")
-    print("-" * 45)
-    for method, (t, r, c) in summary.items():
-        print(f"{method:<15s}  {t:>8.1f}  {r:>8.4f}  {c:>8.4f}")
+    rmse, corr = report_recovery("SMC² Hessian", result.get_samples(), **report_args)
+    print(f"  Time={elapsed:.1f}s  RMSE={rmse:.4f}  Corr={corr:.4f}")
 
 
 # ---------------------------------------------------------------------------
