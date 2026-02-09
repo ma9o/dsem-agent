@@ -1,19 +1,14 @@
-"""Hess-MC² inference: tempered SMC with gradient-based proposals.
+"""Hess-MC² inference: SMC with gradient-based change-of-variables L-kernels.
 
-Implements a tempered SMC sampler [Del Moral et al., 2006] for SSM parameter
-estimation, with proposal kernels from the Hess-MC² paper:
+Implements the SMC sampler from the Hess-MC² paper with momentum-based
+proposals and change-of-variables (CoV) L-kernels:
 - Random Walk (RW) proposals
 - First-Order Langevin (MALA) proposals using gradient of log-posterior
-- Second-Order (Hessian) proposals using curvature information
+- Second-Order (Hessian) proposals using diagonal curvature information
 
-Tempering schedule gamma_0=0 < gamma_1 < ... < gamma_K=1 gradually transitions
-from the prior p(theta) to the full posterior p(theta)*p(y|theta). At each step:
-1. Re-weight particles by p(y|theta)^{delta_gamma}
-2. Resample if ESS < N/2
-3. Rejuvenate via MCMC moves targeting the current tempered posterior
-
-The inner particle filter (or Kalman filter) provides a differentiable
-log-likelihood, enabling gradient/Hessian computation via JAX autodiff.
+All proposals are accepted — quality is controlled through importance weight
+correction via the CoV L-kernel, not MH accept/reject. Gradients and Hessians
+target the log-posterior (paper Eq 9, 11).
 
 Reference: Murphy et al., "Hess-MC²: Sequential Monte Carlo Squared using
 Hessian Information and Second Order Proposals", 2025.
@@ -27,43 +22,11 @@ import jax
 import jax.numpy as jnp
 import jax.random as random
 import numpyro.distributions as dist
+from blackjax.smc.resampling import systematic as _systematic_resample
+from jax.flatten_util import ravel_pytree
 from numpyro import handlers
 
 from dsem_agent.models.ssm.inference import InferenceResult, _eval_model
-
-# ---------------------------------------------------------------------------
-# Parameter packing: named dicts <-> flat vectors
-# ---------------------------------------------------------------------------
-
-
-class ParamPacker:
-    """Pack/unpack named parameter dicts to/from flat JAX vectors."""
-
-    def __init__(self, site_info: dict):
-        self.names: list[str] = []
-        self.slices: dict[str, tuple[int, int, tuple[int, ...]]] = {}
-        offset = 0
-        for name, info in site_info.items():
-            shape = info["shape"]
-            size = 1
-            for s in shape:
-                size *= s
-            self.names.append(name)
-            self.slices[name] = (offset, offset + size, shape)
-            offset += size
-        self.dim = offset
-
-    def pack(self, params: dict[str, jnp.ndarray]) -> jnp.ndarray:
-        parts = [params[n].flatten() for n in self.names]
-        return jnp.concatenate(parts) if parts else jnp.array([])
-
-    def unpack(self, vector: jnp.ndarray) -> dict[str, jnp.ndarray]:
-        result = {}
-        for name in self.names:
-            start, end, shape = self.slices[name]
-            result[name] = vector[start:end].reshape(shape)
-        return result
-
 
 # ---------------------------------------------------------------------------
 # Model tracing and differentiable evaluators
@@ -92,22 +55,22 @@ def _discover_sites(model, observations, times, subject_ids, rng_key):
     return site_info
 
 
-def _build_eval_fns(model, observations, times, subject_ids, site_info, packer):
+def _build_eval_fns(model, observations, times, subject_ids, site_info, unravel_fn):
     """Build differentiable functions for log-likelihood and log-prior.
 
     Returns:
-        log_lik_fn(z, pf_key) -> scalar log p(y|θ)
+        log_lik_fn(z, pf_key) -> scalar log p(y|theta)
         log_prior_unc_fn(z) -> scalar log p_unc(z) = log p(T(z)) + log|J|
     """
     transforms = {name: info["transform"] for name, info in site_info.items()}
     distributions = {name: info["distribution"] for name, info in site_info.items()}
 
     def _constrain(z):
-        unc = packer.unpack(z)
-        return {name: transforms[name](unc[name]) for name in packer.names}, unc
+        unc = unravel_fn(z)
+        return {name: transforms[name](unc[name]) for name in unc}, unc
 
     def log_lik_fn(z, pf_key):
-        """Log-likelihood p(y|θ) via PF or Kalman."""
+        """Log-likelihood p(y|theta) via PF or Kalman."""
         con, _ = _constrain(z)
         model.pf_key = pf_key
         log_lik, _ = _eval_model(model.model, con, observations, times, subject_ids)
@@ -116,94 +79,13 @@ def _build_eval_fns(model, observations, times, subject_ids, site_info, packer):
     def log_prior_unc_fn(z):
         """Log-prior in unconstrained space: log p(T(z)) + log|J(z)|."""
         con, unc = _constrain(z)
-        lp = sum(jnp.sum(distributions[name].log_prob(con[name])) for name in packer.names)
+        lp = sum(jnp.sum(distributions[name].log_prob(con[name])) for name in unc)
         lj = sum(
-            jnp.sum(transforms[name].log_abs_det_jacobian(unc[name], con[name]))
-            for name in packer.names
+            jnp.sum(transforms[name].log_abs_det_jacobian(unc[name], con[name])) for name in unc
         )
         return lp + lj
 
     return log_lik_fn, log_prior_unc_fn
-
-
-# ---------------------------------------------------------------------------
-# Outer SMC resampling
-# ---------------------------------------------------------------------------
-
-
-def _systematic_resampling_outer(key, log_weights, n):
-    """Systematic resampling for the outer SMC sampler."""
-    weights = jnp.exp(log_weights - jax.nn.logsumexp(log_weights))
-    cumsum = jnp.cumsum(weights)
-    us = (random.uniform(key, ()) + jnp.arange(n)) / n
-    idx = jnp.searchsorted(cumsum, us)
-    return jnp.clip(idx, 0, n - 1)
-
-
-# ---------------------------------------------------------------------------
-# Proposals (leapfrog form from paper Sec III-A)
-# ---------------------------------------------------------------------------
-
-
-def _propose_rw(key, theta, step_size, _grad, _hess_diag):
-    z = random.normal(key, theta.shape)
-    return theta + step_size * z
-
-
-def _propose_fo(key, theta, step_size, grad, _hess_diag):
-    """MALA proposal: θ' = θ + (ε²/2)∇log π + ε·z."""
-    z = random.normal(key, theta.shape)
-    return theta + 0.5 * step_size**2 * grad + step_size * z
-
-
-def _propose_so(key, theta, step_size, grad, hess_diag, fallback_ss):
-    """Second-order proposal using diagonal Hessian as metric.
-
-    M = -diag(∇²log π). If M > 0: θ' = θ + (ε²/2)M⁻¹∇ + ε·M^{-1/2}z.
-    Else fallback to MALA with fallback_ss.
-    """
-    neg_hess_diag = -hess_diag
-    is_psd = jnp.all(neg_hess_diag > 1e-8)
-
-    def so_branch(key):
-        inv_m = 1.0 / jnp.maximum(neg_hess_diag, 1e-8)
-        inv_m_sqrt = jnp.sqrt(inv_m)
-        z = random.normal(key, theta.shape)
-        return theta + 0.5 * step_size**2 * inv_m * grad + step_size * inv_m_sqrt * z
-
-    def fo_branch(key):
-        z = random.normal(key, theta.shape)
-        return theta + 0.5 * fallback_ss**2 * grad + fallback_ss * z
-
-    return jax.lax.cond(is_psd, so_branch, fo_branch, key)
-
-
-def _log_proposal_density(theta_new, theta_old, grad, hess_diag, step_size, proposal, fallback_ss):
-    """Log q(θ'|θ) for MH accept/reject."""
-    if proposal == "rw":
-        diff = theta_new - theta_old
-        return -0.5 * jnp.sum(diff**2) / step_size**2
-
-    elif proposal == "mala":
-        mean = theta_old + 0.5 * step_size**2 * grad
-        diff = theta_new - mean
-        return -0.5 * jnp.sum(diff**2) / step_size**2
-
-    else:  # hessian
-        neg_hess_diag = -hess_diag
-        is_psd = jnp.all(neg_hess_diag > 1e-8)
-
-        def so_density():
-            inv_m = 1.0 / jnp.maximum(neg_hess_diag, 1e-8)
-            mean = theta_old + 0.5 * step_size**2 * inv_m * grad
-            var = step_size**2 * inv_m
-            return -0.5 * jnp.sum((theta_new - mean) ** 2 / var + jnp.log(var))
-
-        def fo_density():
-            mean = theta_old + 0.5 * fallback_ss**2 * grad
-            return -0.5 * jnp.sum((theta_new - mean) ** 2) / fallback_ss**2
-
-        return jax.lax.cond(is_psd, so_density, fo_density)
 
 
 # ---------------------------------------------------------------------------
@@ -216,13 +98,125 @@ def _diag_hessian(f, x, *args):
     grad_fn = jax.grad(f)
 
     def hvp_diag_element(basis_vec):
-        _, jvp_val = jax.jvp(
-            grad_fn, (x, *args), (basis_vec, *[jnp.zeros_like(a) for a in args])
-        )
+        _, jvp_val = jax.jvp(grad_fn, (x, *args), (basis_vec, *[jnp.zeros_like(a) for a in args]))
         return jnp.dot(basis_vec, jvp_val)
 
     eye = jnp.eye(x.shape[0])
     return jax.vmap(hvp_diag_element)(eye)
+
+
+# ---------------------------------------------------------------------------
+# CoV L-kernel density
+# ---------------------------------------------------------------------------
+
+
+def _log_cov_density(v, m_diag, step_size, D):
+    """Log proposal density in v-space with Jacobian correction.
+
+    Computes log N(v; 0, diag(m)) + log|det(J)|^{-1} where J = eps * M^{-1},
+    dropping the -D/2*log(2*pi) constant which cancels in L - q.
+
+    For FO/RW pass m_diag = ones(D): Jacobian is step_size^D which
+    cancels between forward and reverse if step sizes match.
+    """
+    return 0.5 * jnp.sum(jnp.log(m_diag) - v**2 / m_diag) - D * jnp.log(step_size)
+
+
+# ---------------------------------------------------------------------------
+# Pure-JAX proposal functions (vmappable)
+# ---------------------------------------------------------------------------
+
+
+def _propose_rw(x, grad, hess_diag, z, eps, eps_fb):  # noqa: ARG001
+    """RW proposal (Eq 28): x_new = x + eps * z."""
+    v = z
+    v_half = v
+    x_new = x + eps * v
+    return x_new, v, v_half, jnp.ones_like(x), eps
+
+
+def _propose_fo(x, grad, hess_diag, z, eps, eps_fb):  # noqa: ARG001
+    """First-order / MALA proposal with leapfrog structure (Eq 30-33)."""
+    v = z
+    v_half = 0.5 * eps * grad + v
+    x_new = x + eps * v_half
+    return x_new, v, v_half, jnp.ones_like(x), eps
+
+
+def _propose_so(x, grad, hess_diag, z, eps, eps_fb):
+    """Second-order proposal with FO fallback when not PSD (Eq 39-41)."""
+    neg_hd = -hess_diag
+    is_psd = jnp.all(neg_hd > 1e-8)
+    m = jnp.maximum(neg_hd, 1e-8)
+    ones = jnp.ones_like(x)
+
+    # SO path
+    v_so = z * jnp.sqrt(m)
+    v_half_so = 0.5 * eps * grad + v_so
+    x_new_so = x + eps * (v_half_so / m)
+
+    # FO fallback path
+    v_fo = z
+    v_half_fo = 0.5 * eps_fb * grad + v_fo
+    x_new_fo = x + eps_fb * v_half_fo
+
+    return (
+        jnp.where(is_psd, x_new_so, x_new_fo),
+        jnp.where(is_psd, v_so, v_fo),
+        jnp.where(is_psd, v_half_so, v_half_fo),
+        jnp.where(is_psd, m, ones),
+        jnp.where(is_psd, eps, eps_fb),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Pure-JAX reverse momentum functions (vmappable)
+# ---------------------------------------------------------------------------
+
+
+def _reverse_rw(v_half, grad_new, hess_diag_new, eps, eps_fb):  # noqa: ARG001
+    """RW reverse: symmetric, v_new = v_half (Eq 29)."""
+    return v_half, jnp.ones_like(v_half), eps
+
+
+def _reverse_fo(v_half, grad_new, hess_diag_new, eps, eps_fb):  # noqa: ARG001
+    """FO reverse momentum kick (Eq 34)."""
+    v_new = 0.5 * eps * grad_new + v_half
+    return v_new, jnp.ones_like(v_half), eps
+
+
+def _reverse_so(v_half, grad_new, hess_diag_new, eps, eps_fb):
+    """SO reverse with FO fallback (Eq 42, 44)."""
+    neg_hd = -hess_diag_new
+    is_psd = jnp.all(neg_hd > 1e-8)
+    m = jnp.maximum(neg_hd, 1e-8)
+    ones = jnp.ones_like(v_half)
+
+    v_new_so = 0.5 * eps * grad_new + v_half
+    v_new_fo = 0.5 * eps_fb * grad_new + v_half
+
+    return (
+        jnp.where(is_psd, v_new_so, v_new_fo),
+        jnp.where(is_psd, m, ones),
+        jnp.where(is_psd, eps, eps_fb),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Pure-JAX weight update (vmappable)
+# ---------------------------------------------------------------------------
+
+
+def _compute_weight(
+    logw_old, log_post_new, log_post_old, v, v_new, fwd_m, rev_m, fwd_ss, rev_ss, D
+):
+    """Importance weight update with CoV L-kernel correction (Eq 25)."""
+    log_L = _log_cov_density(-v_new, rev_m, rev_ss, D)
+    log_q = _log_cov_density(v, fwd_m, fwd_ss, D)
+    lw = logw_old + log_post_new - log_post_old + log_L - log_q
+    lw = jnp.where(jnp.isfinite(log_post_new), lw, -jnp.inf)
+    lw = jnp.where(jnp.isfinite(logw_old), lw, -jnp.inf)
+    return lw
 
 
 # ---------------------------------------------------------------------------
@@ -237,29 +231,27 @@ def fit_hessmc2(
     subject_ids: jnp.ndarray | None = None,
     n_smc_particles: int = 64,
     n_iterations: int = 20,
-    n_mcmc_steps: int = 5,
     proposal: Literal["rw", "mala", "hessian"] = "mala",
     step_size: float = 0.1,
     fallback_step_size: float = 0.01,
     seed: int = 0,
     **kwargs: Any,  # noqa: ARG001
 ) -> InferenceResult:
-    """Fit SSM parameters using Hess-MC² (tempered SMC with Langevin proposals).
+    """Fit SSM parameters via Hess-MC² (SMC with CoV L-kernels).
 
-    Uses likelihood tempering gamma: 0->1 over K steps to bridge from prior to
-    posterior. At each temperature step, particles are rejuvenated via MCMC
-    with gradient/Hessian-informed proposals.
+    Uses importance-weighted SMC where all proposals are accepted and
+    quality is controlled through change-of-variables L-kernel weight
+    correction. Gradients/Hessians target the log-posterior (Eq 9, 11).
 
     Args:
         model: SSMModel instance
         observations: (T, n_manifest) observed data
         times: (T,) observation times
         subject_ids: optional subject indices for hierarchical models
-        n_smc_particles: N — number of parameter particles
-        n_iterations: K — number of tempering steps
-        n_mcmc_steps: number of MCMC rejuvenation moves per step
+        n_smc_particles: N -- number of parameter particles
+        n_iterations: K -- number of SMC iterations
         proposal: "rw", "mala", or "hessian"
-        step_size: ε — proposal step size
+        step_size: epsilon -- proposal step size
         fallback_step_size: step size when Hessian is not PSD (SO only)
         seed: random seed
 
@@ -273,185 +265,182 @@ def fit_hessmc2(
     # 1. Discover model sites
     rng_key, trace_key = random.split(rng_key)
     site_info = _discover_sites(model, observations, times, subject_ids, trace_key)
-    packer = ParamPacker(site_info)
-    D = packer.dim
+    example_unc = {name: info["transform"].inv(info["value"]) for name, info in site_info.items()}
+    flat_example, unravel_fn = ravel_pytree(example_unc)
+    D = flat_example.shape[0]
 
     # 2. Build differentiable functions
     log_lik_fn, log_prior_unc_fn = _build_eval_fns(
-        model, observations, times, subject_ids, site_info, packer
+        model, observations, times, subject_ids, site_info, unravel_fn
     )
     pf_key = model.pf_key
 
-    def tempered_log_post(z, gamma):
-        """Log of tempered posterior: log p(z) + gamma * log p(y|theta(z))."""
-        ll = log_lik_fn(z, pf_key)
-        lp = log_prior_unc_fn(z)
-        return lp + gamma * ll
+    # Gradient and Hessian target the log-POSTERIOR (paper Eq 9, 11)
+    def log_post_fn(z, pf_key):
+        return log_lik_fn(z, pf_key) + log_prior_unc_fn(z)
 
-    # 3. Initialize N particles from prior (gamma=0, target is just the prior)
+    grad_post_fn = jax.grad(log_post_fn, argnums=0)
+
+    # Select proposal/reverse functions and build vmapped batches
+    if proposal == "rw":
+        _prop, _rev = _propose_rw, _reverse_rw
+    elif proposal == "mala":
+        _prop, _rev = _propose_fo, _reverse_fo
+    else:
+        _prop, _rev = _propose_so, _reverse_so
+
+    propose_batch = jax.jit(jax.vmap(_prop, in_axes=(0, 0, 0, 0, None, None)))
+    reverse_batch = jax.jit(jax.vmap(_rev, in_axes=(0, 0, 0, None, None)))
+    weight_batch = jax.jit(jax.vmap(_compute_weight, in_axes=(0, 0, 0, 0, 0, 0, 0, 0, 0, None)))
+
+    # 3. Initialize N particles from prior
     particles = jnp.zeros((N, D))
-    log_liks = jnp.zeros(N)
+    log_posts = jnp.zeros(N)
+    grads = jnp.zeros((N, D))
+    hess_diags = jnp.zeros((N, D))
 
-    print(f"Hess-MC²: N={N}, K={K}, D={D}, proposal={proposal}, ε={step_size}")
+    print(f"Hess-MC²: N={N}, K={K}, D={D}, proposal={proposal}, eps={step_size}")
     print(f"  Initializing {N} particles from prior...")
 
     for i in range(N):
         rng_key, init_key = random.split(rng_key)
         with handlers.seed(rng_seed=int(init_key[0])):
-            trace = handlers.trace(model.model).get_trace(
-                observations, times, subject_ids
-            )
+            trace = handlers.trace(model.model).get_trace(observations, times, subject_ids)
         init_unc = {}
         for name, info in site_info.items():
             init_unc[name] = info["transform"].inv(trace[name]["value"])
-        particles = particles.at[i].set(packer.pack(init_unc))
-        # Compute log-likelihood for each particle
+        particles = particles.at[i].set(ravel_pytree(init_unc)[0])
+
         ll = log_lik_fn(particles[i], pf_key)
-        ll = jnp.where(jnp.isfinite(ll), ll, -1e30)
-        log_liks = log_liks.at[i].set(ll)
+        lp = log_prior_unc_fn(particles[i])
+        log_posts = log_posts.at[i].set(
+            jnp.where(jnp.isfinite(ll) & jnp.isfinite(lp), lp + ll, -1e30)
+        )
 
-    # Tempering schedule: linear gamma from 0 to 1
-    gammas = jnp.linspace(0.0, 1.0, K + 1)
+        if proposal in ("mala", "hessian"):
+            g = grad_post_fn(particles[i], pf_key)
+            grads = grads.at[i].set(jnp.nan_to_num(g, nan=0.0, posinf=0.0, neginf=0.0))
+        if proposal == "hessian":
+            hd = _diag_hessian(log_post_fn, particles[i], pf_key)
+            hess_diags = hess_diags.at[i].set(jnp.nan_to_num(hd, nan=0.0, posinf=0.0, neginf=0.0))
 
-    # Track diagnostics
+    # Initial weights: log w = log [pi(theta)/q(theta)] = log_post - log_prior = log_lik
+    init_log_priors = jnp.array([log_prior_unc_fn(particles[i]) for i in range(N)])
+    logw = log_posts - init_log_priors
+
+    # Diagnostics and recycling storage (Eq 26, [18])
     ess_history = []
     resample_points = []
-    accept_rates = []
+    recycled_particles = [particles]
+    recycled_logw = [logw]
 
-    # 4. Tempered SMC loop
+    # 4. Main SMC loop
     for k in range(K):
-        gamma_prev = float(gammas[k])
-        gamma_curr = float(gammas[k + 1])
-        delta_gamma = gamma_curr - gamma_prev
-
-        # --- Step A: Re-weight by incremental likelihood ---
-        # delta log w = (gamma_k - gamma_{k-1}) * log p(y|theta)
-        log_weights = delta_gamma * log_liks
-
-        # --- Step B: ESS check and resampling ---
-        log_wn = log_weights - jax.nn.logsumexp(log_weights)
+        # --- Normalize weights, ESS ---
+        log_wn = logw - jax.nn.logsumexp(logw)
         wn = jnp.exp(log_wn)
         ess = float(1.0 / jnp.sum(wn**2))
         ess_history.append(ess)
 
+        # --- Resample if ESS < N/2 (carry grads and hessians) ---
         did_resample = False
         if ess < N / 2:
             resample_points.append(k)
             rng_key, resample_key = random.split(rng_key)
-            idx = _systematic_resampling_outer(resample_key, log_weights, N)
+            idx = _systematic_resample(resample_key, jnp.exp(logw - jax.nn.logsumexp(logw)), N)
             particles = particles[idx]
-            log_liks = log_liks[idx]
+            log_posts = log_posts[idx]
+            grads = grads[idx]
+            hess_diags = hess_diags[idx]
+            logw = jnp.full(N, -jnp.log(float(N)))
             did_resample = True
 
-        # --- Step C: MCMC rejuvenation targeting tempered posterior at gamma_k ---
-        n_accepted = 0
-        n_proposed = 0
+        # --- Draw noise for all particles at once ---
+        rng_key, noise_key = random.split(rng_key)
+        z_all = random.normal(noise_key, (N, D))
 
-        # Pre-compute gradients for current particles (needed for MALA/Hessian)
-        grads = jnp.zeros((N, D))
-        hess_diags = jnp.zeros((N, D))
+        # --- Vectorized proposal (pure JAX, no handlers) ---
+        particles_new, v_all, v_half_all, fwd_m_all, fwd_ss_all = propose_batch(
+            particles, grads, hess_diags, z_all, step_size, fallback_step_size
+        )
 
-        if proposal in ("mala", "hessian"):
-            for i in range(N):
-                g = jax.grad(tempered_log_post)(particles[i], gamma_curr)
-                grads = grads.at[i].set(jnp.nan_to_num(g, nan=0.0, posinf=0.0, neginf=0.0))
+        # --- Evaluate model at new particles (sequential; handlers not vmappable) ---
+        log_posts_new = jnp.zeros(N)
+        grads_new = jnp.zeros((N, D))
+        hess_diags_new = jnp.zeros((N, D))
 
-        if proposal == "hessian":
-            for i in range(N):
-                hd = _diag_hessian(tempered_log_post, particles[i], gamma_curr)
-                hess_diags = hess_diags.at[i].set(
+        for i in range(N):
+            ll = log_lik_fn(particles_new[i], pf_key)
+            lp = log_prior_unc_fn(particles_new[i])
+            log_posts_new = log_posts_new.at[i].set(
+                jnp.where(jnp.isfinite(ll) & jnp.isfinite(lp), lp + ll, -1e30)
+            )
+
+            if proposal in ("mala", "hessian"):
+                g = grad_post_fn(particles_new[i], pf_key)
+                grads_new = grads_new.at[i].set(jnp.nan_to_num(g, nan=0.0, posinf=0.0, neginf=0.0))
+            if proposal == "hessian":
+                hd = _diag_hessian(log_post_fn, particles_new[i], pf_key)
+                hess_diags_new = hess_diags_new.at[i].set(
                     jnp.nan_to_num(hd, nan=0.0, posinf=0.0, neginf=0.0)
                 )
 
-        for _m in range(n_mcmc_steps):
-            for i in range(N):
-                rng_key, prop_key, accept_key = random.split(rng_key, 3)
-
-                # Propose
-                if proposal == "rw":
-                    theta_new = _propose_rw(
-                        prop_key, particles[i], step_size, grads[i], hess_diags[i]
-                    )
-                elif proposal == "mala":
-                    theta_new = _propose_fo(
-                        prop_key, particles[i], step_size, grads[i], hess_diags[i]
-                    )
-                else:
-                    theta_new = _propose_so(
-                        prop_key, particles[i], step_size, grads[i],
-                        hess_diags[i], fallback_step_size,
-                    )
-
-                # Evaluate proposed particle
-                ll_new = log_lik_fn(theta_new, pf_key)
-                ll_new = jnp.where(jnp.isfinite(ll_new), ll_new, -1e30)
-                lp_new = log_prior_unc_fn(theta_new)
-                lp_new = jnp.where(jnp.isfinite(lp_new), lp_new, -1e30)
-                log_post_new = lp_new + gamma_curr * ll_new
-
-                lp_old = log_prior_unc_fn(particles[i])
-                log_post_old = lp_old + gamma_curr * log_liks[i]
-
-                # MH acceptance ratio (includes proposal asymmetry for MALA/Hessian)
-                log_alpha = log_post_new - log_post_old
-
-                if proposal != "rw":
-                    # Compute gradient at proposed point for reverse proposal
-                    g_new = jax.grad(tempered_log_post)(theta_new, gamma_curr)
-                    g_new = jnp.nan_to_num(g_new, nan=0.0, posinf=0.0, neginf=0.0)
-
-                    hd_new = hess_diags[i]  # Approximate: reuse current Hessian
-                    if proposal == "hessian":
-                        hd_new = _diag_hessian(tempered_log_post, theta_new, gamma_curr)
-                        hd_new = jnp.nan_to_num(hd_new, nan=0.0, posinf=0.0, neginf=0.0)
-
-                    # Forward: q(θ'|θ), Reverse: q(θ|θ')
-                    log_q_fwd = _log_proposal_density(
-                        theta_new, particles[i], grads[i], hess_diags[i],
-                        step_size, proposal, fallback_step_size,
-                    )
-                    log_q_rev = _log_proposal_density(
-                        particles[i], theta_new, g_new, hd_new,
-                        step_size, proposal, fallback_step_size,
-                    )
-                    log_alpha = log_alpha + log_q_rev - log_q_fwd
-
-                # Accept/reject
-                u = random.uniform(accept_key)
-                accept = jnp.log(u) < log_alpha
-                accept = accept & jnp.isfinite(log_post_new)
-
-                if bool(accept):
-                    particles = particles.at[i].set(theta_new)
-                    log_liks = log_liks.at[i].set(ll_new)
-                    if proposal in ("mala", "hessian"):
-                        grads = grads.at[i].set(g_new)
-                    if proposal == "hessian":
-                        hess_diags = hess_diags.at[i].set(hd_new)
-                    n_accepted += 1
-                n_proposed += 1
-
-        acc_rate = n_accepted / max(n_proposed, 1)
-        accept_rates.append(acc_rate)
-        resamp_tag = " [resampled]" if did_resample else ""
-        print(
-            f"  step {k + 1}/{K}  γ={gamma_curr:.3f}  "
-            f"ESS={ess:.1f}/{N}  accept={acc_rate:.2f}{resamp_tag}"
+        # --- Vectorized reverse momentum + weight update ---
+        v_new_all, rev_m_all, rev_ss_all = reverse_batch(
+            v_half_all, grads_new, hess_diags_new, step_size, fallback_step_size
         )
 
-    # 5. Extract final samples in constrained space
+        logw = weight_batch(
+            logw,
+            log_posts_new,
+            log_posts,
+            v_all,
+            v_new_all,
+            fwd_m_all,
+            rev_m_all,
+            fwd_ss_all,
+            rev_ss_all,
+            D,
+        )
+
+        # Update state
+        particles = particles_new
+        log_posts = log_posts_new
+        grads = grads_new
+        hess_diags = hess_diags_new
+
+        # Store for recycling (Eq 26, [18])
+        recycled_particles.append(particles)
+        recycled_logw.append(logw)
+
+        resamp_tag = " [resampled]" if did_resample else ""
+        print(f"  step {k + 1}/{K}  ESS={ess:.1f}/{N}{resamp_tag}")
+
+    # 5. Final resampling from recycled pool
+    rng_key, final_key = random.split(rng_key)
+    all_particles = jnp.concatenate(recycled_particles, axis=0)  # ((K+1)*N, D)
+    all_logw = jnp.concatenate(recycled_logw, axis=0)  # ((K+1)*N,)
+    idx = _systematic_resample(final_key, jnp.exp(all_logw - jax.nn.logsumexp(all_logw)), N)
+    final_particles = all_particles[idx]
+
+    # Extract final samples in constrained space
     transforms = {name: info["transform"] for name, info in site_info.items()}
     samples = {}
-    for name in packer.names:
+    for name in transforms:
         vals = []
         for i in range(N):
-            unc = packer.unpack(particles[i])
+            unc = unravel_fn(final_particles[i])
             vals.append(transforms[name](unc[name]))
         samples[name] = jnp.stack(vals)
 
-    # Extract deterministic sites (drift, diffusion matrices, etc.)
     det_samples = _extract_deterministic_sites(
-        model, observations, times, subject_ids, site_info, packer, particles,
+        model,
+        observations,
+        times,
+        subject_ids,
+        site_info,
+        unravel_fn,
+        final_particles,
     )
     samples.update(det_samples)
 
@@ -461,8 +450,6 @@ def fit_hessmc2(
         diagnostics={
             "ess_history": ess_history,
             "resample_points": resample_points,
-            "accept_rates": accept_rates,
-            "gammas": [float(g) for g in gammas],
             "n_smc_particles": N,
             "n_iterations": K,
             "proposal": proposal,
@@ -472,7 +459,13 @@ def fit_hessmc2(
 
 
 def _extract_deterministic_sites(
-    model, observations, times, subject_ids, site_info, packer, particles,
+    model,
+    observations,
+    times,
+    subject_ids,
+    site_info,
+    unravel_fn,
+    particles,
 ):
     """Run model with each particle to extract deterministic sites."""
     transforms = {name: info["transform"] for name, info in site_info.items()}
@@ -480,13 +473,11 @@ def _extract_deterministic_sites(
     det_samples: dict[str, list] = {}
 
     for i in range(N):
-        unc = packer.unpack(particles[i])
-        con = {name: transforms[name](unc[name]) for name in packer.names}
+        unc = unravel_fn(particles[i])
+        con = {name: transforms[name](unc[name]) for name in unc}
 
         with handlers.seed(rng_seed=0), handlers.substitute(data=con):
-            trace = handlers.trace(model.model).get_trace(
-                observations, times, subject_ids
-            )
+            trace = handlers.trace(model.model).get_trace(observations, times, subject_ids)
 
         for name, site in trace.items():
             if site["type"] == "deterministic":
