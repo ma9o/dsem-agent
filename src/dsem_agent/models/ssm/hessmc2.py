@@ -34,7 +34,7 @@ PF likelihood evaluation. Do NOT downgrade to diagonal Hessian.
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import jax
 import jax.numpy as jnp
@@ -46,6 +46,114 @@ from jax.flatten_util import ravel_pytree
 from numpyro import handlers
 
 from dsem_agent.models.ssm.inference import InferenceResult, _eval_model
+
+if TYPE_CHECKING:
+    from dsem_agent.models.ssm.model import SSMSpec
+
+# ---------------------------------------------------------------------------
+# Pure-JAX deterministic site assembly (replaces sequential numpyro tracing)
+# ---------------------------------------------------------------------------
+
+
+def _assemble_deterministics(
+    samples: dict[str, jnp.ndarray], spec: SSMSpec
+) -> dict[str, jnp.ndarray]:
+    """Assemble deterministic sites from constrained samples, bypassing numpyro.
+
+    Each deterministic site is a matrix assembled from the raw sample sites
+    (e.g. drift_diag_pop, drift_offdiag_pop → drift matrix). This mirrors the
+    assembly logic in SSMModel._sample_* but operates directly on the (N, ...)
+    sample arrays, avoiding N sequential numpyro trace calls.
+
+    Only non-hierarchical models are supported (hessmc2 doesn't do hierarchical).
+    """
+    N = next(iter(samples.values())).shape[0]
+    n_l, n_m = spec.n_latent, spec.n_manifest
+    det = {}
+
+    # -- drift: diag(-|drift_diag_pop|) + offdiag entries --
+    if "drift_diag_pop" in samples:
+
+        def _assemble_drift(drift_diag_pop, drift_offdiag_pop):
+            drift_diag = -jnp.abs(drift_diag_pop)
+            drift = jnp.diag(drift_diag)
+            offdiag_idx = 0
+            for i in range(n_l):
+                for j in range(n_l):
+                    if i != j:
+                        drift = drift.at[i, j].set(drift_offdiag_pop[offdiag_idx])
+                        offdiag_idx += 1
+            return drift
+
+        offdiag = samples.get("drift_offdiag_pop", jnp.zeros((N, 0)))
+        det["drift"] = jax.vmap(_assemble_drift)(samples["drift_diag_pop"], offdiag)
+
+    # -- diffusion: diag or full lower-triangular Cholesky --
+    if "diffusion_diag_pop" in samples:
+
+        def _assemble_diffusion_diag(diff_diag):
+            return jnp.diag(diff_diag)
+
+        def _assemble_diffusion_full(diff_diag, diff_lower):
+            diffusion = jnp.diag(diff_diag)
+            lower_idx = 0
+            for i in range(n_l):
+                for j in range(i):
+                    diffusion = diffusion.at[i, j].set(diff_lower[lower_idx])
+                    lower_idx += 1
+            return diffusion
+
+        if "diffusion_lower" in samples:
+            det["diffusion"] = jax.vmap(_assemble_diffusion_full)(
+                samples["diffusion_diag_pop"], samples["diffusion_lower"]
+            )
+        else:
+            det["diffusion"] = jax.vmap(_assemble_diffusion_diag)(samples["diffusion_diag_pop"])
+
+    # -- cint: passthrough --
+    if "cint_pop" in samples:
+        det["cint"] = samples["cint_pop"]
+
+    # -- lambda: eye(n_m, n_l) + free loadings in rows n_l: --
+    if not isinstance(spec.lambda_mat, jnp.ndarray):
+        if "lambda_free" in samples:
+
+            def _assemble_lambda(free_loadings):
+                lam = jnp.eye(n_m, n_l)
+                idx = 0
+                for i in range(n_l, n_m):
+                    for j in range(n_l):
+                        lam = lam.at[i, j].set(free_loadings[idx])
+                        idx += 1
+                return lam
+
+            det["lambda"] = jax.vmap(_assemble_lambda)(samples["lambda_free"])
+        else:
+            # n_m == n_l: lambda is just identity, no free params
+            det["lambda"] = jnp.broadcast_to(jnp.eye(n_m, n_l), (N, n_m, n_l))
+
+    # -- manifest_cov: diag(d) @ diag(d).T = diag(d²) --
+    if "manifest_var_diag" in samples:
+        det["manifest_cov"] = jax.vmap(lambda d: jnp.diag(d**2))(samples["manifest_var_diag"])
+    elif isinstance(spec.manifest_var, jnp.ndarray):
+        fixed_cov = spec.manifest_var @ spec.manifest_var.T
+        det["manifest_cov"] = jnp.broadcast_to(fixed_cov, (N, n_m, n_m))
+
+    # -- t0_means: passthrough or broadcast fixed --
+    if "t0_means_pop" in samples:
+        det["t0_means"] = samples["t0_means_pop"]
+    elif isinstance(spec.t0_means, jnp.ndarray):
+        det["t0_means"] = jnp.broadcast_to(spec.t0_means, (N, n_l))
+
+    # -- t0_cov: diag(d²) or broadcast fixed --
+    if "t0_var_diag" in samples:
+        det["t0_cov"] = jax.vmap(lambda d: jnp.diag(d**2))(samples["t0_var_diag"])
+    elif isinstance(spec.t0_var, jnp.ndarray):
+        fixed_cov = spec.t0_var @ spec.t0_var.T
+        det["t0_cov"] = jnp.broadcast_to(fixed_cov, (N, n_l, n_l))
+
+    return det
+
 
 # ---------------------------------------------------------------------------
 # Model tracing and differentiable evaluators
@@ -237,7 +345,7 @@ def fit_hessmc2(
     subject_ids: jnp.ndarray | None = None,
     n_smc_particles: int = 64,
     n_iterations: int = 20,
-    proposal: Literal["rw", "mala", "hessian"] = "mala",
+    proposal: Literal["rw", "mala", "hessian"] = "hessian",
     step_size: float = 0.1,
     fallback_step_size: float = 0.01,
     adapt_step_size: bool = True,
@@ -461,15 +569,7 @@ def fit_hessmc2(
 
         samples[name] = jax.vmap(_extract_one)(final_particles)
 
-    det_samples = _extract_deterministic_sites(
-        model,
-        observations,
-        times,
-        subject_ids,
-        site_info,
-        unravel_fn,
-        final_particles,
-    )
+    det_samples = _assemble_deterministics(samples, model.spec)
     samples.update(det_samples)
 
     return InferenceResult(
@@ -484,39 +584,3 @@ def fit_hessmc2(
             "step_size": step_size,
         },
     )
-
-
-def _extract_deterministic_sites(
-    model,
-    observations,
-    times,
-    subject_ids,
-    site_info,
-    unravel_fn,
-    particles,
-):
-    """Run model with each particle to extract deterministic sites.
-
-    Blocks the log_likelihood factor site to avoid N redundant PF evaluations —
-    only deterministic site values are needed here.
-    """
-    transforms = {name: info["transform"] for name, info in site_info.items()}
-    N = particles.shape[0]
-    det_samples: dict[str, list] = {}
-
-    blocked_model = handlers.block(model.model, hide=["log_likelihood"])
-
-    for i in range(N):
-        unc = unravel_fn(particles[i])
-        con = {name: transforms[name](unc[name]) for name in unc}
-
-        with handlers.seed(rng_seed=0), handlers.substitute(data=con):
-            trace = handlers.trace(blocked_model).get_trace(observations, times, subject_ids)
-
-        for name, site in trace.items():
-            if site["type"] == "deterministic":
-                if name not in det_samples:
-                    det_samples[name] = []
-                det_samples[name].append(site["value"])
-
-    return {name: jnp.stack(vals) for name, vals in det_samples.items()}
