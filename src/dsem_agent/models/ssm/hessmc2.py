@@ -59,7 +59,7 @@ def _build_eval_fns(model, observations, times, subject_ids, site_info, unravel_
     """Build differentiable functions for log-likelihood and log-prior.
 
     Returns:
-        log_lik_fn(z, pf_key) -> scalar log p(y|theta)
+        log_lik_fn(z) -> scalar log p(y|theta)
         log_prior_unc_fn(z) -> scalar log p_unc(z) = log p(T(z)) + log|J|
     """
     transforms = {name: info["transform"] for name, info in site_info.items()}
@@ -69,10 +69,9 @@ def _build_eval_fns(model, observations, times, subject_ids, site_info, unravel_
         unc = unravel_fn(z)
         return {name: transforms[name](unc[name]) for name in unc}, unc
 
-    def log_lik_fn(z, pf_key):
+    def log_lik_fn(z):
         """Log-likelihood p(y|theta) via PF or Kalman."""
         con, _ = _constrain(z)
-        model.pf_key = pf_key
         log_lik, _ = _eval_model(model.model, con, observations, times, subject_ids)
         return log_lik
 
@@ -273,13 +272,34 @@ def fit_hessmc2(
     log_lik_fn, log_prior_unc_fn = _build_eval_fns(
         model, observations, times, subject_ids, site_info, unravel_fn
     )
-    pf_key = model.pf_key
 
     # Gradient and Hessian target the log-POSTERIOR (paper Eq 9, 11)
-    def log_post_fn(z, pf_key):
-        return log_lik_fn(z, pf_key) + log_prior_unc_fn(z)
+    def log_post_fn(z):
+        return log_lik_fn(z) + log_prior_unc_fn(z)
 
-    grad_post_fn = jax.grad(log_post_fn, argnums=0)
+    grad_post_fn = jax.grad(log_post_fn)
+
+    # --- Batched evaluators: vmap over particles, JIT the whole batch ---
+    def _safe_log_post(z):
+        ll = log_lik_fn(z)
+        lp = log_prior_unc_fn(z)
+        return jnp.where(jnp.isfinite(ll) & jnp.isfinite(lp), lp + ll, -1e30)
+
+    def _safe_grad(z):
+        g = grad_post_fn(z)
+        return jnp.nan_to_num(g, nan=0.0, posinf=0.0, neginf=0.0)
+
+    batch_log_post = jax.jit(jax.vmap(_safe_log_post))
+    batch_log_prior = jax.jit(jax.vmap(log_prior_unc_fn))
+    batch_grad = jax.jit(jax.vmap(_safe_grad))
+
+    if proposal == "hessian":
+
+        def _safe_diag_hessian(z):
+            hd = _diag_hessian(log_post_fn, z)
+            return jnp.nan_to_num(hd, nan=0.0, posinf=0.0, neginf=0.0)
+
+        batch_hessian = jax.jit(jax.vmap(_safe_diag_hessian))
 
     # Select proposal/reverse functions and build vmapped batches
     if proposal == "rw":
@@ -293,11 +313,8 @@ def fit_hessmc2(
     reverse_batch = jax.jit(jax.vmap(_rev, in_axes=(0, 0, 0, None, None)))
     weight_batch = jax.jit(jax.vmap(_compute_weight, in_axes=(0, 0, 0, 0, 0, 0, 0, 0, 0, None)))
 
-    # 3. Initialize N particles from prior
+    # 3. Initialize N particles from prior (sequential — handlers not vmappable)
     particles = jnp.zeros((N, D))
-    log_posts = jnp.zeros(N)
-    grads = jnp.zeros((N, D))
-    hess_diags = jnp.zeros((N, D))
 
     print(f"Hess-MC²: N={N}, K={K}, D={D}, proposal={proposal}, eps={step_size}")
     print(f"  Initializing {N} particles from prior...")
@@ -311,21 +328,17 @@ def fit_hessmc2(
             init_unc[name] = info["transform"].inv(trace[name]["value"])
         particles = particles.at[i].set(ravel_pytree(init_unc)[0])
 
-        ll = log_lik_fn(particles[i], pf_key)
-        lp = log_prior_unc_fn(particles[i])
-        log_posts = log_posts.at[i].set(
-            jnp.where(jnp.isfinite(ll) & jnp.isfinite(lp), lp + ll, -1e30)
-        )
-
-        if proposal in ("mala", "hessian"):
-            g = grad_post_fn(particles[i], pf_key)
-            grads = grads.at[i].set(jnp.nan_to_num(g, nan=0.0, posinf=0.0, neginf=0.0))
-        if proposal == "hessian":
-            hd = _diag_hessian(log_post_fn, particles[i], pf_key)
-            hess_diags = hess_diags.at[i].set(jnp.nan_to_num(hd, nan=0.0, posinf=0.0, neginf=0.0))
+    # Batch evaluate all initial particles at once
+    log_posts = batch_log_post(particles)
+    grads = jnp.zeros((N, D))
+    hess_diags = jnp.zeros((N, D))
+    if proposal in ("mala", "hessian"):
+        grads = batch_grad(particles)
+    if proposal == "hessian":
+        hess_diags = batch_hessian(particles)
 
     # Initial weights: log w = log [pi(theta)/q(theta)] = log_post - log_prior = log_lik
-    init_log_priors = jnp.array([log_prior_unc_fn(particles[i]) for i in range(N)])
+    init_log_priors = batch_log_prior(particles)
     logw = log_posts - init_log_priors
 
     # Diagnostics and recycling storage (Eq 26, [18])
@@ -364,26 +377,14 @@ def fit_hessmc2(
             particles, grads, hess_diags, z_all, step_size, fallback_step_size
         )
 
-        # --- Evaluate model at new particles (sequential; handlers not vmappable) ---
-        log_posts_new = jnp.zeros(N)
+        # --- Batch evaluate all new particles (vmapped) ---
+        log_posts_new = batch_log_post(particles_new)
         grads_new = jnp.zeros((N, D))
         hess_diags_new = jnp.zeros((N, D))
-
-        for i in range(N):
-            ll = log_lik_fn(particles_new[i], pf_key)
-            lp = log_prior_unc_fn(particles_new[i])
-            log_posts_new = log_posts_new.at[i].set(
-                jnp.where(jnp.isfinite(ll) & jnp.isfinite(lp), lp + ll, -1e30)
-            )
-
-            if proposal in ("mala", "hessian"):
-                g = grad_post_fn(particles_new[i], pf_key)
-                grads_new = grads_new.at[i].set(jnp.nan_to_num(g, nan=0.0, posinf=0.0, neginf=0.0))
-            if proposal == "hessian":
-                hd = _diag_hessian(log_post_fn, particles_new[i], pf_key)
-                hess_diags_new = hess_diags_new.at[i].set(
-                    jnp.nan_to_num(hd, nan=0.0, posinf=0.0, neginf=0.0)
-                )
+        if proposal in ("mala", "hessian"):
+            grads_new = batch_grad(particles_new)
+        if proposal == "hessian":
+            hess_diags_new = batch_hessian(particles_new)
 
         # --- Vectorized reverse momentum + weight update ---
         v_new_all, rev_m_all, rev_ss_all = reverse_batch(
@@ -423,15 +424,16 @@ def fit_hessmc2(
     idx = _systematic_resample(final_key, jnp.exp(all_logw - jax.nn.logsumexp(all_logw)), N)
     final_particles = all_particles[idx]
 
-    # Extract final samples in constrained space
+    # Extract final samples in constrained space (vmapped)
     transforms = {name: info["transform"] for name, info in site_info.items()}
     samples = {}
     for name in transforms:
-        vals = []
-        for i in range(N):
-            unc = unravel_fn(final_particles[i])
-            vals.append(transforms[name](unc[name]))
-        samples[name] = jnp.stack(vals)
+
+        def _extract_one(z, _name=name):
+            unc = unravel_fn(z)
+            return transforms[_name](unc[_name])
+
+        samples[name] = jax.vmap(_extract_one)(final_particles)
 
     det_samples = _extract_deterministic_sites(
         model,
