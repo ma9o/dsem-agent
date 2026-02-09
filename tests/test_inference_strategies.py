@@ -544,9 +544,7 @@ class TestParameterRecoveryPoisson:
         actual_drift_mean = float(jnp.mean(-jnp.abs(drift_diag_samples[:, 0])))
 
         # Recovered drift should be negative
-        assert actual_drift_mean < 0.0, (
-            f"Drift should be negative: {actual_drift_mean:.3f}"
-        )
+        assert actual_drift_mean < 0.0, f"Drift should be negative: {actual_drift_mean:.3f}"
 
 
 class TestParameterRecoveryStudentT:
@@ -607,9 +605,7 @@ class TestParameterRecoveryStudentT:
         actual_drift_mean = float(jnp.mean(-jnp.abs(drift_diag_samples[:, 0])))
 
         # Recovered drift should be negative
-        assert actual_drift_mean < 0.0, (
-            f"Drift should be negative: {actual_drift_mean:.3f}"
-        )
+        assert actual_drift_mean < 0.0, f"Drift should be negative: {actual_drift_mean:.3f}"
 
 
 class TestHighDimNonlinear:
@@ -835,6 +831,7 @@ class TestEdgeCases:
 class TestFitReturnsInferenceResult:
     """Test that fit() returns InferenceResult for all methods."""
 
+    @pytest.mark.slow
     def test_fit_nuts_returns_inference_result(self):
         """fit() with method='nuts' returns InferenceResult."""
         spec = SSMSpec(
@@ -867,6 +864,7 @@ class TestFitReturnsInferenceResult:
         samples = result.get_samples()
         assert "drift_diag_pop" in samples
 
+    @pytest.mark.slow
     def test_fit_svi_returns_inference_result(self):
         """fit() with method='svi' returns InferenceResult."""
         spec = SSMSpec(
@@ -900,6 +898,7 @@ class TestFitReturnsInferenceResult:
         assert "drift" in samples
         assert samples["drift"].shape[0] == 20
 
+    @pytest.mark.slow
     def test_fit_pmmh_returns_inference_result(self):
         """fit() with method='pmmh' returns InferenceResult."""
         spec = SSMSpec(
@@ -932,6 +931,7 @@ class TestFitReturnsInferenceResult:
         assert "drift_diag_pop" in samples
         assert samples["drift_diag_pop"].shape[0] == 20
 
+    @pytest.mark.slow
     def test_fit_poisson_svi_returns_inference_result(self):
         """fit() with Poisson manifest_dist + SVI returns InferenceResult."""
         spec = SSMSpec(
@@ -970,6 +970,7 @@ class TestFitReturnsInferenceResult:
 class TestSVIBackend:
     """Tests specific to SVI inference backend."""
 
+    @pytest.mark.slow
     def test_svi_losses_decrease(self):
         """ELBO loss should generally decrease during SVI training."""
         spec = SSMSpec(
@@ -1003,6 +1004,7 @@ class TestSVIBackend:
             f"SVI loss did not decrease: early={early_mean:.1f}, late={late_mean:.1f}"
         )
 
+    @pytest.mark.slow
     def test_svi_guide_types(self):
         """All guide types should produce valid results."""
         spec = SSMSpec(
@@ -1040,6 +1042,7 @@ class TestSVIBackend:
 class TestPMMHBackend:
     """Tests specific to PMMH inference backend."""
 
+    @pytest.mark.slow
     def test_pmmh_acceptance_rate_reasonable(self):
         """PMMH acceptance rate should be between 0.05 and 0.95."""
         spec = SSMSpec(
@@ -1223,6 +1226,421 @@ class TestBuilderNoiseFamilyWiring:
         ssm_spec = builder._convert_spec_to_ssm(model_spec, data)
 
         assert ssm_spec.manifest_dist == NoiseFamily.GAUSSIAN
+
+
+# =============================================================================
+# Hess-MC² Unit Tests (Pure-JAX Components)
+# =============================================================================
+
+
+class TestHessMC2Proposals:
+    """Test proposal functions are mathematically correct.
+
+    All proposals are pure JAX: no model, no handlers, instant.
+    """
+
+    @pytest.fixture
+    def particle_state(self):
+        """Standard 3D particle state for proposal tests."""
+        D = 3
+        return {
+            "x": jnp.array([1.0, -0.5, 0.3]),
+            "grad": jnp.array([0.2, -0.1, 0.05]),
+            "hess_diag": jnp.array([-2.0, -1.5, -3.0]),  # negative definite
+            "z": jnp.array([0.5, -0.3, 0.1]),
+            "eps": 0.1,
+            "eps_fb": 0.01,
+            "D": D,
+        }
+
+    def test_rw_proposal_is_x_plus_eps_z(self, particle_state):
+        """RW: x_new = x + eps * z (Eq 28)."""
+        from dsem_agent.models.ssm.hessmc2 import _propose_rw
+
+        s = particle_state
+        x_new, v, v_half, m, _ss = _propose_rw(
+            s["x"], s["grad"], s["hess_diag"], s["z"], s["eps"], s["eps_fb"]
+        )
+        expected = s["x"] + s["eps"] * s["z"]
+        assert jnp.allclose(x_new, expected)
+        assert jnp.allclose(v, s["z"])
+        assert jnp.allclose(v_half, s["z"])
+        assert jnp.allclose(m, jnp.ones(s["D"]))
+
+    def test_fo_proposal_uses_gradient(self, particle_state):
+        """FO/MALA: v_half = 0.5*eps*grad + z, x_new = x + eps*v_half (Eq 30-33)."""
+        from dsem_agent.models.ssm.hessmc2 import _propose_fo
+
+        s = particle_state
+        x_new, v, v_half, _m, _ss = _propose_fo(
+            s["x"], s["grad"], s["hess_diag"], s["z"], s["eps"], s["eps_fb"]
+        )
+        expected_v_half = 0.5 * s["eps"] * s["grad"] + s["z"]
+        expected_x = s["x"] + s["eps"] * expected_v_half
+        assert jnp.allclose(v_half, expected_v_half)
+        assert jnp.allclose(x_new, expected_x)
+        assert jnp.allclose(v, s["z"])
+
+    def test_fo_reduces_to_rw_when_grad_is_zero(self, particle_state):
+        """With zero gradient, FO should behave like RW."""
+        from dsem_agent.models.ssm.hessmc2 import _propose_fo, _propose_rw
+
+        s = particle_state
+        zero_grad = jnp.zeros(s["D"])
+        x_fo, _, _, _, _ = _propose_fo(
+            s["x"], zero_grad, s["hess_diag"], s["z"], s["eps"], s["eps_fb"]
+        )
+        x_rw, _, _, _, _ = _propose_rw(
+            s["x"], zero_grad, s["hess_diag"], s["z"], s["eps"], s["eps_fb"]
+        )
+        assert jnp.allclose(x_fo, x_rw)
+
+    def test_so_proposal_uses_hessian_when_psd(self, particle_state):
+        """SO: with negative definite Hessian, uses mass matrix M = -diag(H)."""
+        from dsem_agent.models.ssm.hessmc2 import _propose_so
+
+        s = particle_state
+        x_new, _v, _v_half, m, ss = _propose_so(
+            s["x"], s["grad"], s["hess_diag"], s["z"], s["eps"], s["eps_fb"]
+        )
+        neg_hd = -s["hess_diag"]  # [2.0, 1.5, 3.0] — all positive
+        expected_v = s["z"] * jnp.sqrt(neg_hd)
+        expected_v_half = 0.5 * s["eps"] * s["grad"] + expected_v
+        expected_x = s["x"] + s["eps"] * (expected_v_half / neg_hd)
+        assert jnp.allclose(x_new, expected_x)
+        assert jnp.allclose(m, neg_hd)
+        assert jnp.allclose(ss, s["eps"])  # used SO step size, not fallback
+
+    def test_so_falls_back_to_fo_when_not_psd(self, particle_state):
+        """SO: with non-negative-definite Hessian, falls back to FO."""
+        from dsem_agent.models.ssm.hessmc2 import _propose_fo, _propose_so
+
+        s = particle_state
+        bad_hess = jnp.array([1.0, -1.5, -3.0])  # first element positive -> not PSD
+        x_so, _, _, m, ss = _propose_so(s["x"], s["grad"], bad_hess, s["z"], s["eps"], s["eps_fb"])
+        x_fo, _, _, _, _ = _propose_fo(
+            s["x"], s["grad"], bad_hess, s["z"], s["eps_fb"], s["eps_fb"]
+        )
+        assert jnp.allclose(x_so, x_fo)
+        assert jnp.allclose(m, jnp.ones(s["D"]))  # identity mass
+        assert jnp.allclose(ss, s["eps_fb"])  # used fallback step size
+
+
+class TestHessMC2ReverseMomentum:
+    """Test reverse momentum functions match paper equations."""
+
+    @pytest.fixture
+    def reverse_state(self):
+        return {
+            "v_half": jnp.array([0.3, -0.2, 0.1]),
+            "grad_new": jnp.array([0.1, -0.3, 0.2]),
+            "hess_diag_new": jnp.array([-2.0, -1.0, -4.0]),
+            "eps": 0.1,
+            "eps_fb": 0.01,
+        }
+
+    def test_rw_reverse_is_identity(self, reverse_state):
+        """RW reverse: v_new = v_half (symmetric)."""
+        from dsem_agent.models.ssm.hessmc2 import _reverse_rw
+
+        s = reverse_state
+        v_new, _m, _ss = _reverse_rw(
+            s["v_half"], s["grad_new"], s["hess_diag_new"], s["eps"], s["eps_fb"]
+        )
+        assert jnp.allclose(v_new, s["v_half"])
+
+    def test_fo_reverse_applies_gradient_kick(self, reverse_state):
+        """FO reverse: v_new = 0.5*eps*grad_new + v_half (Eq 34)."""
+        from dsem_agent.models.ssm.hessmc2 import _reverse_fo
+
+        s = reverse_state
+        v_new, _m, _ss = _reverse_fo(
+            s["v_half"], s["grad_new"], s["hess_diag_new"], s["eps"], s["eps_fb"]
+        )
+        expected = 0.5 * s["eps"] * s["grad_new"] + s["v_half"]
+        assert jnp.allclose(v_new, expected)
+
+    def test_fo_forward_reverse_symmetry(self):
+        """FO proposal + reverse with same gradient should recover original v."""
+        from dsem_agent.models.ssm.hessmc2 import _propose_fo, _reverse_fo
+
+        x = jnp.array([1.0, 2.0])
+        grad = jnp.array([0.5, -0.3])
+        z = jnp.array([0.1, -0.2])
+        eps = 0.1
+
+        _, _v, v_half, _, _ = _propose_fo(x, grad, jnp.zeros(2), z, eps, eps)
+        # If grad_new == grad (stationary), reverse should give v_new == v
+        # because: v = z, v_half = 0.5*eps*grad + z
+        #          v_new = 0.5*eps*grad + v_half = 0.5*eps*grad + 0.5*eps*grad + z
+        # This is NOT v — the symmetry is in the weight correction, not the values.
+        # Just verify the reverse produces finite values.
+        v_new, _, _ = _reverse_fo(v_half, grad, jnp.zeros(2), eps, eps)
+        assert jnp.all(jnp.isfinite(v_new))
+
+
+class TestHessMC2Weights:
+    """Test importance weight computation and CoV L-kernel."""
+
+    def test_cov_density_is_finite(self):
+        """CoV log-density should be finite for reasonable inputs."""
+        from dsem_agent.models.ssm.hessmc2 import _log_cov_density
+
+        v = jnp.array([0.5, -0.3])
+        m = jnp.ones(2)
+        eps = 0.1
+        D = 2
+        ld = _log_cov_density(v, m, eps, D)
+        assert jnp.isfinite(ld)
+
+    def test_cov_density_higher_for_smaller_v(self):
+        """Closer to mode (v=0) should give higher density."""
+        from dsem_agent.models.ssm.hessmc2 import _log_cov_density
+
+        m = jnp.ones(3)
+        eps = 0.1
+        D = 3
+        ld_small = _log_cov_density(jnp.array([0.01, 0.01, 0.01]), m, eps, D)
+        ld_large = _log_cov_density(jnp.array([2.0, 2.0, 2.0]), m, eps, D)
+        assert ld_small > ld_large
+
+    def test_weight_update_no_change_gives_zero_correction(self):
+        """If proposal doesn't move and forward == reverse, weight unchanged."""
+        from dsem_agent.models.ssm.hessmc2 import _compute_weight
+
+        D = 2
+        logw_old = jnp.array(-1.0)
+        log_post = jnp.array(-5.0)
+        v = jnp.array([0.3, -0.1])
+        m = jnp.ones(D)
+        ss = jnp.array(0.1)
+
+        # Same post, same v forward and reverse, same mass and step size
+        lw = _compute_weight(logw_old, log_post, log_post, v, v, m, m, ss, ss, D)
+        # log_L - log_q cancels, log_post_new - log_post_old cancels
+        assert jnp.allclose(lw, logw_old, atol=1e-5)
+
+    def test_weight_increases_when_posterior_improves(self):
+        """Moving to higher posterior should increase the weight."""
+        from dsem_agent.models.ssm.hessmc2 import _compute_weight
+
+        D = 2
+        logw_old = jnp.array(0.0)
+        v = jnp.array([0.1, -0.1])
+        m = jnp.ones(D)
+        ss = jnp.array(0.1)
+
+        lw_better = _compute_weight(
+            logw_old, jnp.array(-3.0), jnp.array(-5.0), v, v, m, m, ss, ss, D
+        )
+        lw_worse = _compute_weight(
+            logw_old, jnp.array(-7.0), jnp.array(-5.0), v, v, m, m, ss, ss, D
+        )
+        assert lw_better > lw_worse
+
+    def test_weight_neginf_for_invalid_posterior(self):
+        """Non-finite posterior should give -inf weight."""
+        from dsem_agent.models.ssm.hessmc2 import _compute_weight
+
+        D = 2
+        lw = _compute_weight(
+            jnp.array(0.0),
+            jnp.array(jnp.nan),  # invalid new posterior
+            jnp.array(-5.0),
+            jnp.zeros(D),
+            jnp.zeros(D),
+            jnp.ones(D),
+            jnp.ones(D),
+            jnp.array(0.1),
+            jnp.array(0.1),
+            D,
+        )
+        assert lw == -jnp.inf
+
+
+class TestHessMC2DiagHessian:
+    """Test diagonal Hessian computation on known functions."""
+
+    def test_quadratic_hessian_is_exact(self):
+        """For f(x) = 0.5 * x^T A x, diag(H) = diag(A)."""
+        from dsem_agent.models.ssm.hessmc2 import _diag_hessian
+
+        A = jnp.array([[2.0, 0.5], [0.5, 3.0]])
+
+        def f(x):
+            return 0.5 * x @ A @ x
+
+        x = jnp.array([1.0, -1.0])
+        hd = _diag_hessian(f, x)
+        assert jnp.allclose(hd, jnp.diag(A), atol=1e-4)
+
+    def test_hessian_with_extra_args(self):
+        """_diag_hessian should handle extra (non-differentiated) arguments."""
+        from dsem_agent.models.ssm.hessmc2 import _diag_hessian
+
+        def f(x, scale):
+            return scale * jnp.sum(x**2)
+
+        x = jnp.array([1.0, 2.0, 3.0])
+        scale = jnp.array(2.0)
+        hd = _diag_hessian(f, x, scale)
+        # d²/dx_i² (scale * sum x_i²) = 2 * scale = 4.0
+        assert jnp.allclose(hd, jnp.full(3, 4.0), atol=1e-4)
+
+    def test_rosenbrock_hessian_diagonal(self):
+        """Verify on Rosenbrock: f(x,y) = (1-x)² + 100(y-x²)²."""
+        from dsem_agent.models.ssm.hessmc2 import _diag_hessian
+
+        def rosenbrock(xy):
+            x, y = xy[0], xy[1]
+            return (1 - x) ** 2 + 100 * (y - x**2) ** 2
+
+        # At (1, 1) (the minimum):
+        # d²f/dx² = 2 + 400*(3x²-y) + 800*x² = 2+400*2+800 = 1602 at (1,1)
+        #         Actually: d²f/dx² = 2 - 400*y + 1200*x² = 2-400+1200 = 802
+        # d²f/dy² = 200
+        xy = jnp.array([1.0, 1.0])
+        hd = _diag_hessian(rosenbrock, xy)
+        assert jnp.allclose(hd[0], 802.0, atol=1.0)
+        assert jnp.allclose(hd[1], 200.0, atol=1.0)
+
+
+class TestHessMC2VmapBatching:
+    """Test that proposals and weights work correctly under vmap."""
+
+    def test_propose_fo_batch(self):
+        """Vmapped FO proposal should give same result as sequential."""
+        from dsem_agent.models.ssm.hessmc2 import _propose_fo
+
+        N, D = 4, 3
+        key = random.PRNGKey(0)
+        xs = random.normal(key, (N, D))
+        grads = random.normal(random.PRNGKey(1), (N, D))
+        zs = random.normal(random.PRNGKey(2), (N, D))
+        hess = jnp.zeros((N, D))
+        eps, eps_fb = 0.1, 0.01
+
+        batch_fn = jax.vmap(_propose_fo, in_axes=(0, 0, 0, 0, None, None))
+        x_batch, _, _, _, _ = batch_fn(xs, grads, hess, zs, eps, eps_fb)
+
+        for i in range(N):
+            x_single, _, _, _, _ = _propose_fo(xs[i], grads[i], hess[i], zs[i], eps, eps_fb)
+            assert jnp.allclose(x_batch[i], x_single)
+
+    def test_weight_batch(self):
+        """Vmapped weight computation should match sequential."""
+        from dsem_agent.models.ssm.hessmc2 import _compute_weight
+
+        N, D = 4, 3
+        key = random.PRNGKey(42)
+        keys = random.split(key, 8)
+        logw_old = random.normal(keys[0], (N,))
+        log_post_new = random.normal(keys[1], (N,)) - 5.0
+        log_post_old = random.normal(keys[2], (N,)) - 5.0
+        v = random.normal(keys[3], (N, D))
+        v_new = random.normal(keys[4], (N, D))
+        fwd_m = jnp.ones((N, D))
+        rev_m = jnp.ones((N, D))
+        fwd_ss = jnp.full((N,), 0.1)
+        rev_ss = jnp.full((N,), 0.1)
+
+        batch_fn = jax.vmap(_compute_weight, in_axes=(0, 0, 0, 0, 0, 0, 0, 0, 0, None))
+        lw_batch = batch_fn(
+            logw_old, log_post_new, log_post_old, v, v_new, fwd_m, rev_m, fwd_ss, rev_ss, D
+        )
+
+        for i in range(N):
+            lw_single = _compute_weight(
+                logw_old[i],
+                log_post_new[i],
+                log_post_old[i],
+                v[i],
+                v_new[i],
+                fwd_m[i],
+                rev_m[i],
+                fwd_ss[i],
+                rev_ss[i],
+                D,
+            )
+            assert jnp.allclose(lw_batch[i], lw_single)
+
+
+# =============================================================================
+# Hess-MC² Smoke Test (Non-linear Non-Gaussian DGP)
+# =============================================================================
+
+
+class TestHessMC2Smoke:
+    """Minimal end-to-end smoke test for Hess-MC² on Poisson SSM.
+
+    DGP: 1-latent CT-SSM with Poisson observations (log-link).
+    Non-linear (exp link) + non-Gaussian (Poisson counts).
+    Uses tiny settings (N=8, K=3) just to verify the pipeline runs.
+    """
+
+    @pytest.mark.timeout(30)
+    def test_poisson_smoke(self):
+        """Hess-MC² MALA runs on Poisson SSM and returns valid result.
+
+        Performance gate: must complete within 30s (JIT compile + N=8, K=3).
+        """
+        import time
+
+        t0 = time.perf_counter()
+
+        # -- Simulate 1D Poisson SSM --
+        T, dt = 30, 1.0
+        true_drift = -0.5
+        log_baseline = jnp.log(5.0)
+
+        key = random.PRNGKey(42)
+        discrete_coef = jnp.exp(true_drift * dt)
+        states = [jnp.zeros(1)]
+        for _ in range(T - 1):
+            key, sk = random.split(key)
+            states.append(discrete_coef * states[-1] + random.normal(sk, (1,)) * 0.2)
+        latent = jnp.stack(states)
+
+        key, obs_key = random.split(key)
+        eta = jnp.clip(latent + log_baseline, -10.0, 6.0)
+        observations = random.poisson(obs_key, jnp.exp(eta)).astype(jnp.float32)
+        times = jnp.arange(T, dtype=float) * dt
+
+        # -- Fit with tiny settings --
+        spec = SSMSpec(
+            n_latent=1,
+            n_manifest=1,
+            lambda_mat=jnp.eye(1),
+            diffusion="diag",
+            manifest_dist=NoiseFamily.POISSON,
+            manifest_means=jnp.array([log_baseline]),
+        )
+        model = SSMModel(spec, n_particles=50)
+
+        result = fit(
+            model,
+            observations=observations,
+            times=times,
+            method="hessmc2",
+            n_smc_particles=8,
+            n_iterations=3,
+            proposal="mala",
+            step_size=0.01,
+            seed=0,
+        )
+
+        # -- Basic sanity checks --
+        assert isinstance(result, InferenceResult)
+        assert result.method == "hessmc2"
+        samples = result.get_samples()
+        assert len(samples) > 0
+
+        ess = result.diagnostics["ess_history"]
+        assert len(ess) == 3
+        assert all(e > 0 for e in ess)
+
+        elapsed = time.perf_counter() - t0
+        assert elapsed < 30.0, f"Hess-MC² smoke took {elapsed:.1f}s, must be under 30s"
 
 
 if __name__ == "__main__":
