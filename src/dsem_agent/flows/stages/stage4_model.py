@@ -37,18 +37,20 @@ def build_raw_data_summary(raw_data: pl.DataFrame) -> str:
     # Per-indicator stats
     indicator_stats = (
         raw_data.group_by("indicator")
-        .agg([
-            pl.col("value").cast(pl.Float64, strict=False).count().alias("n_obs"),
-            pl.col("value").cast(pl.Float64, strict=False).mean().alias("mean"),
-            pl.col("value").cast(pl.Float64, strict=False).std().alias("std"),
-        ])
+        .agg(
+            [
+                pl.col("value").cast(pl.Float64, strict=False).count().alias("n_obs"),
+                pl.col("value").cast(pl.Float64, strict=False).mean().alias("mean"),
+                pl.col("value").cast(pl.Float64, strict=False).std().alias("std"),
+            ]
+        )
         .sort("indicator")
     )
 
     lines.append("  Per indicator:")
     for row in indicator_stats.iter_rows(named=True):
-        mean_str = f"{row['mean']:.2f}" if row['mean'] is not None else "N/A"
-        std_str = f"{row['std']:.2f}" if row['std'] is not None else "N/A"
+        mean_str = f"{row['mean']:.2f}" if row["mean"] is not None else "N/A"
+        std_str = f"{row['std']:.2f}" if row["std"] is not None else "N/A"
         lines.append(f"    {row['indicator']}: n={row['n_obs']}, mean={mean_str}, std={std_str}")
 
     return "\n".join(lines)
@@ -209,8 +211,7 @@ def build_model_task(
 
         # Pivot raw data: rows=timestamps, columns=indicators
         wide_data = (
-            raw_data
-            .with_columns(pl.col("value").cast(pl.Float64, strict=False))
+            raw_data.with_columns(pl.col("value").cast(pl.Float64, strict=False))
             .pivot(on="indicator", index="timestamp", values="value")
             .sort("timestamp")
         )
@@ -290,7 +291,9 @@ def stage4_orchestrated_flow(
     priors = {}
     for param_spec, prior_result in zip(parameter_specs, prior_results):
         param_name = param_spec.get("name", "unknown")
-        priors[param_name] = prior_result.result() if hasattr(prior_result, "result") else prior_result
+        priors[param_name] = (
+            prior_result.result() if hasattr(prior_result, "result") else prior_result
+        )
 
     # 3. Validate priors
     validation = validate_priors_task(model_spec, priors, raw_data)

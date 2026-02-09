@@ -12,9 +12,30 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 # Valid aggregation functions for indicator specifications
 # NOTE: These are metadata for documentation - CT-SEM handles aggregation internally
 VALID_AGGREGATIONS = {
-    "mean", "sum", "min", "max", "std", "var", "last", "first", "count",
-    "median", "p10", "p25", "p75", "p90", "p99", "skew", "kurtosis", "iqr",
-    "range", "cv", "entropy", "instability", "trend", "n_unique",
+    "mean",
+    "sum",
+    "min",
+    "max",
+    "std",
+    "var",
+    "last",
+    "first",
+    "count",
+    "median",
+    "p10",
+    "p25",
+    "p75",
+    "p90",
+    "p99",
+    "skew",
+    "kurtosis",
+    "iqr",
+    "range",
+    "cv",
+    "entropy",
+    "instability",
+    "trend",
+    "n_unique",
 }
 
 

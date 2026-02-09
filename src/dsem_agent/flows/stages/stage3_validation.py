@@ -48,12 +48,32 @@ def validate_extraction(
     # Concatenate all worker dataframes
     dataframes = [wr.dataframe for wr in worker_results if wr.dataframe is not None]
     if not dataframes:
-        return {"is_valid": False, "issues": [{"indicator": "all", "issue_type": "no_data", "severity": "error", "message": "No data extracted"}]}
+        return {
+            "is_valid": False,
+            "issues": [
+                {
+                    "indicator": "all",
+                    "issue_type": "no_data",
+                    "severity": "error",
+                    "message": "No data extracted",
+                }
+            ],
+        }
 
     combined = pl.concat(dataframes, how="vertical")
 
     if combined.is_empty():
-        return {"is_valid": False, "issues": [{"indicator": "all", "issue_type": "no_data", "severity": "error", "message": "No data extracted"}]}
+        return {
+            "is_valid": False,
+            "issues": [
+                {
+                    "indicator": "all",
+                    "issue_type": "no_data",
+                    "severity": "error",
+                    "message": "No data extracted",
+                }
+            ],
+        }
 
     indicators = dsem_model.get("measurement", {}).get("indicators", [])
     indicator_names = {ind.get("name") for ind in indicators if ind.get("name")}
@@ -65,50 +85,56 @@ def validate_extraction(
         ind_data = combined.filter(pl.col("indicator") == ind_name)
 
         if ind_data.is_empty():
-            issues.append({
-                "indicator": ind_name,
-                "issue_type": "missing",
-                "severity": "warning",
-                "message": "No data extracted for this indicator",
-            })
+            issues.append(
+                {
+                    "indicator": ind_name,
+                    "issue_type": "missing",
+                    "severity": "warning",
+                    "message": "No data extracted for this indicator",
+                }
+            )
             continue
 
         # Coerce values to numeric for validation
-        values = ind_data.select(
-            pl.col("value").cast(pl.Float64, strict=False)
-        ).drop_nulls()
+        values = ind_data.select(pl.col("value").cast(pl.Float64, strict=False)).drop_nulls()
 
         n_obs = len(values)
 
         if n_obs == 0:
-            issues.append({
-                "indicator": ind_name,
-                "issue_type": "no_numeric",
-                "severity": "error",
-                "message": "No numeric values extracted",
-            })
+            issues.append(
+                {
+                    "indicator": ind_name,
+                    "issue_type": "no_numeric",
+                    "severity": "error",
+                    "message": "No numeric values extracted",
+                }
+            )
             continue
 
         # Check sample size
         if n_obs < MIN_OBSERVATIONS:
-            issues.append({
-                "indicator": ind_name,
-                "issue_type": "low_n",
-                "severity": "warning",
-                "message": f"Only {n_obs} observations (recommend >= {MIN_OBSERVATIONS})",
-            })
+            issues.append(
+                {
+                    "indicator": ind_name,
+                    "issue_type": "low_n",
+                    "severity": "warning",
+                    "message": f"Only {n_obs} observations (recommend >= {MIN_OBSERVATIONS})",
+                }
+            )
 
         # Check variance
         try:
             variance = values["value"].var()
             if variance is not None and variance == 0:
                 const_val = values["value"].first()
-                issues.append({
-                    "indicator": ind_name,
-                    "issue_type": "no_variance",
-                    "severity": "error",
-                    "message": f"Zero variance (constant value = {const_val})",
-                })
+                issues.append(
+                    {
+                        "indicator": ind_name,
+                        "issue_type": "no_variance",
+                        "severity": "error",
+                        "message": f"Zero variance (constant value = {const_val})",
+                    }
+                )
         except Exception:
             pass
 

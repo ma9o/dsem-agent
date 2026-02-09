@@ -100,20 +100,20 @@ def causal_inference_pipeline(
         orchestrator_chunks[:SAMPLE_CHUNKS],
     )
 
-    measurement_model = measurement_result['measurement_model']
-    identifiability_status = measurement_result['identifiability_status']
+    measurement_model = measurement_result["measurement_model"]
+    identifiability_status = measurement_result["identifiability_status"]
 
     n_indicators = len(measurement_model["indicators"])
     print(f"Final model has {n_indicators} indicators")
 
     # Report non-identifiable treatments
-    non_identifiable = identifiability_status.get('non_identifiable_treatments', {})
+    non_identifiable = identifiability_status.get("non_identifiable_treatments", {})
     if non_identifiable:
         print("\n⚠️  NON-IDENTIFIABLE TREATMENT EFFECTS:")
         for treatment in sorted(non_identifiable.keys()):
             details = non_identifiable[treatment]
-            blockers = details.get('confounders', []) if isinstance(details, dict) else []
-            notes = details.get('notes') if isinstance(details, dict) else None
+            blockers = details.get("confounders", []) if isinstance(details, dict) else []
+            notes = details.get("notes") if isinstance(details, dict) else None
             if blockers:
                 print(f"  - {treatment} → {outcome} (blocked by: {', '.join(blockers)})")
             elif notes:
@@ -150,18 +150,24 @@ def causal_inference_pipeline(
     # ══════════════════════════════════════════════════════════════════════════
     print("\n=== Stage 3: Extraction Validation ===")
     validation_task = validate_extraction(dsem_model, worker_results)
-    validation_report = validation_task.result() if hasattr(validation_task, "result") else validation_task
+    validation_report = (
+        validation_task.result() if hasattr(validation_task, "result") else validation_task
+    )
 
     if validation_report:
         issues = validation_report.get("issues", [])
         if not validation_report.get("is_valid", True):
             print("⚠️  Stage 3 validation errors detected:")
             for issue in issues:
-                print(f"    - {issue['indicator']}: {issue['issue_type']} ({issue['severity']}) {issue['message']}")
+                print(
+                    f"    - {issue['indicator']}: {issue['issue_type']} ({issue['severity']}) {issue['message']}"
+                )
         elif issues:
             print("⚠️  Stage 3 validation warnings:")
             for issue in issues:
-                print(f"    - {issue['indicator']}: {issue['issue_type']} ({issue['severity']}) {issue['message']}")
+                print(
+                    f"    - {issue['indicator']}: {issue['issue_type']} ({issue['severity']}) {issue['message']}"
+                )
 
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 4: Model Specification (Orchestrator-Worker Architecture)

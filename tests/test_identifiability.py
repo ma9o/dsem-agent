@@ -93,8 +93,6 @@ def test_identifiability_with_construct_name_measurements():
     assert "B" in result["identifiable_treatments"]
 
 
-
-
 def test_identifiability_unobserved_treatment():
     """Test when the treatment itself is unobserved.
 
@@ -168,8 +166,6 @@ def test_lagged_confounding_blocks_identification():
     assert "U" in _blockers(result, "X")
 
 
-
-
 def test_dag_to_admg_unrolls_to_two_timesteps():
     """Test that dag_to_admg creates a 2-timestep unrolled graph."""
     latent_model = {
@@ -202,8 +198,6 @@ def test_dag_to_admg_unrolls_to_two_timesteps():
     assert ("B_{t-1}", "A_t") in edge_names
     assert ("A_{t-1}", "A_t") in edge_names
     assert ("B_{t-1}", "B_t") in edge_names
-
-
 
 
 def test_dag_to_admg_validates_max_lag_one():
@@ -282,8 +276,6 @@ def test_analyze_unobserved_all_observed():
 
     assert len(analysis["can_marginalize"]) == 0
     assert analysis["blocking_details"] == {}
-
-
 
 
 def test_format_marginalization_report():

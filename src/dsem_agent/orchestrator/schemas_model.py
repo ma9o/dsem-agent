@@ -105,9 +105,7 @@ class ModelSpec(BaseModel):
     model_clock: str = Field(
         description="Temporal granularity at which the model operates (e.g., 'daily')"
     )
-    reasoning: str = Field(
-        description="Overall reasoning for the model specification choices"
-    )
+    reasoning: str = Field(description="Overall reasoning for the model specification choices")
 
 
 # Result schemas for the orchestrator stage
@@ -116,9 +114,5 @@ class ModelSpec(BaseModel):
 class Stage4OrchestratorResult(BaseModel):
     """Result of Stage 4 orchestrator: proposed model specification."""
 
-    model_spec: ModelSpec = Field(
-        description="The proposed model specification"
-    )
-    raw_response: str = Field(
-        description="Raw LLM response for debugging"
-    )
+    model_spec: ModelSpec = Field(description="The proposed model specification")
+    raw_response: str = Field(description="Raw LLM response for debugging")

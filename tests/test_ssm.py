@@ -196,8 +196,9 @@ class TestSSMModel:
         times = jnp.arange(T, dtype=float)
 
         # Run with minimal samples using NUTS
-        result = fit(model, observations, times, method="nuts",
-                     num_warmup=10, num_samples=10, num_chains=1)
+        result = fit(
+            model, observations, times, method="nuts", num_warmup=10, num_samples=10, num_chains=1
+        )
 
         samples = result.get_samples()
         assert "drift_diag_pop" in samples

@@ -623,6 +623,7 @@ class SSMModel:
         subject_indices = jnp.arange(n_subjects)
         return jnp.sum(vmap(subject_ll)(subject_indices))
 
+
 def build_ssm_model(
     n_latent: int,
     n_manifest: int,
