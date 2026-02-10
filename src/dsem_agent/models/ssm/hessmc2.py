@@ -425,7 +425,19 @@ def fit_hessmc2(
             H = jax.hessian(log_post_fn)(z)
             return jnp.nan_to_num(H, nan=0.0, posinf=0.0, neginf=0.0)
 
-        batch_hessian = jax.jit(jax.vmap(_safe_full_hessian))
+        _batch_hessian_jit = jax.jit(jax.vmap(_safe_full_hessian))
+
+        # Chunk size for Hessian computation to avoid OOM on large N.
+        # Each Hessian creates O(N_pf * T * D^2) intermediates; vmapping
+        # over all N_smc at once can exceed GPU memory.
+        _hess_chunk = min(N, 32)
+
+        def batch_hessian(particles):
+            chunks = [
+                _batch_hessian_jit(particles[i : i + _hess_chunk])
+                for i in range(0, particles.shape[0], _hess_chunk)
+            ]
+            return jnp.concatenate(chunks, axis=0)
 
     # Select proposal/reverse functions and build vmapped batches
     if proposal == "rw":
@@ -466,10 +478,7 @@ def fit_hessmc2(
     # When warmup_iters > 0, the first iterations use RW which doesn't need
     # grads or hessians — skip the expensive initial computation.
     hessians = jnp.zeros((N, D, D))
-    if warmup_iters > 0:
-        log_posts = batch_log_post(particles)
-        grads = jnp.zeros((N, D))
-    elif proposal == "rw":
+    if warmup_iters > 0 or proposal == "rw":
         log_posts = batch_log_post(particles)
         grads = jnp.zeros((N, D))
     else:
