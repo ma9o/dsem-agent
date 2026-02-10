@@ -30,12 +30,97 @@ import jax.random as random
 import jax.scipy.linalg as jla
 from blackjax.smc.resampling import systematic as _systematic_resample
 from jax.flatten_util import ravel_pytree
+from numpyro.infer import SVI, Trace_ELBO
+from numpyro.infer.autoguide import AutoMultivariateNormal
+from numpyro.optim import ClippedAdam
 
 from dsem_agent.models.likelihoods.particle import SSMAdapter
 from dsem_agent.models.ssm.discretization import discretize_system_batched
 from dsem_agent.models.ssm.hessmc2 import _assemble_deterministics, _discover_sites
 from dsem_agent.models.ssm.inference import InferenceResult
 from dsem_agent.models.ssm.mcmc_utils import compute_weighted_chol_mass, hmc_step
+
+# ---------------------------------------------------------------------------
+# SVI warmstart for mass matrix initialization
+# ---------------------------------------------------------------------------
+
+
+def _svi_warmstart(
+    model,
+    observations,
+    times,
+    subject_ids,
+    D,
+    blocks=None,
+    num_steps=500,
+    learning_rate=0.01,
+    seed=42,
+):
+    """Run quick SVI to estimate posterior covariance for mass matrix init.
+
+    Uses AutoMultivariateNormal guide, which parameterizes the posterior in the
+    same unconstrained space as PGAS (both use ravel_pytree on sorted dict keys).
+
+    Args:
+        model: SSMModel instance
+        observations: (T, n_manifest) observed data
+        times: (T,) observation times
+        subject_ids: optional subject indices
+        D: total number of unconstrained parameters
+        blocks: optional list of block dicts (for per-block mass initialization)
+        num_steps: SVI optimization steps
+        learning_rate: Adam learning rate
+        seed: random seed
+
+    Returns:
+        init_theta: (D,) SVI posterior mean in unconstrained space
+        chol_mass_full: (D, D) Cholesky of precision matrix
+        block_chol_masses: dict of block_name -> (block_size, block_size) Cholesky,
+            or None if blocks is None
+    """
+    guide = AutoMultivariateNormal(model.model)
+    optimizer = ClippedAdam(step_size=learning_rate)
+    svi = SVI(model.model, guide, optimizer, Trace_ELBO())
+
+    rng_key = random.PRNGKey(seed)
+    svi_result = svi.run(rng_key, num_steps, observations, times, subject_ids, progress_bar=False)
+
+    # Extract guide parameters
+    init_theta = svi_result.params["auto_loc"]  # (D,) posterior mean
+    scale_tril = svi_result.params["auto_scale_tril"]  # (D, D) lower-tri Cholesky of cov
+
+    # Check for NaN/Inf
+    if not (jnp.all(jnp.isfinite(init_theta)) and jnp.all(jnp.isfinite(scale_tril))):
+        print("  SVI warmstart: NaN detected, falling back to identity mass matrix")
+        return None, None, None
+
+    # Full covariance and precision
+    reg = 1e-3
+    full_cov = scale_tril @ scale_tril.T
+
+    # Full mass matrix: precision = inv(cov + reg*I)
+    cov_reg = full_cov + reg * jnp.eye(D)
+    L_cov = jla.cholesky(cov_reg, lower=True)
+    prec = jla.cho_solve((L_cov, True), jnp.eye(D))
+    chol_mass_full = jla.cholesky(prec, lower=True)
+
+    # Per-block mass matrices from marginal covariance sub-blocks
+    block_chol_masses = None
+    if blocks is not None:
+        block_chol_masses = {}
+        for block in blocks:
+            s = block["slice"]
+            bsize = block["size"]
+            block_cov = full_cov[s, s] + reg * jnp.eye(bsize)
+            L_b = jla.cholesky(block_cov, lower=True)
+            block_prec = jla.cho_solve((L_b, True), jnp.eye(bsize))
+            block_chol_masses[block["name"]] = jla.cholesky(block_prec, lower=True)
+
+    final_loss = float(svi_result.losses[-1])
+    print(f"  SVI warmstart: {num_steps} steps, final ELBO={final_loss:.0f}")
+
+    return init_theta, chol_mass_full, block_chol_masses
+
 
 # ---------------------------------------------------------------------------
 # Transition log-prob
@@ -454,6 +539,8 @@ def fit_pgas(
     seed: int = 0,
     n_leapfrog: int = 1,
     block_sampling: bool = False,
+    svi_warmstart: bool = True,
+    svi_num_steps: int = 500,
     **kwargs: Any,  # noqa: ARG001
 ) -> InferenceResult:
     """Fit SSM via PGAS with gradient-informed CSMC and HMC parameter updates.
@@ -476,6 +563,8 @@ def fit_pgas(
         seed: random seed
         n_leapfrog: number of leapfrog steps (1 = MALA, >1 = HMC)
         block_sampling: update parameter blocks independently
+        svi_warmstart: run SVI to initialize mass matrix and parameters
+        svi_num_steps: number of SVI steps for warmstart
 
     Returns:
         InferenceResult with posterior samples
@@ -504,8 +593,9 @@ def fit_pgas(
     block_tag = "+block" if block_sampling else ""
     hmc_tag = f"+HMC(L={n_leapfrog})" if n_leapfrog > 1 else ""
     opt_tag = "+optimal" if gaussian_obs else ""
+    svi_tag = "+svi_init" if svi_warmstart else ""
     print(
-        f"PGAS [precond{block_tag}{hmc_tag}{opt_tag}]: "
+        f"PGAS [precond{block_tag}{hmc_tag}{opt_tag}{svi_tag}]: "
         f"n_outer={n_outer}, N_csmc={N_csmc}, n_mh={n_mh_steps}, n_l={n_l}"
     )
 
@@ -635,16 +725,41 @@ def fit_pgas(
         s = block["slice"]
         block_hmc_fns.append(_make_block_hmc_fn(s.start, block["size"]))
 
-    # 6. Initialize parameters at prior mean (more stable than random sample)
-    parts = []
-    for name in sorted(site_info.keys()):
-        info = site_info[name]
-        prior_mean = info["distribution"].mean
-        unc_mean = info["transform"].inv(prior_mean)
-        parts.append(unc_mean.reshape(-1))
-    theta_unc = jnp.concatenate(parts)
+    # 6. Initialize parameters and mass matrix
+    chol_mass_full = jnp.eye(D)
 
-    # 7. Initialize trajectory from prior simulation
+    if svi_warmstart:
+        svi_theta, svi_chol_mass, svi_block_chols = _svi_warmstart(
+            model,
+            observations,
+            times,
+            subject_ids,
+            D,
+            blocks=blocks if block_sampling else None,
+            num_steps=svi_num_steps,
+            seed=seed + 1000,
+        )
+        if svi_theta is not None:
+            theta_unc = svi_theta
+            chol_mass_full = svi_chol_mass
+            if svi_block_chols is not None:
+                for block in blocks:
+                    block["chol_mass"] = svi_block_chols[block["name"]]
+        else:
+            # SVI failed, fall back to prior mean + identity mass
+            svi_warmstart = False
+
+    if not svi_warmstart:
+        # Initialize at prior mean (original behavior)
+        parts = []
+        for name in sorted(site_info.keys()):
+            info = site_info[name]
+            prior_mean = info["distribution"].mean
+            unc_mean = info["transform"].inv(prior_mean)
+            parts.append(unc_mean.reshape(-1))
+        theta_unc = jnp.concatenate(parts)
+
+    # 7. Initialize trajectory from current parameters
     drift, diff_cov, cint, lambda_mat, manifest_means, manifest_cov, t0_mean, t0_cov = (
         _params_to_matrices(theta_unc, unravel_fn, transforms, model.spec)
     )
@@ -659,7 +774,6 @@ def fit_pgas(
     accept_rates = []
     block_accept_rates = {b["name"]: [] for b in blocks} if block_sampling else {}
     current_step_size = param_step_size
-    chol_mass_full = jnp.eye(D)
 
     # Mass matrix update parameters
     mass_update_interval = 10
@@ -822,6 +936,7 @@ def fit_pgas(
         "param_step_size": current_step_size,
         "block_sampling": block_sampling,
         "gaussian_obs": gaussian_obs,
+        "svi_warmstart": svi_warmstart,
     }
     if block_sampling and len(blocks) > 1:
         diagnostics["block_accept_rates"] = block_accept_rates
