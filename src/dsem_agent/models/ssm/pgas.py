@@ -186,7 +186,9 @@ def _csmc_sweep(
     """
     _T, n_l = ref_traj.shape
     N = n_particles
+    n_m = observations.shape[1]
     jitter = jnp.eye(n_l) * 1e-6
+    jitter_obs = jnp.eye(n_m) * 1e-6
 
     # --- Initialize at t=0 ---
     chol_t0 = jla.cholesky(t0_cov + jitter, lower=True)
@@ -219,9 +221,7 @@ def _csmc_sweep(
             # Adjust R_inv for this timestep's mask
             mask_inf = (1.0 - mask_t) * 1e10
             R_adj_t_inflated = R_adj_t + jnp.diag(mask_inf)
-            R_inv_t = jnp.linalg.inv(
-                R_adj_t_inflated + jitter[: R_adj_t.shape[0], : R_adj_t.shape[1]]
-            )
+            R_inv_t = jnp.linalg.inv(R_adj_t_inflated + jitter_obs)
             LtRinvL_t = lambda_mat.T @ R_inv_t @ lambda_mat
             LtRinv_t = lambda_mat.T @ R_inv_t
 
@@ -245,9 +245,7 @@ def _csmc_sweep(
 
             # Weights for optimal proposal: p(y|x_prev) = N(y; Lambda@prior_mean+mu, Lambda@Qd@Lambda^T+R)
             pred_cov = lambda_mat @ Qd_t @ lambda_mat.T + R_adj_t_inflated
-            chol_pred = jla.cholesky(
-                pred_cov + jitter[: pred_cov.shape[0], : pred_cov.shape[1]], lower=True
-            )
+            chol_pred = jla.cholesky(pred_cov + jitter_obs, lower=True)
 
             def log_pred_lik(prior_mean):
                 pred_mean = lambda_mat @ prior_mean + manifest_means
@@ -255,7 +253,7 @@ def _csmc_sweep(
                 Linv_diff = jla.solve_triangular(chol_pred, diff, lower=True)
                 logdet = jnp.sum(jnp.log(jnp.diag(chol_pred)))
                 return (
-                    -0.5 * jnp.dot(Linv_diff, Linv_diff) - logdet - 0.5 * n_l * jnp.log(2 * jnp.pi)
+                    -0.5 * jnp.dot(Linv_diff, Linv_diff) - logdet - 0.5 * n_m * jnp.log(2 * jnp.pi)
                 )
 
             log_w_free = jax.vmap(log_pred_lik)(prior_means)

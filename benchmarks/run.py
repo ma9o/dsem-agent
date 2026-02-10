@@ -97,7 +97,7 @@ METHOD_CONFIGS = {
         "local": {
             "T": 80,
             "n_outer": 60,
-            "n_csmc_particles": 32,
+            "n_csmc_particles": 30,
             "n_mh_steps": 5,
             "n_pf": 200,
             "n_warmup": 30,
@@ -106,7 +106,52 @@ METHOD_CONFIGS = {
         "gpu": {
             "T": 200,
             "n_outer": 200,
-            "n_csmc_particles": 128,
+            "n_csmc_particles": 120,
+            "n_mh_steps": 15,
+            "n_pf": 500,
+            "n_warmup": 100,
+            "param_step_size": 0.1,
+        },
+        "gpu_type": "B200",
+        "timeout": 3600,
+    },
+    # Baseline variants: disable all SOTA upgrades for A/B comparison
+    "pgas_baseline": {
+        "local": {
+            "T": 80,
+            "n_outer": 200,
+            "n_csmc_particles": 30,
+            "n_mh_steps": 10,
+            "n_pf": 100,
+            "n_warmup": 100,
+            "param_step_size": 0.05,
+        },
+        "gpu": {
+            "T": 200,
+            "n_outer": 500,
+            "n_csmc_particles": 50,
+            "n_mh_steps": 15,
+            "n_pf": 200,
+            "n_warmup": 250,
+            "param_step_size": 0.05,
+        },
+        "gpu_type": "A100",
+        "timeout": 7200,
+    },
+    "tempered_smc_baseline": {
+        "local": {
+            "T": 80,
+            "n_outer": 60,
+            "n_csmc_particles": 30,
+            "n_mh_steps": 5,
+            "n_pf": 200,
+            "n_warmup": 30,
+            "param_step_size": 0.1,
+        },
+        "gpu": {
+            "T": 200,
+            "n_outer": 200,
+            "n_csmc_particles": 120,
             "n_mh_steps": 15,
             "n_pf": 500,
             "n_warmup": 100,
@@ -260,13 +305,22 @@ def run_method(method: str, problem: RecoveryProblem, local: bool) -> RecoveryRe
         print(f"Final proposal scale: {diag.get('final_proposal_scale', 0):.4f}")
         print()
 
-    elif method == "pgas":
+    elif method in ("pgas", "pgas_baseline"):
+        is_baseline = method.endswith("_baseline")
         model = SSMModel(
             problem.spec,
             priors=problem.priors,
             n_particles=cfg["n_pf"],
             pf_seed=42,
         )
+        # SOTA flags: baseline disables all upgrades
+        pgas_kwargs = {}
+        if is_baseline:
+            pgas_kwargs = {"block_sampling": False}
+            print("  [BASELINE] block_sampling=False")
+        else:
+            print("  [UPGRADED] block_sampling=True, optimal_proposal=auto, preconditioning=on")
+        print()
         t0 = time.perf_counter()
         result = fit(
             model,
@@ -280,6 +334,7 @@ def run_method(method: str, problem: RecoveryProblem, local: bool) -> RecoveryRe
             param_step_size=cfg["param_step_size"],
             n_warmup=cfg["n_warmup"],
             seed=0,
+            **pgas_kwargs,
         )
         elapsed = time.perf_counter() - t0
         print(f"Done in {elapsed:.1f}s")
@@ -290,15 +345,31 @@ def run_method(method: str, problem: RecoveryProblem, local: bool) -> RecoveryRe
             f"  MALA accept: mean={sum(rates) / len(rates):.2f}  "
             f"final_step={result.diagnostics['param_step_size']:.4f}"
         )
+        if result.diagnostics.get("gaussian_obs"):
+            print("  Optimal proposal: ACTIVE")
+        if result.diagnostics.get("block_sampling"):
+            block_rates = result.diagnostics.get("block_accept_rates", {})
+            for bname, brates in block_rates.items():
+                print(f"  Block '{bname}' accept: mean={sum(brates) / len(brates):.2f}")
         print()
 
-    elif method == "tempered_smc":
+    elif method in ("tempered_smc", "tempered_smc_baseline"):
+        is_baseline = method.endswith("_baseline")
         model = SSMModel(
             problem.spec,
             priors=problem.priors,
             n_particles=cfg["n_pf"],
             pf_seed=42,
         )
+        # SOTA flags: baseline disables all upgrades
+        smc_kwargs = {}
+        if is_baseline:
+            smc_kwargs = {"adaptive_tempering": False, "waste_free": False}
+            print("  [BASELINE] adaptive_tempering=False, waste_free=False")
+        else:
+            smc_kwargs = {"waste_free": True, "adaptive_tempering": True}
+            print("  [UPGRADED] adaptive_tempering=True, waste_free=True")
+        print()
         t0 = time.perf_counter()
         result = fit(
             model,
@@ -311,9 +382,16 @@ def run_method(method: str, problem: RecoveryProblem, local: bool) -> RecoveryRe
             param_step_size=cfg["param_step_size"],
             n_warmup=cfg["n_warmup"],
             seed=0,
+            **smc_kwargs,
         )
         elapsed = time.perf_counter() - t0
         print(f"Done in {elapsed:.1f}s")
+        # Tempered SMC diagnostics
+        beta_schedule = result.diagnostics.get("beta_schedule", [])
+        if beta_schedule:
+            print(f"  Tempering levels: {len(beta_schedule)}, final beta={beta_schedule[-1]:.4f}")
+        if result.diagnostics.get("waste_free"):
+            print("  Waste-free: ACTIVE")
         print()
 
     elif method == "hessmc2":
@@ -393,17 +471,11 @@ if HAS_MODAL:
         run(methods, local=False)
 
     @app.local_entrypoint()
-    def modal_main():
-        import sys
-
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--method", default="all")
-        # Filter out Modal's own args
-        args, _ = parser.parse_known_args([a for a in sys.argv[1:] if not a.startswith("--")])
-        if args.method == "all":
+    def modal_main(method: str = "all"):
+        if method == "all":
             methods = list(METHOD_CONFIGS.keys())
         else:
-            methods = [m.strip() for m in args.method.split(",")]
+            methods = [m.strip() for m in method.split(",")]
         recovery_remote.remote(methods)
 
 

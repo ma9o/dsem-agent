@@ -17,8 +17,9 @@ def make_modal_image(gpu: str):
         .pip_install("uv")
         .uv_sync(uv_project_dir=str(ROOT), groups=["dev"], frozen=True)
         .uv_pip_install("jax[cuda12]", gpu=gpu)
-        .env({"PYTHONPATH": "/root/src"})
-        .add_local_dir(ROOT / "src" / "dsem_agent", remote_path="/root/src/dsem_agent")
+        .env({"PYTHONPATH": "/root"})
+        .add_local_dir(ROOT / "src" / "dsem_agent", remote_path="/root/dsem_agent")
+        .add_local_dir(ROOT / "benchmarks", remote_path="/root/benchmarks")
     )
 
 

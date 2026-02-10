@@ -40,6 +40,7 @@ dev = [
     "streamlit-agraph>=0.0.45",
     "watchdog>=6.0.0",
     "dspy>=3.0.4",
+    "modal>=1.3.2",
 ]
 
 [tool.ruff]
