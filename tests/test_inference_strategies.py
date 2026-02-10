@@ -1705,6 +1705,23 @@ class TestMCMCUtils:
         beta = find_next_beta(logw, log_liks, 0.0, 0.5, N)
         assert beta == 1.0
 
+    def test_dual_averaging_converges(self):
+        """Dual averaging should converge step size toward target acceptance."""
+        from dsem_agent.models.ssm.mcmc_utils import dual_averaging_init, dual_averaging_update
+
+        state = dual_averaging_init(1.0)
+        # Simulate low acceptance (step too large) -> should shrink
+        for _ in range(50):
+            state = dual_averaging_update(state, 0.1, target_accept=0.65)
+        assert state.eps < 1.0  # step size should have decreased
+        assert state.eps_bar < 1.0
+
+        # Simulate high acceptance (step too small) -> should grow
+        state2 = dual_averaging_init(0.001)
+        for _ in range(50):
+            state2 = dual_averaging_update(state2, 0.95, target_accept=0.65)
+        assert state2.eps > 0.001
+
     def test_compute_weighted_chol_mass_shape(self):
         """compute_weighted_chol_mass should return (D, D) lower-triangular."""
         from dsem_agent.models.ssm.mcmc_utils import compute_weighted_chol_mass

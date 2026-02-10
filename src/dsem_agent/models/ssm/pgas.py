@@ -38,7 +38,12 @@ from dsem_agent.models.likelihoods.particle import SSMAdapter
 from dsem_agent.models.ssm.discretization import discretize_system_batched
 from dsem_agent.models.ssm.hessmc2 import _assemble_deterministics, _discover_sites
 from dsem_agent.models.ssm.inference import InferenceResult
-from dsem_agent.models.ssm.mcmc_utils import compute_weighted_chol_mass, hmc_step
+from dsem_agent.models.ssm.mcmc_utils import (
+    compute_weighted_chol_mass,
+    dual_averaging_init,
+    dual_averaging_update,
+    hmc_step,
+)
 
 # ---------------------------------------------------------------------------
 # SVI warmstart for mass matrix initialization
@@ -773,7 +778,15 @@ def fit_pgas(
     theta_chain = []
     accept_rates = []
     block_accept_rates = {b["name"]: [] for b in blocks} if block_sampling else {}
+
+    # Dual averaging for step size adaptation
+    target_accept = 0.65 if n_leapfrog > 1 else 0.574
+    da_state = dual_averaging_init(param_step_size)
     current_step_size = param_step_size
+    # Per-block dual averaging states
+    if block_sampling:
+        for block in blocks:
+            block["da_state"] = dual_averaging_init(block["step_size"])
 
     # Mass matrix update parameters
     mass_update_interval = 10
@@ -832,26 +845,15 @@ def fit_pgas(
                 block_accept_rates[block["name"]].append(block_rate)
                 n_accepted_total += block_accepted
 
-                # Per-block step size adaptation
-                if n > 0 and n % 5 == 0:
-                    recent = block_accept_rates[block["name"]][-5:]
-                    avg = sum(recent) / len(recent)
-                    if n < n_warmup:
-                        if avg < 0.15:
-                            block["step_size"] *= 0.5
-                        elif avg > 0.6:
-                            block["step_size"] *= 2.0
-                        elif avg < 0.25:
-                            block["step_size"] *= 0.8
-                        elif avg > 0.5:
-                            block["step_size"] *= 1.3
-                    else:
-                        if avg < 0.05:
-                            block["step_size"] *= 0.5
-                        elif avg < 0.15:
-                            block["step_size"] *= 0.8
-                        elif avg > 0.6:
-                            block["step_size"] *= 1.2
+                # Per-block dual averaging step size adaptation during warmup
+                if n < n_warmup:
+                    block["da_state"] = dual_averaging_update(
+                        block["da_state"], block_rate, target_accept
+                    )
+                    block["step_size"] = block["da_state"].eps
+                elif n == n_warmup:
+                    # Fix step size at averaged value after warmup
+                    block["step_size"] = block["da_state"].eps_bar
 
             accept_rate = n_accepted_total / (n_mh_steps * len(blocks))
         else:
@@ -866,6 +868,14 @@ def fit_pgas(
                 n_accepted += int(accepted)
 
             accept_rate = n_accepted / n_mh_steps
+
+            # Joint dual averaging step size adaptation during warmup
+            if n < n_warmup:
+                da_state = dual_averaging_update(da_state, accept_rate, target_accept)
+                current_step_size = da_state.eps
+            elif n == n_warmup:
+                # Fix step size at averaged value after warmup
+                current_step_size = da_state.eps_bar
 
         accept_rates.append(accept_rate)
 
@@ -883,27 +893,6 @@ def fit_pgas(
                     )
             else:
                 chol_mass_full = compute_weighted_chol_mass(recent, jnp.zeros(len(recent)), D)
-
-        # Adapt joint step size (non-block mode)
-        if (not block_sampling or len(blocks) <= 1) and n > 0 and n % 5 == 0:
-            recent_rates = accept_rates[-5:]
-            avg_rate = sum(recent_rates) / len(recent_rates)
-            if n < n_warmup:
-                if avg_rate < 0.15:
-                    current_step_size *= 0.5
-                elif avg_rate > 0.6:
-                    current_step_size *= 2.0
-                elif avg_rate < 0.25:
-                    current_step_size *= 0.8
-                elif avg_rate > 0.5:
-                    current_step_size *= 1.3
-            else:
-                if avg_rate < 0.05:
-                    current_step_size *= 0.5
-                elif avg_rate < 0.15:
-                    current_step_size *= 0.8
-                elif avg_rate > 0.6:
-                    current_step_size *= 1.2
 
         if (n + 1) % max(1, n_outer // 5) == 0:
             print(

@@ -5,6 +5,8 @@ Provides:
     When n_leapfrog=1, identical to preconditioned MALA.
   - compute_weighted_chol_mass: Weighted precision Cholesky from particle cloud.
   - find_next_beta: ESS-based bisection for adaptive tempering schedules.
+  - DualAveragingState / dual_averaging_*: Nesterov dual averaging for step size
+    adaptation (Hoffman & Gelman 2014).
 """
 
 from __future__ import annotations
@@ -159,3 +161,102 @@ def find_next_beta(logw, log_liks, beta_prev, target_ess_ratio, N):
 
     beta_next = beta_prev + lo
     return min(beta_next, 1.0)
+
+
+# ---------------------------------------------------------------------------
+# Dual averaging for step size adaptation (Hoffman & Gelman 2014, Algorithm 5)
+# ---------------------------------------------------------------------------
+
+
+class DualAveragingState:
+    """State for Nesterov dual averaging step size adaptation.
+
+    Tracks running statistics to converge to the optimal step size that
+    achieves a target MH acceptance rate. After warmup, use `eps_bar`
+    (the averaged step size) for stable sampling.
+
+    Attributes:
+        log_eps: current (non-averaged) log step size
+        log_eps_bar: averaged log step size (use after warmup)
+        h_bar: running average of (target - accept_prob)
+        step: number of updates so far
+        mu: shrinkage target = log(10 * eps_init)
+    """
+
+    __slots__ = ("h_bar", "log_eps", "log_eps_bar", "mu", "step")
+
+    def __init__(self, log_eps, log_eps_bar, h_bar, step, mu):
+        self.log_eps = log_eps
+        self.log_eps_bar = log_eps_bar
+        self.h_bar = h_bar
+        self.step = step
+        self.mu = mu
+
+    @property
+    def eps(self):
+        """Current step size (use during warmup)."""
+        import math
+
+        return math.exp(self.log_eps)
+
+    @property
+    def eps_bar(self):
+        """Averaged step size (use after warmup)."""
+        import math
+
+        return math.exp(self.log_eps_bar)
+
+
+def dual_averaging_init(eps_init):
+    """Initialize dual averaging state.
+
+    Args:
+        eps_init: initial step size guess
+
+    Returns:
+        DualAveragingState
+    """
+    import math
+
+    return DualAveragingState(
+        log_eps=math.log(eps_init),
+        log_eps_bar=0.0,
+        h_bar=0.0,
+        step=0,
+        mu=math.log(10.0 * eps_init),
+    )
+
+
+def dual_averaging_update(state, accept_prob, target_accept=0.65, gamma=0.05, t0=10, kappa=0.75):
+    """Update dual averaging state with new acceptance probability.
+
+    Implements Algorithm 5 from Hoffman & Gelman (2014). Converges to
+    the step size achieving `target_accept` acceptance rate.
+
+    Args:
+        state: current DualAveragingState
+        accept_prob: observed MH acceptance probability (0-1)
+        target_accept: target acceptance rate (0.65 for HMC, 0.574 for MALA)
+        gamma: adaptation regularization (default 0.05)
+        t0: early stabilization offset (default 10)
+        kappa: forgetting rate for step size averaging (default 0.75)
+
+    Returns:
+        updated DualAveragingState
+    """
+    import math
+
+    m = state.step + 1
+    w = 1.0 / (m + t0)
+    h_bar = (1.0 - w) * state.h_bar + w * (target_accept - accept_prob)
+    log_eps = state.mu - math.sqrt(m) / gamma * h_bar
+    m_kappa = m ** (-kappa)
+    log_eps_bar = m_kappa * log_eps + (1.0 - m_kappa) * state.log_eps_bar
+
+    return DualAveragingState(
+        log_eps=log_eps,
+        log_eps_bar=log_eps_bar,
+        h_bar=h_bar,
+        step=m,
+        mu=state.mu,
+    )
