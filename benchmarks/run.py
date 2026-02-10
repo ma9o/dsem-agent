@@ -84,7 +84,7 @@ METHOD_CONFIGS = {
         "gpu": {
             "T": 200,
             "n_outer": 500,
-            "n_csmc_particles": 50,
+            "n_csmc_particles": 100,  # N >= T/2 for good CSMC mixing
             "n_mh_steps": 15,
             "n_pf": 200,
             "n_warmup": 250,
@@ -129,7 +129,7 @@ METHOD_CONFIGS = {
         "gpu": {
             "T": 200,
             "n_outer": 500,
-            "n_csmc_particles": 50,
+            "n_csmc_particles": 100,  # N >= T/2 for good CSMC mixing
             "n_mh_steps": 15,
             "n_pf": 200,
             "n_warmup": 250,

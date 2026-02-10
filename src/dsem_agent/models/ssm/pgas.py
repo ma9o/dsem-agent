@@ -536,7 +536,7 @@ def fit_pgas(
     times: jnp.ndarray,
     subject_ids: jnp.ndarray | None = None,
     n_outer: int = 50,
-    n_csmc_particles: int = 20,
+    n_csmc_particles: int = 30,
     n_mh_steps: int = 5,
     langevin_step_size: float = 0.0,
     param_step_size: float = 0.1,
@@ -560,7 +560,8 @@ def fit_pgas(
         times: (T,) observation times
         subject_ids: optional subject indices
         n_outer: number of Gibbs iterations
-        n_csmc_particles: N for CSMC (including reference particle)
+        n_csmc_particles: N for CSMC (including reference particle).
+            For good mixing, use N >= T/2 (Lindsten et al. 2014).
         n_mh_steps: HMC/MALA steps per parameter update
         langevin_step_size: step size for gradient shift in CSMC proposals
         param_step_size: HMC/MALA step size for parameter updates
