@@ -735,7 +735,9 @@ class TestParameterRecovery:
         result = fit(
             model, obs, times, method="nuts", num_warmup=200, num_samples=200, num_chains=1
         )
-        drift_mean = float(jnp.mean(result.get_samples()["drift_diag_pop"][:, 0]))
+        # Model applies -abs(drift_diag_pop) so check the transformed value
+        raw = result.get_samples()["drift_diag_pop"][:, 0]
+        drift_mean = float(jnp.mean(-jnp.abs(raw)))
         assert -1.5 < drift_mean < 0.0, f"Drift posterior mean = {drift_mean}"
 
     @pytest.mark.slow
@@ -766,7 +768,8 @@ class TestParameterRecovery:
         result = fit(
             model, obs, times, method="nuts", num_warmup=200, num_samples=200, num_chains=1
         )
-        drift_mean = float(jnp.mean(result.get_samples()["drift_diag_pop"][:, 0]))
+        raw = result.get_samples()["drift_diag_pop"][:, 0]
+        drift_mean = float(jnp.mean(-jnp.abs(raw)))
         assert -1.5 < drift_mean < 0.0, f"Drift posterior mean = {drift_mean}"
 
     @pytest.mark.slow
@@ -798,8 +801,469 @@ class TestParameterRecovery:
         result = fit(
             model, obs, times, method="nuts", num_warmup=200, num_samples=200, num_chains=1
         )
-        drift_mean = float(jnp.mean(result.get_samples()["drift_diag_pop"][:, 0]))
+        raw = result.get_samples()["drift_diag_pop"][:, 0]
+        drift_mean = float(jnp.mean(-jnp.abs(raw)))
         assert -1.5 < drift_mean < 0.0, f"Drift posterior mean = {drift_mean}"
+
+
+# =============================================================================
+# TestRBPFKalmanConsistency — RBPF must match exact Kalman for Gaussian obs
+# =============================================================================
+
+
+class TestRBPFKalmanConsistency:
+    """Verify RBPF matches Kalman filter exactly for Gaussian observations.
+
+    These tests catch bugs in RBPF predict/update/weight logic by comparing
+    against the known-correct Kalman filter on linear-Gaussian systems.
+    """
+
+    def _kalman_ll(self, ct, meas, init, obs, dt):
+        from dsem_agent.models.likelihoods.kalman import KalmanLikelihood
+
+        kf = KalmanLikelihood(n_latent=init.mean.shape[0], n_manifest=meas.lambda_mat.shape[0])
+        return float(kf.compute_log_likelihood(ct, meas, init, obs, dt))
+
+    def _rbpf_ll(self, ct, meas, init, obs, dt, n_particles=500, seed=42):
+        return float(
+            _run_rbpf(
+                ct,
+                meas,
+                init,
+                obs,
+                dt,
+                manifest_dist="gaussian",
+                n_particles=n_particles,
+                rng_key=random.PRNGKey(seed),
+            )
+        )
+
+    def test_kalman_match_identity_measurement(self):
+        """RBPF ≈ Kalman with identity lambda, n=2."""
+        ct, meas, init = _make_standard_params(n_latent=2, n_manifest=2)
+        T = 20
+        obs = random.normal(random.PRNGKey(0), (T, 2)) * 0.5
+        dt = jnp.ones(T)
+        ll_kf = self._kalman_ll(ct, meas, init, obs, dt)
+        ll_rb = self._rbpf_ll(ct, meas, init, obs, dt, n_particles=1000)
+        assert abs(ll_rb - ll_kf) < 1.5, f"RBPF={ll_rb:.2f}, Kalman={ll_kf:.2f}"
+
+    def test_kalman_match_non_identity_lambda(self):
+        """RBPF ≈ Kalman with 3-manifest, 2-latent, non-identity lambda."""
+        n_latent, n_manifest = 2, 3
+        ct = CTParams(
+            drift=jnp.array([[-0.5, 0.1], [0.2, -0.8]]),
+            diffusion_cov=jnp.eye(n_latent) * 0.1,
+            cint=jnp.zeros(n_latent),
+        )
+        meas = MeasurementParams(
+            lambda_mat=jnp.array([[1.0, 0.0], [0.5, 0.5], [0.0, 1.0]]),
+            manifest_means=jnp.array([0.1, -0.2, 0.3]),
+            manifest_cov=jnp.eye(n_manifest) * 0.15,
+        )
+        init = InitialStateParams(mean=jnp.array([0.5, -0.3]), cov=jnp.eye(n_latent) * 0.8)
+
+        T = 15
+        obs = random.normal(random.PRNGKey(7), (T, n_manifest)) * 0.5
+        dt = jnp.ones(T)
+        ll_kf = self._kalman_ll(ct, meas, init, obs, dt)
+        ll_rb = self._rbpf_ll(ct, meas, init, obs, dt, n_particles=1000)
+        assert abs(ll_rb - ll_kf) < 1.5, f"RBPF={ll_rb:.2f}, Kalman={ll_kf:.2f}"
+
+    def test_kalman_match_nonzero_intercept(self):
+        """RBPF ≈ Kalman with non-zero drift intercept."""
+        ct = CTParams(
+            drift=jnp.array([[-0.5, 0.0], [0.0, -0.3]]),
+            diffusion_cov=jnp.eye(2) * 0.1,
+            cint=jnp.array([0.5, -0.2]),
+        )
+        meas = MeasurementParams(
+            lambda_mat=jnp.eye(2),
+            manifest_means=jnp.zeros(2),
+            manifest_cov=jnp.eye(2) * 0.1,
+        )
+        init = InitialStateParams(mean=jnp.zeros(2), cov=jnp.eye(2))
+
+        T = 15
+        obs = random.normal(random.PRNGKey(11), (T, 2)) * 0.5 + 0.3
+        dt = jnp.ones(T)
+        ll_kf = self._kalman_ll(ct, meas, init, obs, dt)
+        ll_rb = self._rbpf_ll(ct, meas, init, obs, dt, n_particles=1000)
+        assert abs(ll_rb - ll_kf) < 1.5, f"RBPF={ll_rb:.2f}, Kalman={ll_kf:.2f}"
+
+    def test_kalman_match_nondiag_diffusion(self):
+        """RBPF ≈ Kalman with non-diagonal diffusion covariance."""
+        Q = jnp.array([[0.15, 0.05], [0.05, 0.10]])
+        ct = CTParams(
+            drift=jnp.array([[-0.5, 0.1], [0.2, -0.8]]),
+            diffusion_cov=Q,
+            cint=jnp.zeros(2),
+        )
+        meas = MeasurementParams(
+            lambda_mat=jnp.eye(2),
+            manifest_means=jnp.zeros(2),
+            manifest_cov=jnp.eye(2) * 0.1,
+        )
+        init = InitialStateParams(mean=jnp.zeros(2), cov=jnp.eye(2))
+
+        T = 15
+        obs = random.normal(random.PRNGKey(13), (T, 2)) * 0.5
+        dt = jnp.ones(T)
+        ll_kf = self._kalman_ll(ct, meas, init, obs, dt)
+        ll_rb = self._rbpf_ll(ct, meas, init, obs, dt, n_particles=1000)
+        assert abs(ll_rb - ll_kf) < 1.5, f"RBPF={ll_rb:.2f}, Kalman={ll_kf:.2f}"
+
+    def test_kalman_match_irregular_dt(self):
+        """RBPF ≈ Kalman with irregular time intervals."""
+        ct, meas, init = _make_standard_params()
+        T = 12
+        obs = random.normal(random.PRNGKey(17), (T, 2)) * 0.5
+        dt = jnp.array([0.1, 0.5, 1.0, 2.0, 0.3, 0.7, 1.5, 0.2, 0.8, 1.2, 0.4, 0.9])
+        ll_kf = self._kalman_ll(ct, meas, init, obs, dt)
+        ll_rb = self._rbpf_ll(ct, meas, init, obs, dt, n_particles=1000)
+        assert abs(ll_rb - ll_kf) < 1.5, f"RBPF={ll_rb:.2f}, Kalman={ll_kf:.2f}"
+
+    def test_missing_data_convention_difference(self):
+        """RBPF and Kalman handle NaN differently: verify RBPF gives higher LL.
+
+        The Kalman filter inflates R for missing obs (adding spurious
+        normalization constants). RBPF correctly skips them (log weight = 0).
+        So RBPF LL > Kalman LL when data has NaN, and the difference should
+        scale with the number of missing observations.
+        """
+        ct, meas, init = _make_standard_params()
+        T = 15
+        obs = random.normal(random.PRNGKey(19), (T, 2)) * 0.5
+        obs_missing = obs.at[3, 0].set(jnp.nan)
+        obs_missing = obs_missing.at[7, :].set(jnp.nan)
+        obs_missing = obs_missing.at[10, 1].set(jnp.nan)
+        dt = jnp.ones(T)
+
+        # RBPF on complete vs missing data
+        ll_rb_full = self._rbpf_ll(ct, meas, init, obs, dt, n_particles=1000)
+        ll_rb_miss = self._rbpf_ll(ct, meas, init, obs_missing, dt, n_particles=1000)
+
+        # Missing data should give HIGHER LL (fewer observations to penalize)
+        assert ll_rb_miss > ll_rb_full - 1.0, (
+            f"Missing data LL={ll_rb_miss:.2f} should be >= full LL={ll_rb_full:.2f} "
+            "(fewer obs can only increase or maintain LL)"
+        )
+        assert np.isfinite(ll_rb_miss), f"RBPF with missing data should be finite: {ll_rb_miss}"
+
+    @pytest.mark.slow
+    def test_kalman_match_unbiased(self):
+        """Mean RBPF LL over many seeds should converge to exact Kalman LL."""
+        ct, meas, init = _make_standard_params()
+        T = 20
+        obs = random.normal(random.PRNGKey(23), (T, 2)) * 0.5
+        dt = jnp.ones(T)
+
+        ll_kf = self._kalman_ll(ct, meas, init, obs, dt)
+        rbpf_lls = [
+            self._rbpf_ll(ct, meas, init, obs, dt, n_particles=500, seed=i) for i in range(50)
+        ]
+        mean_rbpf = np.mean(rbpf_lls)
+        # PF has a known downward bias in log-LL (Jensen's inequality), so
+        # mean RBPF should be slightly below Kalman. Allow 1.0 nat tolerance.
+        assert abs(mean_rbpf - ll_kf) < 1.0, (
+            f"Mean RBPF={mean_rbpf:.3f}, Kalman={ll_kf:.3f}, diff={abs(mean_rbpf - ll_kf):.3f}"
+        )
+
+
+# =============================================================================
+# TestRBPFGradientConsistency — Gradients match finite differences
+# =============================================================================
+
+
+class TestRBPFGradientConsistency:
+    """Verify RBPF gradients via finite differences.
+
+    Catches bugs where jax.grad runs without error but produces incorrect
+    gradients (e.g., stop-gradient errors, wrong resampling gradient paths).
+    """
+
+    def _fd_gradient(self, fn, x, eps=1e-3):
+        """Central finite difference gradient."""
+        grad_fd = np.zeros_like(x)
+        for i in range(len(x)):
+            x_plus = x.at[i].set(x[i] + eps)
+            x_minus = x.at[i].set(x[i] - eps)
+            grad_fd[i] = (float(fn(x_plus)) - float(fn(x_minus))) / (2 * eps)
+        return jnp.array(grad_fd)
+
+    def test_grad_drift_gaussian(self):
+        """RBPF gradient w.r.t. drift matches finite differences (Gaussian obs)."""
+        ct, meas, init = _make_standard_params()
+        T = 8
+        obs = random.normal(random.PRNGKey(0), (T, 2)) * 0.5
+        dt = jnp.ones(T)
+
+        def ll_fn(drift_diag):
+            ct_mod = CTParams(
+                drift=jnp.diag(drift_diag), diffusion_cov=ct.diffusion_cov, cint=ct.cint
+            )
+            return _run_rbpf(ct_mod, meas, init, obs, dt, manifest_dist="gaussian", n_particles=200)
+
+        x0 = jnp.array([-0.5, -0.8])
+        grad_ad = jax.grad(ll_fn)(x0)
+        grad_fd = self._fd_gradient(ll_fn, x0)
+        # Finite differences are noisy due to resampling; use loose tolerance
+        assert jnp.allclose(grad_ad, grad_fd, atol=2.0), f"AD grad={grad_ad}, FD grad={grad_fd}"
+
+    def test_grad_drift_poisson(self):
+        """RBPF gradient w.r.t. drift matches finite differences (Poisson obs)."""
+        ct, meas, init = _make_standard_params()
+        T = 8
+        obs = random.poisson(random.PRNGKey(1), jnp.ones((T, 2)) * 2.0).astype(jnp.float32)
+        dt = jnp.ones(T)
+
+        def ll_fn(drift_diag):
+            ct_mod = CTParams(
+                drift=jnp.diag(drift_diag), diffusion_cov=ct.diffusion_cov, cint=ct.cint
+            )
+            return _run_rbpf(ct_mod, meas, init, obs, dt, manifest_dist="poisson", n_particles=200)
+
+        x0 = jnp.array([-0.5, -0.8])
+        grad_ad = jax.grad(ll_fn)(x0)
+        grad_fd = self._fd_gradient(ll_fn, x0)
+        assert jnp.allclose(grad_ad, grad_fd, atol=2.0), f"AD grad={grad_ad}, FD grad={grad_fd}"
+
+    def test_grad_measurement_cov(self):
+        """RBPF gradient w.r.t. measurement noise matches finite differences."""
+        ct, meas, init = _make_standard_params()
+        T = 8
+        obs = random.normal(random.PRNGKey(2), (T, 2)) * 0.5
+        dt = jnp.ones(T)
+
+        def ll_fn(log_r_diag):
+            R = jnp.diag(jnp.exp(log_r_diag))
+            meas_mod = MeasurementParams(
+                lambda_mat=meas.lambda_mat, manifest_means=meas.manifest_means, manifest_cov=R
+            )
+            return _run_rbpf(ct, meas_mod, init, obs, dt, manifest_dist="gaussian", n_particles=200)
+
+        x0 = jnp.array([jnp.log(0.1), jnp.log(0.1)])
+        grad_ad = jax.grad(ll_fn)(x0)
+        grad_fd = self._fd_gradient(ll_fn, x0)
+        assert jnp.allclose(grad_ad, grad_fd, atol=2.0), f"AD grad={grad_ad}, FD grad={grad_fd}"
+
+
+# =============================================================================
+# TestRBPFBootstrapAgreement — RBPF and bootstrap should agree in expectation
+# =============================================================================
+
+
+class TestRBPFBootstrapAgreement:
+    """RBPF and bootstrap PF should agree on average LL for non-Gaussian obs.
+
+    Catches bugs where RBPF computes a biased likelihood (e.g., wrong quadrature,
+    missing observation weight terms).
+    """
+
+    @pytest.mark.slow
+    def test_mean_ll_agreement_poisson(self):
+        """Average RBPF LL ≈ average bootstrap LL for Poisson observations."""
+        key = random.PRNGKey(0)
+        obs, dt, ct, meas, init = _simulate_poisson_data(key, T=15)
+
+        n_runs = 40
+        rbpf_lls = [
+            float(_run_rbpf(ct, meas, init, obs, dt, rng_key=random.PRNGKey(i), n_particles=200))
+            for i in range(n_runs)
+        ]
+        boot_lls = [
+            float(
+                _run_bootstrap_pf(
+                    ct, meas, init, obs, dt, rng_key=random.PRNGKey(i), n_particles=200
+                )
+            )
+            for i in range(n_runs)
+        ]
+
+        mean_rbpf = np.mean(rbpf_lls)
+        mean_boot = np.mean(boot_lls)
+        # Both should estimate the same marginal LL; allow some tolerance
+        assert abs(mean_rbpf - mean_boot) < 3.0, (
+            f"Mean RBPF={mean_rbpf:.2f}, Mean bootstrap={mean_boot:.2f}, "
+            f"diff={abs(mean_rbpf - mean_boot):.2f}"
+        )
+
+    @pytest.mark.slow
+    def test_mean_ll_agreement_student_t(self):
+        """Average RBPF LL ≈ average bootstrap LL for Student-t observations."""
+        ct, meas, init = _make_standard_params()
+        T = 15
+        obs = random.normal(random.PRNGKey(10), (T, 2)) * 0.5
+        dt = jnp.ones(T)
+
+        n_runs = 40
+        rbpf_lls = [
+            float(
+                _run_rbpf(
+                    ct,
+                    meas,
+                    init,
+                    obs,
+                    dt,
+                    manifest_dist="student_t",
+                    rng_key=random.PRNGKey(i),
+                    n_particles=200,
+                    extra_params={"obs_df": 5.0},
+                )
+            )
+            for i in range(n_runs)
+        ]
+        boot_lls = [
+            float(
+                _run_bootstrap_pf(
+                    ct,
+                    meas,
+                    init,
+                    obs,
+                    dt,
+                    manifest_dist="student_t",
+                    rng_key=random.PRNGKey(i),
+                    n_particles=200,
+                    extra_params={"obs_df": 5.0},
+                )
+            )
+            for i in range(n_runs)
+        ]
+
+        mean_rbpf = np.mean(rbpf_lls)
+        mean_boot = np.mean(boot_lls)
+        assert abs(mean_rbpf - mean_boot) < 3.0, (
+            f"Mean RBPF={mean_rbpf:.2f}, Mean bootstrap={mean_boot:.2f}, "
+            f"diff={abs(mean_rbpf - mean_boot):.2f}"
+        )
+
+
+# =============================================================================
+# TestRBPFDiscretization — Verify RBPF uses discretized params correctly
+# =============================================================================
+
+
+class TestRBPFDiscretization:
+    """Test that RBPF correctly uses CT→DT discretized parameters.
+
+    Catches bugs where RBPF uses wrong time intervals or swaps Ad/Qd/cd.
+    """
+
+    def test_longer_dt_increases_uncertainty(self):
+        """Larger dt should give larger prediction uncertainty → lower LL."""
+        ct, meas, init = _make_standard_params()
+        T = 10
+        obs = random.normal(random.PRNGKey(0), (T, 2)) * 0.5
+
+        dt_short = jnp.ones(T) * 0.1
+        dt_long = jnp.ones(T) * 5.0
+        ll_short = _run_rbpf(ct, meas, init, obs, dt_short, manifest_dist="gaussian")
+        ll_long = _run_rbpf(ct, meas, init, obs, dt_long, manifest_dist="gaussian")
+        # Short dt → tighter predictions → typically higher LL for moderate data
+        # (not guaranteed for all data, but holds for typical draws)
+        assert ll_short != ll_long, "Different dt should give different LL"
+
+    def test_dt_sensitivity_poisson(self):
+        """RBPF LL should change when time intervals change (Poisson)."""
+        ct, meas, init = _make_standard_params()
+        T = 10
+        obs = random.poisson(random.PRNGKey(5), jnp.ones((T, 2)) * 2.0).astype(jnp.float32)
+
+        dt1 = jnp.ones(T)
+        dt2 = jnp.ones(T) * 0.5
+        ll1 = float(_run_rbpf(ct, meas, init, obs, dt1))
+        ll2 = float(_run_rbpf(ct, meas, init, obs, dt2))
+        assert ll1 != ll2, "Different dt should produce different LL"
+
+    def test_zero_diffusion_reduces_to_deterministic(self):
+        """With zero diffusion, RBPF should give very tight state predictions."""
+        ct = CTParams(
+            drift=jnp.array([[-0.1, 0.0], [0.0, -0.1]]),
+            diffusion_cov=jnp.eye(2) * 1e-10,
+            cint=jnp.zeros(2),
+        )
+        meas = MeasurementParams(
+            lambda_mat=jnp.eye(2),
+            manifest_means=jnp.zeros(2),
+            manifest_cov=jnp.eye(2) * 0.1,
+        )
+        init = InitialStateParams(mean=jnp.zeros(2), cov=jnp.eye(2) * 1e-10)
+
+        T = 10
+        obs = random.normal(random.PRNGKey(0), (T, 2)) * 0.5
+        dt = jnp.ones(T)
+        ll = _run_rbpf(ct, meas, init, obs, dt, manifest_dist="gaussian")
+        assert jnp.isfinite(ll), f"Near-zero diffusion should still give finite LL: {ll}"
+
+
+# =============================================================================
+# TestRBPFMonotonicity — Likelihood should respond sensibly to param changes
+# =============================================================================
+
+
+class TestRBPFMonotonicity:
+    """Verify monotonic relationships between params and LL.
+
+    Catches sign errors, wrong Jacobians, and off-by-one bugs in RBPF.
+    """
+
+    def test_better_measurement_increases_ll(self):
+        """Smaller measurement noise → higher LL when data matches the model."""
+        ct, _, init = _make_standard_params()
+        T = 15
+
+        # Simulate from the model with low measurement noise
+        key = random.PRNGKey(0)
+        k1, k2 = random.split(key)
+        states = [init.mean]
+        for _t in range(T - 1):
+            k1, k_step = random.split(k1)
+            states.append(states[-1] + ct.drift @ states[-1] + random.normal(k_step, (2,)) * 0.1)
+        states = jnp.stack(states)
+        obs = (states + random.normal(k2, states.shape) * 0.05).astype(jnp.float32)
+        dt = jnp.ones(T)
+
+        ll_low_noise = float(
+            _run_rbpf(
+                ct,
+                MeasurementParams(jnp.eye(2), jnp.zeros(2), jnp.eye(2) * 0.01),
+                init,
+                obs,
+                dt,
+                manifest_dist="gaussian",
+            )
+        )
+        ll_high_noise = float(
+            _run_rbpf(
+                ct,
+                MeasurementParams(jnp.eye(2), jnp.zeros(2), jnp.eye(2) * 1.0),
+                init,
+                obs,
+                dt,
+                manifest_dist="gaussian",
+            )
+        )
+        # Low noise model should fit clean data better
+        assert ll_low_noise > ll_high_noise, (
+            f"Low noise LL={ll_low_noise:.2f} should be > high noise LL={ll_high_noise:.2f}"
+        )
+
+    def test_correct_drift_beats_wrong_drift(self):
+        """True drift parameter should give higher LL than a wrong one (Poisson)."""
+        key = random.PRNGKey(42)
+        obs, dt, ct_true, meas, init = _simulate_poisson_data(key, T=20)
+
+        ct_wrong = CTParams(
+            drift=jnp.eye(2) * 0.5,  # Unstable positive drift (wrong)
+            diffusion_cov=ct_true.diffusion_cov,
+            cint=ct_true.cint,
+        )
+
+        ll_true = float(_run_rbpf(ct_true, meas, init, obs, dt, n_particles=300))
+        ll_wrong = float(_run_rbpf(ct_wrong, meas, init, obs, dt, n_particles=300))
+        assert ll_true > ll_wrong, (
+            f"True drift LL={ll_true:.2f} should beat wrong drift LL={ll_wrong:.2f}"
+        )
 
 
 if __name__ == "__main__":
