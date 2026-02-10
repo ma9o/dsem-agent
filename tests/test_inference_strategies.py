@@ -1863,6 +1863,7 @@ class TestPGASSmoke:
             langevin_step_size=0.0,
             param_step_size=0.1,
             n_warmup=75,
+            block_sampling=False,
             seed=0,
         )
 
@@ -1980,6 +1981,8 @@ class TestTemperedSMCSmoke:
             n_mh_steps=3,
             param_step_size=0.01,
             n_warmup=3,
+            adaptive_tempering=False,
+            waste_free=False,
             seed=0,
         )
 
@@ -2018,6 +2021,8 @@ class TestTemperedSMCSmoke:
             n_mh_steps=10,
             param_step_size=0.1,
             n_warmup=50,
+            adaptive_tempering=False,
+            waste_free=False,
             seed=0,
         )
 
@@ -2054,6 +2059,583 @@ class TestTemperedSMCSmoke:
         assert obs_q5 <= lgss_data["true_obs_sd"] <= obs_q95, (
             f"Obs SD {lgss_data['true_obs_sd']:.2f} outside 90% CI [{obs_q5:.3f}, {obs_q95:.3f}]"
         )
+
+
+# =============================================================================
+# MCMC Utils Tests
+# =============================================================================
+
+
+class TestMCMCUtils:
+    """Test shared MCMC utility functions."""
+
+    def test_hmc_step_n_leapfrog_1_is_mala(self):
+        """hmc_step with n_leapfrog=1 should behave as MALA."""
+        from dsem_agent.models.ssm.mcmc_utils import hmc_step
+
+        D = 3
+        key = random.PRNGKey(42)
+
+        # Simple quadratic target: -0.5 * x^T x
+        def target_vg(z):
+            val = -0.5 * jnp.dot(z, z)
+            grad = -z
+            return val, grad
+
+        z = jnp.array([1.0, -0.5, 0.3])
+        chol_mass = jnp.eye(D)
+        z_new, accepted, log_target = hmc_step(key, z, target_vg, 0.1, chol_mass, n_leapfrog=1)
+
+        assert z_new.shape == (D,)
+        assert jnp.isfinite(log_target)
+        assert accepted.dtype == jnp.bool_
+
+    def test_hmc_step_n_leapfrog_5(self):
+        """hmc_step with n_leapfrog=5 should produce valid results."""
+        from dsem_agent.models.ssm.mcmc_utils import hmc_step
+
+        D = 3
+        key = random.PRNGKey(42)
+
+        def target_vg(z):
+            val = -0.5 * jnp.dot(z, z)
+            grad = -z
+            return val, grad
+
+        z = jnp.array([1.0, -0.5, 0.3])
+        chol_mass = jnp.eye(D)
+        z_new, _accepted, log_target = hmc_step(key, z, target_vg, 0.1, chol_mass, n_leapfrog=5)
+
+        assert z_new.shape == (D,)
+        assert jnp.isfinite(log_target)
+
+    def test_find_next_beta_basic(self):
+        """find_next_beta should return a value between beta_prev and 1.0."""
+        from dsem_agent.models.ssm.mcmc_utils import find_next_beta
+
+        N = 100
+        logw = jnp.zeros(N)
+        key = random.PRNGKey(0)
+        log_liks = random.normal(key, (N,)) * 10.0  # spread-out likelihoods
+
+        beta = find_next_beta(logw, log_liks, 0.0, 0.5, N)
+        assert 0.0 < beta <= 1.0
+
+    def test_find_next_beta_reaches_one(self):
+        """find_next_beta should reach 1.0 when likelihoods are uniform."""
+        from dsem_agent.models.ssm.mcmc_utils import find_next_beta
+
+        N = 100
+        logw = jnp.zeros(N)
+        log_liks = jnp.zeros(N)  # all equal -> ESS stays at N for any delta
+
+        beta = find_next_beta(logw, log_liks, 0.0, 0.5, N)
+        assert beta == 1.0
+
+    def test_compute_weighted_chol_mass_shape(self):
+        """compute_weighted_chol_mass should return (D, D) lower-triangular."""
+        from dsem_agent.models.ssm.mcmc_utils import compute_weighted_chol_mass
+
+        D = 4
+        N = 50
+        key = random.PRNGKey(0)
+        particles = random.normal(key, (N, D))
+        logw = jnp.zeros(N)
+
+        chol = compute_weighted_chol_mass(particles, logw, D)
+        assert chol.shape == (D, D)
+        # Should be lower-triangular (upper triangle ~0)
+        assert jnp.allclose(chol, jnp.tril(chol), atol=1e-6)
+
+
+# =============================================================================
+# Tempered SMC Upgrade Tests
+# =============================================================================
+
+
+class TestTemperedSMCAdaptive:
+    """Test adaptive ESS-based tempering."""
+
+    @pytest.fixture
+    def lgss_data(self):
+        """1D Linear Gaussian SSM data."""
+        import jax.scipy.linalg as jla
+
+        from dsem_agent.models.ssm import SSMSpec, discretize_system
+
+        n_latent, n_manifest = 1, 1
+        T, dt = 50, 1.0
+
+        true_drift = jnp.array([[-0.3]])
+        true_diff_cov = jnp.array([[0.3**2]])
+        true_obs_var = jnp.array([[0.5**2]])
+
+        Ad, Qd, _ = discretize_system(true_drift, true_diff_cov, None, dt)
+        Qd_chol = jla.cholesky(Qd + jnp.eye(n_latent) * 1e-8, lower=True)
+        R_chol = jla.cholesky(true_obs_var, lower=True)
+
+        key = random.PRNGKey(42)
+        states = [jnp.zeros(n_latent)]
+        for _ in range(T - 1):
+            key, nk = random.split(key)
+            states.append(Ad @ states[-1] + Qd_chol @ random.normal(nk, (n_latent,)))
+        latent = jnp.stack(states)
+
+        key, obs_key = random.split(key)
+        observations = latent + random.normal(obs_key, (T, n_manifest)) @ R_chol.T
+        times = jnp.arange(T, dtype=float) * dt
+
+        spec = SSMSpec(
+            n_latent=n_latent,
+            n_manifest=n_manifest,
+            lambda_mat=jnp.eye(n_manifest, n_latent),
+            manifest_means=jnp.zeros(n_manifest),
+            diffusion="diag",
+            t0_means=jnp.zeros(n_latent),
+            t0_var=jnp.eye(n_latent),
+        )
+
+        return {"observations": observations, "times": times, "spec": spec}
+
+    @pytest.mark.timeout(60)
+    def test_adaptive_tempering_reaches_beta_one(self, lgss_data):
+        """Adaptive tempering should reach beta=1.0."""
+        from dsem_agent.models.ssm import SSMModel, fit
+
+        model = SSMModel(lgss_data["spec"], n_particles=50)
+        result = fit(
+            model,
+            observations=lgss_data["observations"],
+            times=lgss_data["times"],
+            method="tempered_smc",
+            n_outer=50,
+            n_csmc_particles=10,
+            n_mh_steps=5,
+            param_step_size=0.01,
+            adaptive_tempering=True,
+            target_ess_ratio=0.5,
+            waste_free=False,
+            seed=0,
+        )
+
+        assert isinstance(result, InferenceResult)
+        beta_schedule = result.diagnostics["beta_schedule"]
+        assert beta_schedule[-1] == 1.0, f"Final beta={beta_schedule[-1]}, expected 1.0"
+
+
+class TestTemperedSMCWasteFree:
+    """Test waste-free particle recycling."""
+
+    @pytest.fixture
+    def lgss_data(self):
+        """1D Linear Gaussian SSM data."""
+        import jax.scipy.linalg as jla
+
+        from dsem_agent.models.ssm import SSMSpec, discretize_system
+
+        n_latent, n_manifest = 1, 1
+        T, dt = 50, 1.0
+
+        true_drift = jnp.array([[-0.3]])
+        true_diff_cov = jnp.array([[0.3**2]])
+        true_obs_var = jnp.array([[0.5**2]])
+
+        Ad, Qd, _ = discretize_system(true_drift, true_diff_cov, None, dt)
+        Qd_chol = jla.cholesky(Qd + jnp.eye(n_latent) * 1e-8, lower=True)
+        R_chol = jla.cholesky(true_obs_var, lower=True)
+
+        key = random.PRNGKey(42)
+        states = [jnp.zeros(n_latent)]
+        for _ in range(T - 1):
+            key, nk = random.split(key)
+            states.append(Ad @ states[-1] + Qd_chol @ random.normal(nk, (n_latent,)))
+        latent = jnp.stack(states)
+
+        key, obs_key = random.split(key)
+        observations = latent + random.normal(obs_key, (T, n_manifest)) @ R_chol.T
+        times = jnp.arange(T, dtype=float) * dt
+
+        spec = SSMSpec(
+            n_latent=n_latent,
+            n_manifest=n_manifest,
+            lambda_mat=jnp.eye(n_manifest, n_latent),
+            manifest_means=jnp.zeros(n_manifest),
+            diffusion="diag",
+            t0_means=jnp.zeros(n_latent),
+            t0_var=jnp.eye(n_latent),
+        )
+
+        return {"observations": observations, "times": times, "spec": spec}
+
+    @pytest.mark.timeout(60)
+    def test_waste_free_runs(self, lgss_data):
+        """Waste-free mode should complete without error."""
+        from dsem_agent.models.ssm import SSMModel, fit
+
+        model = SSMModel(lgss_data["spec"], n_particles=50)
+        result = fit(
+            model,
+            observations=lgss_data["observations"],
+            times=lgss_data["times"],
+            method="tempered_smc",
+            n_outer=10,
+            n_csmc_particles=10,  # N=10, n_mh_steps=5 -> M=2
+            n_mh_steps=5,
+            param_step_size=0.01,
+            waste_free=True,
+            seed=0,
+        )
+
+        assert isinstance(result, InferenceResult)
+        assert result.diagnostics["waste_free"] is True
+
+    def test_waste_free_rejects_bad_n(self):
+        """Waste-free should reject N % n_mh_steps != 0."""
+        from dsem_agent.models.ssm import SSMModel, SSMSpec, fit
+
+        spec = SSMSpec(
+            n_latent=1,
+            n_manifest=1,
+            lambda_mat=jnp.eye(1),
+            diffusion="diag",
+        )
+        model = SSMModel(spec, n_particles=50)
+
+        T = 10
+        observations = jnp.zeros((T, 1))
+        times = jnp.arange(T, dtype=float)
+
+        with pytest.raises(ValueError, match="waste_free requires"):
+            fit(
+                model,
+                observations=observations,
+                times=times,
+                method="tempered_smc",
+                n_outer=5,
+                n_csmc_particles=7,  # N=7, n_mh_steps=3 -> 7%3 != 0
+                n_mh_steps=3,
+                waste_free=True,
+                seed=0,
+            )
+
+
+class TestTemperedSMCMultiStepHMC:
+    """Test multi-step HMC mutations in tempered SMC."""
+
+    @pytest.fixture
+    def lgss_data(self):
+        """1D Linear Gaussian SSM data."""
+        import jax.scipy.linalg as jla
+
+        from dsem_agent.models.ssm import SSMSpec, discretize_system
+
+        n_latent, n_manifest = 1, 1
+        T, dt = 50, 1.0
+
+        true_drift = jnp.array([[-0.3]])
+        true_diff_cov = jnp.array([[0.3**2]])
+        true_obs_var = jnp.array([[0.5**2]])
+
+        Ad, Qd, _ = discretize_system(true_drift, true_diff_cov, None, dt)
+        Qd_chol = jla.cholesky(Qd + jnp.eye(n_latent) * 1e-8, lower=True)
+        R_chol = jla.cholesky(true_obs_var, lower=True)
+
+        key = random.PRNGKey(42)
+        states = [jnp.zeros(n_latent)]
+        for _ in range(T - 1):
+            key, nk = random.split(key)
+            states.append(Ad @ states[-1] + Qd_chol @ random.normal(nk, (n_latent,)))
+        latent = jnp.stack(states)
+
+        key, obs_key = random.split(key)
+        observations = latent + random.normal(obs_key, (T, n_manifest)) @ R_chol.T
+        times = jnp.arange(T, dtype=float) * dt
+
+        spec = SSMSpec(
+            n_latent=n_latent,
+            n_manifest=n_manifest,
+            lambda_mat=jnp.eye(n_manifest, n_latent),
+            manifest_means=jnp.zeros(n_manifest),
+            diffusion="diag",
+            t0_means=jnp.zeros(n_latent),
+            t0_var=jnp.eye(n_latent),
+        )
+
+        return {"observations": observations, "times": times, "spec": spec}
+
+    @pytest.mark.timeout(60)
+    def test_multi_step_hmc_runs(self, lgss_data):
+        """n_leapfrog=5 should complete without error."""
+        from dsem_agent.models.ssm import SSMModel, fit
+
+        model = SSMModel(lgss_data["spec"], n_particles=50)
+        result = fit(
+            model,
+            observations=lgss_data["observations"],
+            times=lgss_data["times"],
+            method="tempered_smc",
+            n_outer=6,
+            n_csmc_particles=10,
+            n_mh_steps=5,
+            param_step_size=0.01,
+            n_leapfrog=5,
+            waste_free=False,
+            seed=0,
+        )
+
+        assert isinstance(result, InferenceResult)
+        assert result.diagnostics["n_leapfrog"] == 5
+
+
+# =============================================================================
+# PGAS Upgrade Tests
+# =============================================================================
+
+
+class TestPGASPreconditioned:
+    """Test preconditioned MALA in PGAS."""
+
+    @pytest.fixture
+    def lgss_data(self):
+        """1D Linear Gaussian SSM data."""
+        import jax.scipy.linalg as jla
+
+        from dsem_agent.models.ssm import SSMSpec, discretize_system
+
+        n_latent, n_manifest = 1, 1
+        T, dt = 50, 1.0
+
+        true_drift = jnp.array([[-0.3]])
+        true_diff_cov = jnp.array([[0.3**2]])
+        true_obs_var = jnp.array([[0.5**2]])
+
+        Ad, Qd, _ = discretize_system(true_drift, true_diff_cov, None, dt)
+        Qd_chol = jla.cholesky(Qd + jnp.eye(n_latent) * 1e-8, lower=True)
+        R_chol = jla.cholesky(true_obs_var, lower=True)
+
+        key = random.PRNGKey(42)
+        states = [jnp.zeros(n_latent)]
+        for _ in range(T - 1):
+            key, nk = random.split(key)
+            states.append(Ad @ states[-1] + Qd_chol @ random.normal(nk, (n_latent,)))
+        latent = jnp.stack(states)
+
+        key, obs_key = random.split(key)
+        observations = latent + random.normal(obs_key, (T, n_manifest)) @ R_chol.T
+        times = jnp.arange(T, dtype=float) * dt
+
+        spec = SSMSpec(
+            n_latent=n_latent,
+            n_manifest=n_manifest,
+            lambda_mat=jnp.eye(n_manifest, n_latent),
+            manifest_means=jnp.zeros(n_manifest),
+            diffusion="diag",
+            t0_means=jnp.zeros(n_latent),
+            t0_var=jnp.eye(n_latent),
+        )
+
+        return {"observations": observations, "times": times, "spec": spec}
+
+    @pytest.mark.timeout(60)
+    def test_pgas_preconditioned_runs(self, lgss_data):
+        """PGAS with preconditioned HMC should complete without error."""
+        from dsem_agent.models.ssm import SSMModel, fit
+
+        model = SSMModel(lgss_data["spec"], n_particles=50)
+        result = fit(
+            model,
+            observations=lgss_data["observations"],
+            times=lgss_data["times"],
+            method="pgas",
+            n_outer=10,
+            n_csmc_particles=8,
+            n_mh_steps=3,
+            param_step_size=0.1,
+            n_warmup=5,
+            block_sampling=False,
+            seed=0,
+        )
+
+        assert isinstance(result, InferenceResult)
+        assert result.method == "pgas"
+        assert len(result.diagnostics["accept_rates"]) == 10
+
+
+class TestPGASOptimalProposal:
+    """Test locally optimal proposal for Gaussian observations."""
+
+    @pytest.fixture
+    def lgss_data(self):
+        """1D Linear Gaussian SSM data."""
+        import jax.scipy.linalg as jla
+
+        from dsem_agent.models.ssm import SSMSpec, discretize_system
+
+        n_latent, n_manifest = 1, 1
+        T, dt = 50, 1.0
+
+        true_drift = jnp.array([[-0.3]])
+        true_diff_cov = jnp.array([[0.3**2]])
+        true_obs_var = jnp.array([[0.5**2]])
+
+        Ad, Qd, _ = discretize_system(true_drift, true_diff_cov, None, dt)
+        Qd_chol = jla.cholesky(Qd + jnp.eye(n_latent) * 1e-8, lower=True)
+        R_chol = jla.cholesky(true_obs_var, lower=True)
+
+        key = random.PRNGKey(42)
+        states = [jnp.zeros(n_latent)]
+        for _ in range(T - 1):
+            key, nk = random.split(key)
+            states.append(Ad @ states[-1] + Qd_chol @ random.normal(nk, (n_latent,)))
+        latent = jnp.stack(states)
+
+        key, obs_key = random.split(key)
+        observations = latent + random.normal(obs_key, (T, n_manifest)) @ R_chol.T
+        times = jnp.arange(T, dtype=float) * dt
+
+        spec = SSMSpec(
+            n_latent=n_latent,
+            n_manifest=n_manifest,
+            lambda_mat=jnp.eye(n_manifest, n_latent),
+            manifest_means=jnp.zeros(n_manifest),
+            diffusion="diag",
+            t0_means=jnp.zeros(n_latent),
+            t0_var=jnp.eye(n_latent),
+        )
+
+        return {"observations": observations, "times": times, "spec": spec}
+
+    @pytest.mark.timeout(60)
+    def test_pgas_optimal_proposal_gaussian(self, lgss_data):
+        """PGAS with optimal proposal should complete for Gaussian obs."""
+        from dsem_agent.models.ssm import SSMModel, fit
+
+        model = SSMModel(lgss_data["spec"], n_particles=50)
+        result = fit(
+            model,
+            observations=lgss_data["observations"],
+            times=lgss_data["times"],
+            method="pgas",
+            n_outer=6,
+            n_csmc_particles=8,
+            n_mh_steps=3,
+            param_step_size=0.1,
+            n_warmup=3,
+            seed=0,
+        )
+
+        assert isinstance(result, InferenceResult)
+        assert result.diagnostics["gaussian_obs"] is True
+
+    @pytest.mark.timeout(60)
+    def test_pgas_fallback_for_poisson(self):
+        """PGAS should fall back to gradient proposal for non-Gaussian obs."""
+        from dsem_agent.models.ssm import NoiseFamily, SSMModel, SSMSpec, fit
+
+        spec = SSMSpec(
+            n_latent=1,
+            n_manifest=1,
+            lambda_mat=jnp.eye(1),
+            diffusion="diag",
+            manifest_dist=NoiseFamily.POISSON,
+            manifest_means=jnp.array([jnp.log(5.0)]),
+        )
+        model = SSMModel(spec, n_particles=50)
+
+        T = 30
+        key = random.PRNGKey(0)
+        observations = random.poisson(key, jnp.ones((T, 1)) * 5.0).astype(jnp.float32)
+        times = jnp.arange(T, dtype=float)
+
+        result = fit(
+            model,
+            observations=observations,
+            times=times,
+            method="pgas",
+            n_outer=6,
+            n_csmc_particles=8,
+            n_mh_steps=3,
+            param_step_size=0.1,
+            n_warmup=3,
+            seed=0,
+        )
+
+        assert isinstance(result, InferenceResult)
+        assert result.diagnostics["gaussian_obs"] is False
+
+
+class TestPGASBlockSampling:
+    """Test block parameter sampling in PGAS."""
+
+    @pytest.fixture
+    def lgss_data(self):
+        """1D Linear Gaussian SSM data."""
+        import jax.scipy.linalg as jla
+
+        from dsem_agent.models.ssm import SSMSpec, discretize_system
+
+        n_latent, n_manifest = 1, 1
+        T, dt = 50, 1.0
+
+        true_drift = jnp.array([[-0.3]])
+        true_diff_cov = jnp.array([[0.3**2]])
+        true_obs_var = jnp.array([[0.5**2]])
+
+        Ad, Qd, _ = discretize_system(true_drift, true_diff_cov, None, dt)
+        Qd_chol = jla.cholesky(Qd + jnp.eye(n_latent) * 1e-8, lower=True)
+        R_chol = jla.cholesky(true_obs_var, lower=True)
+
+        key = random.PRNGKey(42)
+        states = [jnp.zeros(n_latent)]
+        for _ in range(T - 1):
+            key, nk = random.split(key)
+            states.append(Ad @ states[-1] + Qd_chol @ random.normal(nk, (n_latent,)))
+        latent = jnp.stack(states)
+
+        key, obs_key = random.split(key)
+        observations = latent + random.normal(obs_key, (T, n_manifest)) @ R_chol.T
+        times = jnp.arange(T, dtype=float) * dt
+
+        spec = SSMSpec(
+            n_latent=n_latent,
+            n_manifest=n_manifest,
+            lambda_mat=jnp.eye(n_manifest, n_latent),
+            manifest_means=jnp.zeros(n_manifest),
+            diffusion="diag",
+            t0_means=jnp.zeros(n_latent),
+            t0_var=jnp.eye(n_latent),
+        )
+
+        return {"observations": observations, "times": times, "spec": spec}
+
+    @pytest.mark.timeout(60)
+    def test_pgas_block_sampling_runs(self, lgss_data):
+        """PGAS with block sampling should complete and have per-block diagnostics."""
+        from dsem_agent.models.ssm import SSMModel, fit
+
+        model = SSMModel(lgss_data["spec"], n_particles=50)
+        result = fit(
+            model,
+            observations=lgss_data["observations"],
+            times=lgss_data["times"],
+            method="pgas",
+            n_outer=10,
+            n_csmc_particles=8,
+            n_mh_steps=3,
+            param_step_size=0.1,
+            n_warmup=5,
+            block_sampling=True,
+            seed=0,
+        )
+
+        assert isinstance(result, InferenceResult)
+        assert result.diagnostics["block_sampling"] is True
+        assert "block_accept_rates" in result.diagnostics
+        # Should have per-block rates for each parameter site
+        block_rates = result.diagnostics["block_accept_rates"]
+        assert len(block_rates) > 0
+        for _name, rates in block_rates.items():
+            assert len(rates) == 10  # n_outer iterations
 
 
 if __name__ == "__main__":

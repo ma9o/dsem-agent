@@ -3,21 +3,21 @@
 Combines three elements:
 1. PGAS outer loop: Gibbs-alternate between latent trajectories and parameters
 2. Gradient-informed CSMC: Langevin proposals inside conditional SMC for states
-3. MALA parameter updates: Gradient-informed MH for the parameter conditional
+3. HMC/MALA parameter updates: Gradient-informed MH for the parameter conditional
 
 The CSMC sweep uses the PGAS kernel (Lindsten, Jordan & Schoen, 2014) with
 gradient-informed state proposals that shift the bootstrap transition toward
 high-likelihood regions via nabla_x log p(y_t | x_t). The ancestor sampling step
 uses the model transition density (unaffected by the proposal choice).
 
-The parameter update uses MALA (Metropolis-Adjusted Langevin Algorithm)
-targeting p(theta | x_{1:T}, y_{1:T}), which is cheaply evaluable given fixed
-trajectories (no particle filter needed).
-
-Novel combination: nobody has published PGAS + gradient CSMC proposals +
-Hess-MC2-style parameter updates together. Septier & Peters did gradient
-proposals in regular SMC; Lindsten et al. did PGAS with bootstrap proposals;
-Murphy et al. did Hess-MC2 for parameter-only SMC. This module unifies all three.
+Upgrades:
+  - **Preconditioned MALA/HMC**: Uses running covariance mass matrix from theta
+    chain, replacing identity-mass MALA. Shared hmc_step from mcmc_utils.
+  - **Locally optimal proposal**: For Gaussian observations, analytically computes
+    the optimal CSMC proposal p(x_t | x_{t-1}, y_t) which incorporates observation
+    information directly into the proposal.
+  - **Block parameter sampling**: Splits parameters into blocks by site name,
+    updates each block independently with separate step sizes and mass matrices.
 """
 
 from __future__ import annotations
@@ -35,6 +35,7 @@ from dsem_agent.models.likelihoods.particle import SSMAdapter
 from dsem_agent.models.ssm.discretization import discretize_system_batched
 from dsem_agent.models.ssm.hessmc2 import _assemble_deterministics, _discover_sites
 from dsem_agent.models.ssm.inference import InferenceResult
+from dsem_agent.models.ssm.mcmc_utils import compute_weighted_chol_mass, hmc_step
 
 # ---------------------------------------------------------------------------
 # Transition log-prob
@@ -168,6 +169,10 @@ def _csmc_sweep(
     langevin_step_size,
     obs_lp_fn,
     grad_obs_fn,
+    gaussian_obs=False,
+    lambda_mat=None,
+    manifest_means=None,
+    R_adj=None,
 ):
     """One CSMC sweep (Algorithm 2 from PGAS paper) with gradient proposals.
 
@@ -176,9 +181,8 @@ def _csmc_sweep(
     the observation gradient. Ancestor sampling connects the reference
     trajectory to the particle histories for path diversity.
 
-    Uses systematic resampling (blackjax) for free particles (lower variance
-    than multinomial), and categorical sampling for the single-draw ancestor
-    sampling step.
+    When gaussian_obs=True and R_adj is provided, uses the locally optimal
+    proposal that analytically incorporates observation information.
     """
     _T, n_l = ref_traj.shape
     N = n_particles
@@ -205,42 +209,90 @@ def _csmc_sweep(
         free_ancestors = _systematic_resample(rkey, wn, N - 1)
         parent_states = particles_prev[free_ancestors]
 
-        # ---- Propagate free particles with gradient-informed proposals ----
+        # ---- Propagate free particles ----
         prior_means = jax.vmap(lambda x: Ad_t @ x)(parent_states) + cd_t
 
-        def compute_shift(m):
-            g = grad_obs_fn(m, y_t, mask_t)
-            g = jnp.nan_to_num(g, nan=0.0, posinf=0.0, neginf=0.0)
-            raw_shift = langevin_step_size * Qd_t @ g
-            # Clip shift to at most 1 std of process noise to prevent
-            # positive feedback when obs noise is underestimated.
-            scaled = jla.solve_triangular(chol_t, raw_shift, lower=True)
-            norm = jnp.sqrt(jnp.dot(scaled, scaled) + 1e-10)
-            clip = jnp.minimum(1.0, 1.0 / norm)
-            return raw_shift * clip
+        if gaussian_obs:
+            # Locally optimal proposal for Gaussian observations
+            # R_adj varies per timestep for missing data
+            R_adj_t = R_adj[0]  # base R_adj (missing data handled via mask inflation)
+            # Adjust R_inv for this timestep's mask
+            mask_inf = (1.0 - mask_t) * 1e10
+            R_adj_t_inflated = R_adj_t + jnp.diag(mask_inf)
+            R_inv_t = jnp.linalg.inv(
+                R_adj_t_inflated + jitter[: R_adj_t.shape[0], : R_adj_t.shape[1]]
+            )
+            LtRinvL_t = lambda_mat.T @ R_inv_t @ lambda_mat
+            LtRinv_t = lambda_mat.T @ R_inv_t
 
-        shifts = jax.vmap(compute_shift)(prior_means)
-        proposal_means = prior_means + shifts
+            Qd_inv_t = jnp.linalg.inv(Qd_t + jitter)
+            S_inv_t = Qd_inv_t + LtRinvL_t
+            S_t = jnp.linalg.inv(S_inv_t)
+            chol_S_t = jla.cholesky(S_t + jitter, lower=True)
 
-        key, nkey = random.split(key)
-        z = random.normal(nkey, (N - 1, n_l))
-        new_x_free = proposal_means + jax.vmap(lambda zi: chol_t @ zi)(z)
+            residual = y_t - manifest_means
+            info_obs = LtRinv_t @ residual
 
-        new_particles = jnp.concatenate([new_x_free, ref_x_t[None]], axis=0)
+            def propose_optimal(prior_mean, k):
+                m = S_t @ (Qd_inv_t @ prior_mean + info_obs)
+                return m + chol_S_t @ random.normal(k, (n_l,))
 
-        # ---- Weights for free particles: g(y|x) * f/q ----
-        obs_ll_free = jax.vmap(lambda x: obs_lp_fn(x, y_t, mask_t))(new_x_free)
+            key, nkey = random.split(key)
+            prop_keys = random.split(nkey, N - 1)
+            new_x_free = jax.vmap(propose_optimal)(prior_means, prop_keys)
 
-        diff_f = new_x_free - prior_means
-        diff_q = new_x_free - proposal_means
+            new_particles = jnp.concatenate([new_x_free, ref_x_t[None]], axis=0)
 
-        def log_ratio(df, dq):
-            Linv_df = jla.solve_triangular(chol_t, df, lower=True)
-            Linv_dq = jla.solve_triangular(chol_t, dq, lower=True)
-            return -0.5 * (jnp.dot(Linv_df, Linv_df) - jnp.dot(Linv_dq, Linv_dq))
+            # Weights for optimal proposal: p(y|x_prev) = N(y; Lambda@prior_mean+mu, Lambda@Qd@Lambda^T+R)
+            pred_cov = lambda_mat @ Qd_t @ lambda_mat.T + R_adj_t_inflated
+            chol_pred = jla.cholesky(
+                pred_cov + jitter[: pred_cov.shape[0], : pred_cov.shape[1]], lower=True
+            )
 
-        log_fq = jax.vmap(log_ratio)(diff_f, diff_q)
-        log_w_free = obs_ll_free + log_fq
+            def log_pred_lik(prior_mean):
+                pred_mean = lambda_mat @ prior_mean + manifest_means
+                diff = y_t - pred_mean
+                Linv_diff = jla.solve_triangular(chol_pred, diff, lower=True)
+                logdet = jnp.sum(jnp.log(jnp.diag(chol_pred)))
+                return (
+                    -0.5 * jnp.dot(Linv_diff, Linv_diff) - logdet - 0.5 * n_l * jnp.log(2 * jnp.pi)
+                )
+
+            log_w_free = jax.vmap(log_pred_lik)(prior_means)
+
+        else:
+            # Standard gradient-informed proposal (bootstrap + Langevin shift)
+            def compute_shift(m):
+                g = grad_obs_fn(m, y_t, mask_t)
+                g = jnp.nan_to_num(g, nan=0.0, posinf=0.0, neginf=0.0)
+                raw_shift = langevin_step_size * Qd_t @ g
+                scaled = jla.solve_triangular(chol_t, raw_shift, lower=True)
+                norm = jnp.sqrt(jnp.dot(scaled, scaled) + 1e-10)
+                clip = jnp.minimum(1.0, 1.0 / norm)
+                return raw_shift * clip
+
+            shifts = jax.vmap(compute_shift)(prior_means)
+            proposal_means = prior_means + shifts
+
+            key, nkey = random.split(key)
+            z = random.normal(nkey, (N - 1, n_l))
+            new_x_free = proposal_means + jax.vmap(lambda zi: chol_t @ zi)(z)
+
+            new_particles = jnp.concatenate([new_x_free, ref_x_t[None]], axis=0)
+
+            # Weights for free particles: g(y|x) * f/q
+            obs_ll_free = jax.vmap(lambda x: obs_lp_fn(x, y_t, mask_t))(new_x_free)
+
+            diff_f = new_x_free - prior_means
+            diff_q = new_x_free - proposal_means
+
+            def log_ratio(df, dq):
+                Linv_df = jla.solve_triangular(chol_t, df, lower=True)
+                Linv_dq = jla.solve_triangular(chol_t, dq, lower=True)
+                return -0.5 * (jnp.dot(Linv_df, Linv_df) - jnp.dot(Linv_dq, Linv_dq))
+
+            log_fq = jax.vmap(log_ratio)(diff_f, diff_q)
+            log_w_free = obs_ll_free + log_fq
 
         # Reference particle weight: observation likelihood only (no proposal ratio)
         ref_obs_ll = obs_lp_fn(ref_x_t, y_t, mask_t)
@@ -386,39 +438,6 @@ def _traj_log_post(
 
 
 # ---------------------------------------------------------------------------
-# MALA MH step for parameter updates
-# ---------------------------------------------------------------------------
-
-
-def _mala_step(key, theta, val, grad, log_post_fn, step_size):
-    """One MALA Metropolis-Hastings step."""
-    key, noise_key, accept_key = random.split(key, 3)
-    z = random.normal(noise_key, theta.shape)
-
-    eps = step_size
-    theta_star = theta + 0.5 * eps**2 * grad + eps * z
-
-    val_star, grad_star = jax.value_and_grad(log_post_fn)(theta_star)
-    grad_star = jnp.nan_to_num(grad_star, nan=0.0, posinf=0.0, neginf=0.0)
-
-    diff_fwd = theta_star - theta - 0.5 * eps**2 * grad
-    log_q_fwd = -0.5 * jnp.sum(diff_fwd**2) / eps**2
-
-    diff_rev = theta - theta_star - 0.5 * eps**2 * grad_star
-    log_q_rev = -0.5 * jnp.sum(diff_rev**2) / eps**2
-
-    log_alpha = val_star - val + log_q_rev - log_q_fwd
-    u = random.uniform(accept_key)
-    accept = (jnp.log(u) < log_alpha) & jnp.isfinite(val_star)
-
-    new_theta = jnp.where(accept, theta_star, theta)
-    new_val = jnp.where(accept, val_star, val)
-    new_grad = jnp.where(accept, grad_star, grad)
-
-    return new_theta, new_val, new_grad, accept, key
-
-
-# ---------------------------------------------------------------------------
 # Main PGAS sampler
 # ---------------------------------------------------------------------------
 
@@ -435,13 +454,15 @@ def fit_pgas(
     param_step_size: float = 0.1,
     n_warmup: int | None = None,
     seed: int = 0,
+    n_leapfrog: int = 1,
+    block_sampling: bool = True,
     **kwargs: Any,  # noqa: ARG001
 ) -> InferenceResult:
-    """Fit SSM via PGAS with gradient-informed CSMC and MALA parameter updates.
+    """Fit SSM via PGAS with gradient-informed CSMC and HMC parameter updates.
 
     Gibbs loop:
       1. Sample x_{1:T} | theta, y via CSMC with gradient proposals + ancestor sampling
-      2. Update theta | x_{1:T}, y via MALA MH steps (no PF needed)
+      2. Update theta | x_{1:T}, y via block HMC/MALA steps (no PF needed)
 
     Args:
         model: SSMModel instance
@@ -450,11 +471,13 @@ def fit_pgas(
         subject_ids: optional subject indices
         n_outer: number of Gibbs iterations
         n_csmc_particles: N for CSMC (including reference particle)
-        n_mh_steps: MALA steps per parameter update
+        n_mh_steps: HMC/MALA steps per parameter update
         langevin_step_size: step size for gradient shift in CSMC proposals
-        param_step_size: MALA step size for parameter updates
+        param_step_size: HMC/MALA step size for parameter updates
         n_warmup: warmup iterations to discard (default: n_outer // 2)
         seed: random seed
+        n_leapfrog: number of leapfrog steps (1 = MALA, >1 = HMC)
+        block_sampling: update parameter blocks independently
 
     Returns:
         InferenceResult with posterior samples
@@ -477,7 +500,16 @@ def fit_pgas(
     dt_array = jnp.diff(times, prepend=times[0])
     dt_array = dt_array.at[0].set(1e-6)
 
-    print(f"PGAS: n_outer={n_outer}, N_csmc={N_csmc}, n_mh={n_mh_steps}, n_l={n_l}")
+    # Detect Gaussian observations for optimal proposal
+    gaussian_obs = model.spec.manifest_dist.value == "gaussian"
+
+    block_tag = "+block" if block_sampling else ""
+    hmc_tag = f"+HMC(L={n_leapfrog})" if n_leapfrog > 1 else ""
+    opt_tag = "+optimal" if gaussian_obs else ""
+    print(
+        f"PGAS [precond{block_tag}{hmc_tag}{opt_tag}]: "
+        f"n_outer={n_outer}, N_csmc={N_csmc}, n_mh={n_mh_steps}, n_l={n_l}"
+    )
 
     # 1. Discover model sites
     rng_key, trace_key = random.split(rng_key)
@@ -498,9 +530,23 @@ def fit_pgas(
         diffusion_dist=model.spec.diffusion_dist.value,
     )
 
-    # 3. Build JIT-compiled CSMC sweep
-    # obs_lp_fn and grad_obs_fn close over the adapter (Python object, traced at compile time).
-    # The measurement matrices are passed as explicit arguments to _csmc_sweep via the wrapper.
+    # 3. Build block structure for parameter sampling
+    blocks = []
+    offset = 0
+    for name in sorted(site_info.keys()):
+        size = site_info[name]["value"].reshape(-1).shape[0]
+        blocks.append(
+            {
+                "name": name,
+                "slice": slice(offset, offset + size),
+                "size": size,
+                "step_size": param_step_size,
+                "chol_mass": jnp.eye(size),
+            }
+        )
+        offset += size
+
+    # 4. Build JIT-compiled CSMC sweep
     def _do_csmc(
         key, ref_traj, Ad, Qd, chol_Qd, cd, lam, means, cov, t0_mean, t0_cov, obs, mask, step_size
     ):
@@ -510,6 +556,11 @@ def fit_pgas(
             return adapter.observation_log_prob(y, x, params, m)
 
         grad_obs = jax.grad(obs_lp, argnums=0)
+
+        # Precompute R_adj for optimal proposal
+        R_adj = None
+        if gaussian_obs:
+            R_adj = cov[None]  # (1, n_m, n_m) — base manifest_cov
 
         return _csmc_sweep(
             key,
@@ -526,11 +577,15 @@ def fit_pgas(
             step_size,
             obs_lp,
             grad_obs,
+            gaussian_obs=gaussian_obs,
+            lambda_mat=lam if gaussian_obs else None,
+            manifest_means=means if gaussian_obs else None,
+            R_adj=R_adj,
         )
 
     jit_csmc = jax.jit(_do_csmc)
 
-    # 4. Build checkpointed trajectory log-posterior + JIT value_and_grad
+    # 5. Build checkpointed trajectory log-posterior + JIT value_and_grad
     @jax.checkpoint
     def _log_post(z, trajectory):
         return _traj_log_post(
@@ -546,21 +601,43 @@ def fit_pgas(
             adapter,
         )
 
+    # JIT'd HMC step for full-vector updates (non-block mode)
     @jax.jit
-    def _val_grad(z, trajectory):
-        val, grad = jax.value_and_grad(_log_post)(z, trajectory)
-        grad = jnp.nan_to_num(grad, nan=0.0, posinf=0.0, neginf=0.0)
-        return val, grad
+    def _jit_hmc_step(key, theta, trajectory, step_size, chol_mass):
+        def lp_vg(z):
+            v, g = jax.value_and_grad(_log_post)(z, trajectory)
+            return jnp.where(jnp.isfinite(v), v, -1e30), jnp.nan_to_num(g)
 
-    # JIT the MALA step (log_post_fn captured via closure over _log_post)
-    @jax.jit
-    def _jit_mala_step(key, theta, val, grad, trajectory, step_size):
-        def lp(z):
-            return _log_post(z, trajectory)
+        return hmc_step(key, theta, lp_vg, step_size, chol_mass, n_leapfrog)
 
-        return _mala_step(key, theta, val, grad, lp, step_size)
+    # Per-block JIT'd HMC steps (block_start and block_size must be concrete)
+    def _make_block_hmc_fn(block_start, block_size):
+        @jax.jit
+        def _block_hmc(key, theta_full, trajectory, step_size, chol_mass_block):
+            z_block = theta_full[block_start : block_start + block_size]
 
-    # 5. Initialize parameters at prior mean (more stable than random sample)
+            def block_lp_vg(z_b):
+                theta_new = theta_full.at[block_start : block_start + block_size].set(z_b)
+                v, g_full = jax.value_and_grad(_log_post)(theta_new, trajectory)
+                g_block = g_full[block_start : block_start + block_size]
+                return jnp.where(jnp.isfinite(v), v, -1e30), jnp.nan_to_num(g_block)
+
+            z_new, accepted, log_target_new = hmc_step(
+                key, z_block, block_lp_vg, step_size, chol_mass_block, n_leapfrog
+            )
+            theta_updated = theta_full.at[block_start : block_start + block_size].set(z_new)
+            theta_result = jnp.where(accepted, theta_updated, theta_full)
+            return theta_result, accepted, log_target_new
+
+        return _block_hmc
+
+    # Create per-block JIT functions with concrete slice indices
+    block_hmc_fns = []
+    for block in blocks:
+        s = block["slice"]
+        block_hmc_fns.append(_make_block_hmc_fn(s.start, block["size"]))
+
+    # 6. Initialize parameters at prior mean (more stable than random sample)
     parts = []
     for name in sorted(site_info.keys()):
         info = site_info[name]
@@ -569,7 +646,7 @@ def fit_pgas(
         parts.append(unc_mean.reshape(-1))
     theta_unc = jnp.concatenate(parts)
 
-    # 6. Initialize trajectory from prior simulation
+    # 7. Initialize trajectory from prior simulation
     drift, diff_cov, cint, lambda_mat, manifest_means, manifest_cov, t0_mean, t0_cov = (
         _params_to_matrices(theta_unc, unravel_fn, transforms, model.spec)
     )
@@ -582,11 +659,17 @@ def fit_pgas(
     # Storage
     theta_chain = []
     accept_rates = []
+    block_accept_rates = {b["name"]: [] for b in blocks} if block_sampling else {}
     current_step_size = param_step_size
+    chol_mass_full = jnp.eye(D)
+
+    # Mass matrix update parameters
+    mass_update_interval = 10
+    min_mass_samples = max(2 * D, 20)
 
     print("  Starting PGAS loop...")
 
-    # 7. PGAS Gibbs loop
+    # 8. PGAS Gibbs loop
     for n in range(n_outer):
         # --- Step A: CSMC sweep (sample trajectory given theta) ---
         drift, diff_cov, cint, lambda_mat, manifest_means, manifest_cov, t0_mean, t0_cov = (
@@ -617,23 +700,80 @@ def fit_pgas(
             langevin_step_size,
         )
 
-        # --- Step B: Parameter update (MALA steps given trajectory) ---
-        val, grad = _val_grad(theta_unc, trajectory)
+        # --- Step B: Parameter update ---
+        if block_sampling and len(blocks) > 1:
+            # Block parameter updates
+            n_accepted_total = 0
+            for bi, block in enumerate(blocks):
+                block_accepted = 0
+                for _ in range(n_mh_steps):
+                    rng_key, mh_key = random.split(rng_key)
+                    theta_unc, accepted, _ = block_hmc_fns[bi](
+                        mh_key,
+                        theta_unc,
+                        trajectory,
+                        block["step_size"],
+                        block["chol_mass"],
+                    )
+                    block_accepted += int(accepted)
+                block_rate = block_accepted / n_mh_steps
+                block_accept_rates[block["name"]].append(block_rate)
+                n_accepted_total += block_accepted
 
-        n_accepted = 0
-        for _ in range(n_mh_steps):
-            rng_key, mh_key = random.split(rng_key)
-            theta_unc, val, grad, accepted, _ = _jit_mala_step(
-                mh_key, theta_unc, val, grad, trajectory, current_step_size
-            )
-            n_accepted += int(accepted)
+                # Per-block step size adaptation
+                if n > 0 and n % 5 == 0:
+                    recent = block_accept_rates[block["name"]][-5:]
+                    avg = sum(recent) / len(recent)
+                    if n < n_warmup:
+                        if avg < 0.15:
+                            block["step_size"] *= 0.5
+                        elif avg > 0.6:
+                            block["step_size"] *= 2.0
+                        elif avg < 0.25:
+                            block["step_size"] *= 0.8
+                        elif avg > 0.5:
+                            block["step_size"] *= 1.3
+                    else:
+                        if avg < 0.05:
+                            block["step_size"] *= 0.5
+                        elif avg < 0.15:
+                            block["step_size"] *= 0.8
+                        elif avg > 0.6:
+                            block["step_size"] *= 1.2
 
-        accept_rate = n_accepted / n_mh_steps
+            accept_rate = n_accepted_total / (n_mh_steps * len(blocks))
+        else:
+            # Joint parameter update (original behavior)
+            n_accepted = 0
+            for _ in range(n_mh_steps):
+                rng_key, mh_key = random.split(rng_key)
+                theta_new, accepted, _ = _jit_hmc_step(
+                    mh_key, theta_unc, trajectory, current_step_size, chol_mass_full
+                )
+                theta_unc = jnp.where(accepted, theta_new, theta_unc)
+                n_accepted += int(accepted)
+
+            accept_rate = n_accepted / n_mh_steps
+
         accept_rates.append(accept_rate)
 
-        # Adapt step size (target 25-50% acceptance)
-        # During warmup: aggressive adaptation. Post-warmup: gentler to preserve ergodicity.
-        if n > 0 and n % 5 == 0:
+        # Mass matrix update during warmup
+        theta_chain.append(theta_unc.copy())
+        if n % mass_update_interval == 0 and n < n_warmup and len(theta_chain) >= min_mass_samples:
+            recent = jnp.stack(theta_chain[-min_mass_samples:])
+            if block_sampling and len(blocks) > 1:
+                # Per-block mass matrix
+                for block in blocks:
+                    s = block["slice"]
+                    block_samples = recent[:, s]
+                    block["chol_mass"] = compute_weighted_chol_mass(
+                        block_samples, jnp.zeros(len(block_samples)), block["size"]
+                    )
+            else:
+                chol_mass_full = compute_weighted_chol_mass(recent, jnp.zeros(len(recent)), D)
+
+        # Adapt joint step size (non-block mode)
+        if (not block_sampling or len(blocks) <= 1) and n > 0 and n % 5 == 0:
             recent_rates = accept_rates[-5:]
             avg_rate = sum(recent_rates) / len(recent_rates)
             if n < n_warmup:
@@ -646,7 +786,6 @@ def fit_pgas(
                 elif avg_rate > 0.5:
                     current_step_size *= 1.3
             else:
-                # Gentler post-warmup adaptation to avoid frozen chains
                 if avg_rate < 0.05:
                     current_step_size *= 0.5
                 elif avg_rate < 0.15:
@@ -654,15 +793,12 @@ def fit_pgas(
                 elif avg_rate > 0.6:
                     current_step_size *= 1.2
 
-        theta_chain.append(theta_unc.copy())
-
         if (n + 1) % max(1, n_outer // 5) == 0:
             print(
-                f"  iter {n + 1}/{n_outer}  log_post={float(val):.1f}"
-                f"  accept={accept_rate:.2f}  step={current_step_size:.4f}"
+                f"  iter {n + 1}/{n_outer}  accept={accept_rate:.2f}  step={current_step_size:.4f}"
             )
 
-    # 8. Extract posterior samples (discard warmup)
+    # 9. Extract posterior samples (discard warmup)
     theta_samples_unc = jnp.stack(theta_chain[n_warmup:])
 
     samples = {}
@@ -677,16 +813,24 @@ def fit_pgas(
     det_samples = _assemble_deterministics(samples, model.spec)
     samples.update(det_samples)
 
+    diagnostics = {
+        "accept_rates": accept_rates,
+        "n_outer": n_outer,
+        "n_warmup": n_warmup,
+        "n_csmc_particles": N_csmc,
+        "n_mh_steps": n_mh_steps,
+        "n_leapfrog": n_leapfrog,
+        "langevin_step_size": langevin_step_size,
+        "param_step_size": current_step_size,
+        "block_sampling": block_sampling,
+        "gaussian_obs": gaussian_obs,
+    }
+    if block_sampling and len(blocks) > 1:
+        diagnostics["block_accept_rates"] = block_accept_rates
+        diagnostics["block_step_sizes"] = {b["name"]: b["step_size"] for b in blocks}
+
     return InferenceResult(
         _samples=samples,
         method="pgas",
-        diagnostics={
-            "accept_rates": accept_rates,
-            "n_outer": n_outer,
-            "n_warmup": n_warmup,
-            "n_csmc_particles": N_csmc,
-            "n_mh_steps": n_mh_steps,
-            "langevin_step_size": langevin_step_size,
-            "param_step_size": current_step_size,
-        },
+        diagnostics=diagnostics,
     )

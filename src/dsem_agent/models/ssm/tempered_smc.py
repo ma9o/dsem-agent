@@ -1,29 +1,33 @@
-"""Tempered SMC with preconditioned MALA mutations (fit_tempered_smc).
+"""Tempered SMC with preconditioned HMC/MALA mutations (fit_tempered_smc).
 
 Bridges the prior-posterior gap via a tempering ladder beta_0=0 -> beta_K=1,
-with MH-corrected MALA (1-step leapfrog HMC) mutations at each level.
-This handles high-dimensional parameter spaces (D>>3) where importance-
-weighted proposals (Hess-MC2) suffer ESS collapse.
+with MH-corrected HMC mutations at each level. Supports multi-step leapfrog
+(n_leapfrog > 1) and single-step MALA (n_leapfrog = 1).
 
 Key features:
+  - **Adaptive tempering**: ESS-based bisection (Dau & Chopin 2022) automatically
+    selects tempering levels to maintain target ESS ratio. Falls back to linear
+    schedule when adaptive_tempering=False.
+  - **Waste-free recycling**: Resample M = N // n_mh_steps particles, run
+    n_mh_steps mutations on each, keep ALL intermediates to reconstruct N
+    particles with no wasted computation.
+  - **Multi-step HMC**: n_leapfrog > 1 runs L-step leapfrog instead of MALA,
+    allowing longer trajectories in well-conditioned regions.
   - **Precision preconditioning**: Mass matrix M set to the weighted particle
-    precision (inverse covariance), matching Stan/NUTS convention. This makes
-    MALA proposals isotropic in posterior-standardized space (noise ~ eps*N(0,I)).
-  - **Adaptive step size**: Robbins-Monro update targeting ~44% acceptance.
+    precision (inverse covariance), matching Stan/NUTS convention.
+  - **Adaptive step size**: Robbins-Monro update targeting acceptance rate.
   - **Pilot adaptation**: Tunes eps at beta=0 (prior) before tempering starts.
   - **Guarded mass matrix**: Only updates from weighted covariance when ESS
     is healthy (> N/4), preventing degenerate mass matrices.
-  - **Adaptive mutation rounds**: Runs extra MALA rounds at each tempering
-    level when acceptance is low, ensuring particles properly diversify.
 
 Algorithm:
   1. Initialize N particles from the prior in unconstrained space.
-  2. Pilot: tune eps via MALA at beta=0 (targeting the prior).
-  3. For each tempering level beta_k = k / n_outer:
-     a. Incremental reweight: logw += (beta_k - beta_{k-1}) * log_lik(particles)
-     b. Update mass matrix from weighted covariance (only if ESS > N/4)
-     c. Systematic resample if ESS < N/2
-     d. Mutate each particle with MALA (1-5 rounds of n_mh_steps)
+  2. Pilot: tune eps via HMC at beta=0 (targeting the prior).
+  3. While beta < 1.0 (or for n_outer linear steps):
+     a. Select next beta via ESS bisection (adaptive) or linear schedule
+     b. Incremental reweight: logw += (beta_k - beta_{k-1}) * log_lik(particles)
+     c. Update mass matrix from weighted covariance (only if ESS > N/4)
+     d. Resample and mutate (waste-free or standard)
      e. Adapt step size toward target acceptance rate
      f. Store one sample from the particle cloud
   4. Discard warmup, transform to constrained space, return InferenceResult.
@@ -36,7 +40,6 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 import jax.random as random
-import jax.scipy.linalg as jla
 from blackjax.smc.resampling import systematic as _systematic_resample
 from jax.flatten_util import ravel_pytree
 
@@ -46,93 +49,14 @@ from dsem_agent.models.ssm.hessmc2 import (
     _discover_sites,
 )
 from dsem_agent.models.ssm.inference import InferenceResult
+from dsem_agent.models.ssm.mcmc_utils import (
+    compute_weighted_chol_mass,
+    find_next_beta,
+    hmc_step,
+)
 
 # ---------------------------------------------------------------------------
-# Preconditioned MALA step (full mass matrix)
-# ---------------------------------------------------------------------------
-
-
-def _mala_step(rng_key, z, log_target_val_and_grad, step_size, chol_mass):
-    """Preconditioned MALA: 1-step leapfrog with full mass matrix M = L L^T.
-
-    Args:
-        rng_key: PRNG key
-        z: current position (D,)
-        log_target_val_and_grad: fn(z) -> (scalar, (D,))
-        step_size: leapfrog epsilon (scalar JAX value)
-        chol_mass: Cholesky factor of mass matrix (D, D), lower triangular
-
-    Returns:
-        z_new: accepted position (D,)
-        accepted: bool scalar
-        log_target_new: log target at accepted position
-    """
-    noise_key, accept_key = random.split(rng_key)
-    D = z.shape[0]
-
-    # Current value and gradient
-    log_pi, grad = log_target_val_and_grad(z)
-    grad = jnp.nan_to_num(grad, nan=0.0, posinf=0.0, neginf=0.0)
-
-    # Sample momentum: p ~ N(0, M) where M = L L^T
-    u = random.normal(noise_key, (D,))
-    p = chol_mass @ u
-
-    # Leapfrog: half-step momentum, full-step position, half-step momentum
-    p_half = p + 0.5 * step_size * grad
-    z_prop = z + step_size * jla.cho_solve((chol_mass, True), p_half)
-
-    log_pi_prop, grad_prop = log_target_val_and_grad(z_prop)
-    grad_prop = jnp.nan_to_num(grad_prop, nan=0.0, posinf=0.0, neginf=0.0)
-    p_prop = p_half + 0.5 * step_size * grad_prop
-
-    # Kinetic energy: 0.5 * p^T M^{-1} p = 0.5 * ||L^{-1} p||^2
-    Linv_p = jla.solve_triangular(chol_mass, p, lower=True)
-    Linv_p_prop = jla.solve_triangular(chol_mass, p_prop, lower=True)
-    kinetic_old = 0.5 * jnp.dot(Linv_p, Linv_p)
-    kinetic_new = 0.5 * jnp.dot(Linv_p_prop, Linv_p_prop)
-
-    log_alpha = (log_pi_prop - kinetic_new) - (log_pi - kinetic_old)
-    log_alpha = jnp.where(jnp.isfinite(log_alpha), log_alpha, -jnp.inf)
-
-    accept_u = random.uniform(accept_key)
-    accepted = jnp.log(accept_u) < log_alpha
-
-    z_new = jnp.where(accepted, z_prop, z)
-    log_target_new = jnp.where(accepted, log_pi_prop, log_pi)
-
-    return z_new, accepted, log_target_new
-
-
-# ---------------------------------------------------------------------------
-# Empirical covariance helper
-# ---------------------------------------------------------------------------
-
-
-def _compute_weighted_chol_mass(particles, logw, D):
-    """Compute Cholesky of precision (= inverse covariance) for HMC mass matrix.
-
-    With M = precision, the leapfrog dynamics are isotropic in posterior-
-    standardized space: MALA noise becomes eps * N(0, I) rather than
-    eps * N(0, cov^{-1}). This matches the Stan/NUTS convention (where
-    "inverse mass matrix" = covariance, so M = precision).
-
-    For MALA (1-step leapfrog), isotropic proposals are essential since
-    there's no trajectory adaptation to compensate for frequency mismatch.
-    """
-    wn = jnp.exp(logw - jax.nn.logsumexp(logw))
-    mean = jnp.sum(wn[:, None] * particles, axis=0)
-    centered = particles - mean
-    cov = (centered * wn[:, None]).T @ centered
-    cov_reg = cov + 1e-3 * jnp.eye(D)
-    # Compute precision = cov^{-1} via Cholesky solve
-    L_cov = jla.cholesky(cov_reg, lower=True)
-    prec = jla.cho_solve((L_cov, True), jnp.eye(D))
-    return jla.cholesky(prec, lower=True)
-
-
-# ---------------------------------------------------------------------------
-# Tempered SMC + MALA main sampler
+# Tempered SMC + HMC main sampler
 # ---------------------------------------------------------------------------
 
 
@@ -146,36 +70,50 @@ def fit_tempered_smc(
     n_mh_steps: int = 10,
     langevin_step_size: float = 0.5,  # noqa: ARG001
     param_step_size: float = 0.1,
-    n_warmup: int = 50,
-    target_accept: float = 0.44,
+    n_warmup: int | None = None,
+    target_accept: float | None = None,
     seed: int = 0,
+    adaptive_tempering: bool = True,
+    target_ess_ratio: float = 0.5,
+    waste_free: bool = True,
+    n_leapfrog: int = 1,
     **kwargs: Any,  # noqa: ARG001
 ) -> InferenceResult:
-    """Fit SSM parameters via tempered SMC with preconditioned MALA mutations.
-
-    Uses a linear tempering schedule beta_k = k/n_outer to gradually bridge
-    from the prior to the posterior. At each level, preconditioned MALA
-    mutations (with adaptive rounds) diversify the particle cloud.
+    """Fit SSM parameters via tempered SMC with preconditioned HMC mutations.
 
     Args:
         model: SSMModel instance
         observations: (T, n_manifest) observed data
         times: (T,) observation times
         subject_ids: optional subject indices for hierarchical models
-        n_outer: number of tempering levels (beta goes from 1/n_outer to 1.0)
+        n_outer: max tempering levels (safety bound for adaptive, exact for linear)
         n_csmc_particles: N -- number of parameter particles
-        n_mh_steps: number of MALA mutation steps per round
+        n_mh_steps: number of HMC mutation steps per round
         langevin_step_size: unused (kept for API compatibility)
         param_step_size: initial leapfrog step size (epsilon), adapted online
-        n_warmup: number of initial tempering levels to discard as warmup
-        target_accept: target MH acceptance rate for step size adaptation
+        n_warmup: tempering levels to discard as warmup (default: half of actual)
+        target_accept: target MH acceptance rate (default: 0.44 for MALA, 0.65 for HMC)
         seed: random seed
+        adaptive_tempering: use ESS-based bisection for tempering schedule
+        target_ess_ratio: target ESS as fraction of N for adaptive tempering
+        waste_free: use waste-free particle recycling (Dau & Chopin 2022)
+        n_leapfrog: number of leapfrog steps (1 = MALA, >1 = HMC)
 
     Returns:
         InferenceResult with posterior samples and diagnostics
     """
+    # Default target acceptance depends on n_leapfrog
+    if target_accept is None:
+        target_accept = 0.65 if n_leapfrog > 1 else 0.44
+
     rng_key = random.PRNGKey(seed)
     N = n_csmc_particles
+
+    # Validate waste-free constraint
+    if waste_free and N % n_mh_steps != 0:
+        raise ValueError(
+            f"waste_free requires N % n_mh_steps == 0, got N={N}, n_mh_steps={n_mh_steps}"
+        )
 
     # 1. Discover model sites
     rng_key, trace_key = random.split(rng_key)
@@ -208,38 +146,67 @@ def fit_tempered_smc(
         safe_grad = jnp.nan_to_num(grad, nan=0.0, posinf=0.0, neginf=0.0)
         return safe_val, safe_grad
 
-    # JIT-compiled MALA kernel
-    def _mala_scan_body(carry, rng_key, beta, eps, chol_mass):
+    # HMC mutation kernel (single particle)
+    def _hmc_scan_body(carry, rng_key, beta, eps, chol_mass):
         z, n_accept = carry
 
         def tempered_vg(z_):
             return _tempered_val_and_grad(z_, beta)
 
-        z_new, accepted, _ = _mala_step(rng_key, z, tempered_vg, eps, chol_mass)
+        z_new, accepted, _ = hmc_step(rng_key, z, tempered_vg, eps, chol_mass, n_leapfrog)
         return (z_new, n_accept + accepted.astype(jnp.int32)), None
 
     def _mutate_particle(rng_key, z, beta, eps, chol_mass):
-        """Run n_mh_steps of preconditioned MALA on a single particle."""
+        """Run n_mh_steps of preconditioned HMC on a single particle."""
         keys = random.split(rng_key, n_mh_steps)
 
         def scan_fn(carry, key):
-            return _mala_scan_body(carry, key, beta, eps, chol_mass)
+            return _hmc_scan_body(carry, key, beta, eps, chol_mass)
 
         (z_final, n_accept), _ = jax.lax.scan(scan_fn, (z, jnp.int32(0)), keys)
         return z_final, n_accept
 
+    # Waste-free mutation: collect ALL intermediate states
+    def _mutate_particle_wastefree(rng_key, z, beta, eps, chol_mass):
+        """Run n_mh_steps of HMC, keeping all intermediate positions."""
+        keys = random.split(rng_key, n_mh_steps)
+
+        def scan_fn(carry, key):
+            z_curr, n_acc = carry
+
+            def tempered_vg(z_):
+                return _tempered_val_and_grad(z_, beta)
+
+            z_new, accepted, _ = hmc_step(key, z_curr, tempered_vg, eps, chol_mass, n_leapfrog)
+            return (z_new, n_acc + accepted.astype(jnp.int32)), z_new
+
+        (_, n_acc), all_z = jax.lax.scan(scan_fn, (z, jnp.int32(0)), keys)
+        return all_z, n_acc  # all_z: (n_mh_steps, D)
+
     # Vmap over particles, JIT the whole batch mutation
     def _mutate_batch(rng_key, particles, beta, eps, chol_mass):
-        keys = random.split(rng_key, N)
+        keys = random.split(rng_key, particles.shape[0])
         return jax.vmap(lambda k, z: _mutate_particle(k, z, beta, eps, chol_mass))(keys, particles)
 
+    def _mutate_batch_wastefree(rng_key, particles_M, beta, eps, chol_mass):
+        """Waste-free batch: mutate M particles, return (M, n_mh_steps, D)."""
+        M = particles_M.shape[0]
+        keys = random.split(rng_key, M)
+        return jax.vmap(lambda k, z: _mutate_particle_wastefree(k, z, beta, eps, chol_mass))(
+            keys, particles_M
+        )
+
     _mutate_batch_jit = jax.jit(_mutate_batch)
+    _mutate_batch_wastefree_jit = jax.jit(_mutate_batch_wastefree)
 
     # 3. Initialize N particles from prior
     eps = param_step_size
+    mode_tag = "adaptive" if adaptive_tempering else "linear"
+    wf_tag = "+waste-free" if waste_free else ""
+    hmc_tag = f"+HMC(L={n_leapfrog})" if n_leapfrog > 1 else ""
     print(
-        f"Tempered SMC: N={N}, K={n_outer}, D={D}, n_mh={n_mh_steps}, "
-        f"eps={eps}, target_accept={target_accept}"
+        f"Tempered SMC [{mode_tag}{wf_tag}{hmc_tag}]: N={N}, K={n_outer}, D={D}, "
+        f"n_mh={n_mh_steps}, eps={eps}, target_accept={target_accept}"
     )
     print(f"  Initializing {N} particles from prior...")
 
@@ -254,7 +221,7 @@ def fit_tempered_smc(
     particles = jnp.concatenate(parts, axis=1)  # (N, D)
 
     # Initial mass matrix from prior particle covariance (uniform weights)
-    chol_mass = _compute_weighted_chol_mass(particles, jnp.zeros(N), D)
+    chol_mass = compute_weighted_chol_mass(particles, jnp.zeros(N), D)
 
     # ===================================================================
     # Pilot: tune eps at prior (beta=0) before tempering
@@ -282,26 +249,35 @@ def fit_tempered_smc(
 
     # Recompute after pilot diversification
     log_liks, _ = batch_lik_val_and_grad(particles)
-    chol_mass = _compute_weighted_chol_mass(particles, jnp.zeros(N), D)
+    chol_mass = compute_weighted_chol_mass(particles, jnp.zeros(N), D)
 
-    # 4. Tempering schedule: linear beta_k = k / n_outer
-    betas = [float(k + 1) / n_outer for k in range(n_outer)]
     logw = jnp.zeros(N)  # uniform weights at beta=0
 
     # Diagnostics
     accept_rates = []
     ess_history = []
     eps_history = []
+    beta_schedule = []
     chain_samples = []
 
     beta_prev = 0.0
-    max_mutation_rounds = 5  # max extra MALA rounds per tempering level
+    max_mutation_rounds = 5  # max extra rounds per tempering level (standard mode only)
+    level = 0
+
+    # Waste-free parameters
+    M = N // n_mh_steps if waste_free else N  # resample count for waste-free
 
     # 5. Tempering loop
-    for k in range(n_outer):
-        beta_k = betas[k]
+    while beta_prev < 1.0 and level < n_outer:
+        # a. Select next beta
+        if adaptive_tempering:
+            beta_k = find_next_beta(logw, log_liks, beta_prev, target_ess_ratio, N)
+        else:
+            beta_k = float(level + 1) / n_outer
 
-        # a. Incremental reweight: logw += (beta_k - beta_{k-1}) * log_lik
+        beta_schedule.append(beta_k)
+
+        # b. Incremental reweight: logw += (beta_k - beta_{k-1}) * log_lik
         logw = logw + (beta_k - beta_prev) * log_liks
 
         # Normalize and compute ESS
@@ -311,61 +287,96 @@ def fit_tempered_smc(
         ess = float(1.0 / jnp.sum(wn**2))
         ess_history.append(ess)
 
-        # b. Update mass matrix only when ESS is healthy
+        # c. Update mass matrix only when ESS is healthy
         if ess > N / 4:
-            chol_mass = _compute_weighted_chol_mass(particles, logw, D)
+            chol_mass = compute_weighted_chol_mass(particles, logw, D)
 
-        # c. Resample if ESS < N/2
-        did_resample = False
-        if ess < N / 2:
-            rng_key, resample_key = random.split(rng_key)
-            idx = _systematic_resample(resample_key, wn, N)
-            particles = particles[idx]
-            log_liks = log_liks[idx]
-            logw = jnp.full(N, -jnp.log(float(N)))
-            did_resample = True
+        # d. Resample and mutate
+        if waste_free:
+            # Waste-free: resample M particles, mutate each n_mh_steps times
+            rng_key, resample_key, mutate_key = random.split(rng_key, 3)
+            idx = _systematic_resample(resample_key, wn, M)
+            resampled = particles[idx]
 
-        # d. Adaptive mutation: run MALA rounds until acceptance is reasonable
-        total_accepts = 0
-        total_proposals = 0
-        for mutation_round in range(max_mutation_rounds):
-            rng_key, mutate_key = random.split(rng_key)
-            particles_new, n_accepts = _mutate_batch_jit(
-                mutate_key, particles, beta_k, eps, chol_mass
+            all_trajs, n_accs = _mutate_batch_wastefree_jit(
+                mutate_key, resampled, beta_k, eps, chol_mass
             )
-            round_accepts = float(jnp.sum(n_accepts))
-            total_accepts += round_accepts
-            total_proposals += N * n_mh_steps
-            particles = particles_new
+            # all_trajs: (M, n_mh_steps, D) -> reshape to (N, D)
+            particles = all_trajs.reshape(N, D)
+            logw = jnp.full(N, -jnp.log(float(N)))
 
-            # Adapt step size after each round
-            round_accept_rate = round_accepts / (N * n_mh_steps)
+            avg_accept = float(jnp.mean(n_accs) / n_mh_steps)
+            n_rounds = 1
+
+            # Adapt step size
             log_eps = jnp.log(jnp.array(eps))
-            log_eps = log_eps + 0.1 * (round_accept_rate - target_accept)
+            log_eps = log_eps + 0.1 * (avg_accept - target_accept)
             eps = float(jnp.clip(jnp.exp(log_eps), 1e-5, 2.0))
+        else:
+            # Standard: resample if ESS < N/2, then adaptive mutation rounds
+            did_resample = False
+            if ess < N / 2:
+                rng_key, resample_key = random.split(rng_key)
+                idx = _systematic_resample(resample_key, wn, N)
+                particles = particles[idx]
+                log_liks = log_liks[idx]
+                logw = jnp.full(N, -jnp.log(float(N)))
+                did_resample = True
 
-            # Stop early if acceptance is reasonable
-            if mutation_round > 0 and round_accept_rate > 0.2:
-                break
+            total_accepts = 0
+            total_proposals = 0
+            for mutation_round in range(max_mutation_rounds):
+                rng_key, mutate_key = random.split(rng_key)
+                particles_new, n_accepts = _mutate_batch_jit(
+                    mutate_key, particles, beta_k, eps, chol_mass
+                )
+                round_accepts = float(jnp.sum(n_accepts))
+                total_accepts += round_accepts
+                total_proposals += N * n_mh_steps
+                particles = particles_new
 
-        avg_accept = total_accepts / max(total_proposals, 1)
+                # Adapt step size after each round
+                round_accept_rate = round_accepts / (N * n_mh_steps)
+                log_eps = jnp.log(jnp.array(eps))
+                log_eps = log_eps + 0.1 * (round_accept_rate - target_accept)
+                eps = float(jnp.clip(jnp.exp(log_eps), 1e-5, 2.0))
+
+                # Stop early if acceptance is reasonable
+                if mutation_round > 0 and round_accept_rate > 0.2:
+                    break
+
+            avg_accept = total_accepts / max(total_proposals, 1)
+            n_rounds = mutation_round + 1
+
         accept_rates.append(avg_accept)
         eps_history.append(eps)
 
         # Recompute log-likelihoods for next incremental reweight
         log_liks, _ = batch_lik_val_and_grad(particles)
 
-        # f. Draw one sample (rotate through particles for coverage)
-        chain_samples.append(particles[k % N])
+        # Store one sample (rotate through particles for coverage)
+        chain_samples.append(particles[level % N])
 
-        beta_prev = beta_k
+        resamp_tag = ""
+        if not waste_free and did_resample:
+            resamp_tag = " [resampled]"
+        elif waste_free:
+            resamp_tag = " [waste-free]"
 
-        n_rounds = mutation_round + 1
-        resamp_tag = " [resampled]" if did_resample else ""
         print(
-            f"  step {k + 1}/{n_outer}  beta={beta_k:.3f}  ESS={ess:.1f}/{N}"
+            f"  step {level + 1}  beta={beta_k:.3f}  ESS={ess:.1f}/{N}"
             f"  accept={avg_accept:.2f}  eps={eps:.4f}  rounds={n_rounds}{resamp_tag}"
         )
+
+        beta_prev = beta_k
+        level += 1
+
+    # Determine warmup from actual levels used
+    actual_levels = level
+    if n_warmup is None:
+        n_warmup = actual_levels // 2
+    # Clamp warmup to leave at least 1 sample
+    n_warmup = min(n_warmup, max(actual_levels - 1, 0))
 
     # 6. Post-process: discard warmup, transform to constrained space
     chain_particles = jnp.stack(chain_samples[n_warmup:], axis=0)  # (n_keep, D)
@@ -390,11 +401,16 @@ def fit_tempered_smc(
             "accept_rates": accept_rates,
             "ess_history": ess_history,
             "eps_history": eps_history,
+            "beta_schedule": beta_schedule,
+            "n_levels": actual_levels,
             "n_outer": n_outer,
             "n_csmc_particles": N,
             "n_mh_steps": n_mh_steps,
+            "n_leapfrog": n_leapfrog,
             "param_step_size": param_step_size,
             "n_warmup": n_warmup,
             "target_accept": target_accept,
+            "adaptive_tempering": adaptive_tempering,
+            "waste_free": waste_free,
         },
     )
