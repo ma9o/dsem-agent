@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import argparse
 import time
+from typing import TYPE_CHECKING
 
-from benchmarks.metrics import RecoveryResult, header, report_recovery
-from benchmarks.problems.four_latent import FOUR_LATENT, RecoveryProblem
+if TYPE_CHECKING:
+    from benchmarks.metrics import RecoveryResult
+    from benchmarks.problems.four_latent import RecoveryProblem
 
 # ---------------------------------------------------------------------------
 # Method configs: {method: {local: {...}, gpu: {...}, gpu_type, timeout}}
@@ -170,6 +172,7 @@ def run_method(method: str, problem: RecoveryProblem, local: bool) -> RecoveryRe
     import jax
     import numpy as np
 
+    from benchmarks.metrics import RecoveryResult, header, report_recovery
     from dsem_agent.models.ssm import SSMModel, fit
 
     cfg = METHOD_CONFIGS[method]["local" if local else "gpu"]
@@ -399,6 +402,9 @@ def run_method(method: str, problem: RecoveryProblem, local: bool) -> RecoveryRe
 
 def run(methods: list[str], local: bool):
     """Run one or more methods and print comparison."""
+    from benchmarks.metrics import header
+    from benchmarks.problems.four_latent import FOUR_LATENT
+
     summary = {}
     for method in methods:
         res = run_method(method, FOUR_LATENT, local)
