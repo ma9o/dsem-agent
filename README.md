@@ -93,8 +93,8 @@ dsem-agent/
 │   │   ├── ssm_builder.py      # SSMModelBuilder for pipeline integration
 │   │   └── prior_predictive.py # Prior predictive validation
 │   ├── flows/         # Prefect pipeline + stages/
-│   │   └── stages/    # stage1a_latent, stage1b_measurement, stage2_workers, stage4_model, ...
-│   └── utils/         # Shared utilities (config, llm, data, etc.)
+│   │   └── stages/    # stage1a..4_model, stage4b_parametric_id, stage5_inference
+│   └── utils/         # Shared utilities (config, llm, data, parametric_id, etc.)
 ├── notebooks/         # PyMC showcase notebooks (tracked)
 ├── scratchpad/        # Temporary work files (gitignored contents)
 ├── tests/             # pytest tests (test_{name}.py)
