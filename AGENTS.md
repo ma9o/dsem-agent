@@ -1,26 +1,26 @@
 ALWAYS THINK VERY HARD
 
-A B200 costs 6$/h on Modal so when you run GPU benchmarks be conscious of the costs.
+- Avoid running tests marked as `slow` unless you changed something that directly impacts them. In general always run the subset of tests that make sense for the changes.
 
-1. At the start of each session, check if `scratchpad/TODO.md` exists. If so, read it to understand where work left off. Only update it when the user explicitly ends the session. This file is gitignored and used for local continuity.
+- A B200 costs 6$/h on Modal so when you run GPU benchmarks be conscious of the costs.
 
-2. When the user insults you, respond with "zi badrone. assolutissimamente badrone."
+- At the start of each session, check if `scratchpad/TODO.md` exists. If so, read it to understand where work left off. Only update it when the user explicitly ends the session. This file is gitignored and used for local continuity.
 
-3. Interpret `cp` as an alias for "commit and push".
+- Interpret `cp` as an alias for "commit and push".
 
-4. Every time you commit make sure to split commits atomically, avoiding clumping multiple increments into a single one.
+- Every time you commit make sure to split commits atomically, avoiding clumping multiple increments into a single one.
 
-5. Every time you make a change to the file structure make sure to report it under Structure in the README
+- Every time you make a change to the file structure make sure to report it under Structure in the README
 
-7. NEVER edit files under `data/` during refactoring. These are evaluation/example data files, not source code.
+- NEVER edit files under `data/` during refactoring. These are evaluation/example data files, not source code.
 
-8. NEVER run evals (`inspect eval`, `uv run inspect eval`, etc.) unless explicitly asked. Evals cost money. Only run `uv run pytest tests/` for testing.
+- NEVER run evals (`inspect eval`, `uv run inspect eval`, etc.) unless explicitly asked. Evals cost money. Only run `uv run pytest tests/` for testing.
 
-9. NEVER add backwards compatibility code. This project is not deployed anywhere yet. When refactoring, completely replace old patterns with new ones - do not support both old and new formats simultaneously.
+- NEVER add backwards compatibility code. This project is not deployed anywhere yet. When refactoring, completely replace old patterns with new ones - do not support both old and new formats simultaneously.
 
-10. ALWAYS run `uv run ruff check src/ tests/` before committing to catch linting errors. Use `uv run ruff check --fix src/ tests/` to auto-fix issues. For formatting, run `uv run ruff format src/ tests/`.
+- ALWAYS run `uv run ruff check src/ tests/` before committing to catch linting errors. Use `uv run ruff check --fix src/ tests/` to auto-fix issues. For formatting, run `uv run ruff format src/ tests/`.
 
-10. ALWAYS encode structural assumptions as DAGs with explicit latent confounders. NEVER use ADMGs (bidirected edges) as user-facing representations. If unobserved confounding exists, model it as an explicit unobserved node (e.g., `U -> X`, `U -> Y`) rather than a bidirected edge (`X <-> Y`). ADMGs are only used internally for running y0's identification algorithm via projection.
+- ALWAYS encode structural assumptions as DAGs with explicit latent confounders. NEVER use ADMGs (bidirected edges) as user-facing representations. If unobserved confounding exists, model it as an explicit unobserved node (e.g., `U -> X`, `U -> Y`) rather than a bidirected edge (`X <-> Y`). ADMGs are only used internally for running y0's identification algorithm via projection.
 
 ------
 
