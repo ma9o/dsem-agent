@@ -13,7 +13,6 @@ QUERIES_DIR = DATA_DIR / "queries"
 TRAINING_DIR = DATA_DIR / "training"
 
 
-
 def get_orchestrator_chunk_size() -> int:
     """Get chunk size for stage 1 orchestrator."""
     return get_config().stage1_structure_proposal.chunk_size
