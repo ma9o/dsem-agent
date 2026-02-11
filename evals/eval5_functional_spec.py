@@ -23,46 +23,17 @@ from inspect_ai.model import get_model
 from inspect_ai.scorer import Score, Target, accuracy, scorer, stderr
 from inspect_ai.solver import Generate, TaskState, solver
 
+from dsem_agent.orchestrator.schemas_model import (
+    EXPECTED_CONSTRAINT_FOR_ROLE,
+    VALID_LIKELIHOODS_FOR_DTYPE,
+    VALID_LINKS_FOR_DISTRIBUTION,
+)
 from dsem_agent.orchestrator.stage4_orchestrator import propose_model_spec
 from dsem_agent.utils.llm import make_orchestrator_generate_fn
 from evals.common import (
     get_eval_questions,
     load_dsem_model_by_question_id,
 )
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Scoring rubric constants
-# ══════════════════════════════════════════════════════════════════════════════
-
-VALID_LIKELIHOODS: dict[str, set[str]] = {
-    "binary": {"Bernoulli"},
-    "count": {"Poisson", "NegativeBinomial"},
-    "continuous": {"Normal", "Gamma", "Beta"},
-    "ordinal": {"OrderedLogistic"},
-    "categorical": {"Categorical", "OrderedLogistic"},
-}
-
-VALID_LINKS: dict[str, set[str]] = {
-    "Bernoulli": {"logit", "probit"},
-    "Poisson": {"log"},
-    "NegativeBinomial": {"log"},
-    "Normal": {"identity"},
-    "Gamma": {"log"},
-    "Beta": {"logit"},
-    "OrderedLogistic": {"cumulative_logit"},
-    "Categorical": {"softmax"},
-}
-
-EXPECTED_CONSTRAINTS: dict[str, str] = {
-    "ar_coefficient": "unit_interval",
-    "residual_sd": "positive",
-    "fixed_effect": "none",
-    "loading": "positive",
-    "random_intercept_sd": "positive",
-    "random_slope_sd": "positive",
-    "correlation": "correlation",
-}
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Dataset
@@ -214,7 +185,7 @@ def _score_functional_spec(model_spec: dict, dsem_model: dict) -> dict:
     for ind in indicators:
         name = ind["name"]
         dtype = ind.get("measurement_dtype", "continuous")
-        valid_dists = VALID_LIKELIHOODS.get(dtype, set())
+        valid_dists = VALID_LIKELIHOODS_FOR_DTYPE.get(dtype, set())
 
         if name in likelihood_by_var:
             dist = likelihood_by_var[name]["distribution"]
@@ -236,7 +207,7 @@ def _score_functional_spec(model_spec: dict, dsem_model: dict) -> dict:
     for ind in indicators:
         name = ind["name"]
         dtype = ind.get("measurement_dtype", "continuous")
-        valid_dists = VALID_LIKELIHOODS.get(dtype, set())
+        valid_dists = VALID_LIKELIHOODS_FOR_DTYPE.get(dtype, set())
 
         if name in likelihood_by_var:
             dist = likelihood_by_var[name]["distribution"]
@@ -244,7 +215,7 @@ def _score_functional_spec(model_spec: dict, dsem_model: dict) -> dict:
 
             # Only score link if distribution is correct
             if dist in valid_dists:
-                valid_links = VALID_LINKS.get(dist, set())
+                valid_links = VALID_LINKS_FOR_DISTRIBUTION.get(dist, set())
                 if link in valid_links:
                     link_points += 1
                     link_details.append(f"{name}: OK ({link} for {dist})")
@@ -316,7 +287,7 @@ def _score_functional_spec(model_spec: dict, dsem_model: dict) -> dict:
     for p in parameters:
         role = p.get("role", "")
         constraint = p.get("constraint", "")
-        expected = EXPECTED_CONSTRAINTS.get(role)
+        expected = EXPECTED_CONSTRAINT_FOR_ROLE.get(role)
 
         if expected is not None:
             if constraint == expected:

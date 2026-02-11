@@ -4,6 +4,7 @@ Provides a model builder interface compatible with the DSEM pipeline
 while using the NumPyro SSM implementation underneath.
 """
 
+import logging
 from typing import Any
 
 import jax.numpy as jnp
@@ -11,8 +12,15 @@ import numpy as np
 import pandas as pd
 
 from dsem_agent.models.ssm import InferenceResult, NoiseFamily, SSMModel, SSMPriors, SSMSpec, fit
-from dsem_agent.orchestrator.schemas_model import DistributionFamily, ModelSpec, ParameterRole
+from dsem_agent.orchestrator.schemas_model import (
+    DistributionFamily,
+    ModelSpec,
+    ParameterRole,
+    validate_model_spec,
+)
 from dsem_agent.workers.schemas_prior import PriorProposal
+
+logger = logging.getLogger(__name__)
 
 # Mapping from user-facing DistributionFamily to internal NoiseFamily
 _DIST_TO_NOISE: dict[DistributionFamily, NoiseFamily] = {
@@ -97,6 +105,10 @@ class SSMModelBuilder:
             from dsem_agent.orchestrator.schemas_model import ModelSpec
 
             model_spec = ModelSpec.model_validate(model_spec)
+
+        issues = validate_model_spec(model_spec)
+        for issue in issues:
+            logger.warning("ModelSpec %s: %s — %s", issue["severity"], issue["name"], issue["issue"])
 
         # Extract dimensions from data
         manifest_cols = [lik.variable for lik in model_spec.likelihoods]

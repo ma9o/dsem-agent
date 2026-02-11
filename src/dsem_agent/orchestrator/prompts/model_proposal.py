@@ -4,6 +4,9 @@ The orchestrator proposes the complete model structure including:
 - Distribution families and link functions for each indicator
 - Random effects structure
 - All parameters requiring priors with search context for literature
+
+NOTE: Keep distributions/links in sync with VALID_LIKELIHOODS_FOR_DTYPE
+and VALID_LINKS_FOR_DISTRIBUTION in schemas_model.py
 """
 
 SYSTEM = """\
