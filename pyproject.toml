@@ -47,6 +47,7 @@ dev = [
 target-version = "py312"
 line-length = 100
 src = ["src", "tests"]
+fix = true
 
 [tool.ruff.lint]
 select = [
