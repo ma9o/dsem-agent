@@ -14,7 +14,7 @@ to support different inference strategies.
 
 import jax.numpy as jnp
 import jax.scipy.linalg as jla
-from jax import lax, vmap
+from jax import vmap
 
 
 def solve_lyapunov(A: jnp.ndarray, Q: jnp.ndarray) -> jnp.ndarray:
@@ -52,58 +52,6 @@ def solve_lyapunov(A: jnp.ndarray, Q: jnp.ndarray) -> jnp.ndarray:
     vec_X = jla.solve(coef, -vec_Q)
 
     return vec_X.reshape((n, n))
-
-
-def solve_lyapunov_iterative(
-    A: jnp.ndarray, Q: jnp.ndarray, _max_iter: int = 100, tol: float = 1e-10
-) -> jnp.ndarray:
-    """Solve Lyapunov equation iteratively (for numerical stability).
-
-    Uses the Smith iteration for A*X + X*A' = -Q:
-    X_{k+1} = (A + I)^{-1} * (X_k - Q) * (A' + I)^{-1}
-
-    This is more numerically stable for near-singular systems.
-
-    Args:
-        A: n x n drift matrix
-        Q: n x n positive semi-definite matrix
-        max_iter: maximum iterations
-        tol: convergence tolerance
-
-    Returns:
-        X: n x n solution matrix
-    """
-    n = A.shape[0]
-    I_n = jnp.eye(n)
-
-    # Scale A to improve convergence
-    # Find alpha such that (A/alpha) has eigenvalues in suitable range
-    alpha = 1.0
-
-    A_scaled = A / alpha
-    Q_scaled = Q / (alpha * alpha)
-
-    # Initial guess
-    X = jnp.zeros((n, n))
-
-    # Precompute (A + I)^{-1}
-    ApI_inv = jla.inv(A_scaled + I_n)
-
-    def body_fn(carry):
-        X, _ = carry
-        X_new = ApI_inv @ (X - Q_scaled) @ ApI_inv.T
-        # Symmetrize
-        X_new = 0.5 * (X_new + X_new.T)
-        diff = jnp.max(jnp.abs(X_new - X))
-        return X_new, diff
-
-    def cond_fn(carry):
-        _, diff = carry
-        return diff > tol
-
-    X, _ = lax.while_loop(cond_fn, body_fn, (X, jnp.inf))
-
-    return X
 
 
 def compute_asymptotic_diffusion(drift: jnp.ndarray, diffusion_cov: jnp.ndarray) -> jnp.ndarray:
@@ -184,60 +132,6 @@ def compute_discrete_cint(drift: jnp.ndarray, cint: jnp.ndarray, dt: float) -> j
     c_dt = jla.solve(drift, rhs)
 
     return c_dt
-
-
-def matrix_fraction_decomposition(
-    drift: jnp.ndarray, diffusion: jnp.ndarray, cint: jnp.ndarray, dt: float
-) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-    """Compute discretization via matrix fraction decomposition.
-
-    This method computes all discrete parameters in a single matrix
-    exponential, which can be more numerically stable.
-
-    Augmented system:
-    [A  G*G'  c]     [exp(A*dt)  Q_dt  c_dt]
-    [0  -A'   0] --> [0          exp(-A'*dt)  0]
-    [0   0    0]     [0          0            1]
-
-    Args:
-        drift: n x n drift matrix A
-        diffusion: n x n diffusion Cholesky G (so G*G' is covariance)
-        cint: n x 1 continuous intercept
-        dt: time interval
-
-    Returns:
-        discrete_drift: n x n discrete drift exp(A*dt)
-        discrete_Q: n x n discrete diffusion covariance
-        discrete_cint: n x 1 discrete intercept
-    """
-    n = drift.shape[0]
-
-    # Build augmented matrix
-    diffusion_cov = diffusion @ diffusion.T
-    aug_size = 2 * n + 1
-
-    aug = jnp.zeros((aug_size, aug_size))
-    aug = aug.at[:n, :n].set(drift)
-    aug = aug.at[:n, n : 2 * n].set(diffusion_cov)
-    aug = aug.at[:n, 2 * n].set(cint.flatten())
-    aug = aug.at[n : 2 * n, n : 2 * n].set(-drift.T)
-
-    # Compute matrix exponential
-    aug_exp = jla.expm(aug * dt)
-
-    # Extract components
-    discrete_drift = aug_exp[:n, :n]
-
-    # Q_dt = discrete_drift @ aug_exp[:n, n:2*n]
-    # Actually: Q_dt is in the upper-right block already transformed
-    discrete_Q = aug_exp[:n, n : 2 * n] @ discrete_drift.T
-
-    discrete_cint = aug_exp[:n, 2 * n : 2 * n + 1]
-
-    # Ensure Q symmetry
-    discrete_Q = 0.5 * (discrete_Q + discrete_Q.T)
-
-    return discrete_drift, discrete_Q, discrete_cint
 
 
 def discretize_system(

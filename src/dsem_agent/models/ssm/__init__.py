@@ -13,7 +13,6 @@ from dsem_agent.models.ssm.discretization import (
     compute_discrete_diffusion,
     discretize_system,
     discretize_system_batched,
-    matrix_fraction_decomposition,
     solve_lyapunov,
 )
 from dsem_agent.models.ssm.inference import InferenceResult, fit
@@ -32,7 +31,6 @@ __all__ = [
     "compute_discrete_cint",
     "discretize_system",
     "discretize_system_batched",
-    "matrix_fraction_decomposition",
     # Model
     "SSMModel",
     "SSMPriors",

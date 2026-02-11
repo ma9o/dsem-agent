@@ -7,7 +7,6 @@ NOTE: Currently provides stub validation that passes through.
 Full implementation with SSMModelBuilder is pending.
 """
 
-import numpy as np
 import polars as pl
 
 from dsem_agent.orchestrator.schemas_model import ModelSpec
@@ -59,78 +58,6 @@ def validate_prior_predictive(
         )
 
     return True, results
-
-
-def _validate_prior_predictive_samples(
-    var_name: str,
-    samples: np.ndarray,
-    distribution: str,
-) -> PriorValidationResult:
-    """Validate prior predictive samples for an observed variable."""
-    samples = samples.flatten()
-
-    # Check for NaN/Inf
-    n_invalid = np.sum(~np.isfinite(samples))
-    if n_invalid > 0:
-        pct = 100 * n_invalid / len(samples)
-        return PriorValidationResult(
-            parameter=f"prior_pred_{var_name}",
-            is_valid=False,
-            issue=f"{pct:.1f}% of prior predictive samples are NaN/Inf",
-            suggested_adjustment=None,
-        )
-
-    # Check domain violations based on distribution
-    valid = samples[np.isfinite(samples)]
-    if len(valid) == 0:
-        return PriorValidationResult(
-            parameter=f"prior_pred_{var_name}",
-            is_valid=False,
-            issue="No valid samples",
-            suggested_adjustment=None,
-        )
-
-    if distribution in ("Poisson", "NegativeBinomial", "Gamma"):
-        n_negative = np.sum(valid < 0)
-        if n_negative > 0:
-            pct = 100 * n_negative / len(valid)
-            return PriorValidationResult(
-                parameter=f"prior_pred_{var_name}",
-                is_valid=False,
-                issue=f"{pct:.1f}% of samples are negative (should be positive)",
-                suggested_adjustment=None,
-            )
-
-    elif distribution in ("Bernoulli", "Beta"):
-        n_outside = np.sum((valid < 0) | (valid > 1))
-        if n_outside > 0:
-            pct = 100 * n_outside / len(valid)
-            return PriorValidationResult(
-                parameter=f"prior_pred_{var_name}",
-                is_valid=False,
-                issue=f"{pct:.1f}% of samples outside [0, 1]",
-                suggested_adjustment=None,
-            )
-
-    return PriorValidationResult(
-        parameter=f"prior_pred_{var_name}",
-        is_valid=True,
-        issue=None,
-        suggested_adjustment=None,
-    )
-
-
-def _get_constraint_from_distribution(dist_name: str) -> str:
-    """Get the implicit constraint from distribution name."""
-    positive_dists = {"HalfNormal", "Gamma", "InverseGamma", "Exponential", "HalfCauchy"}
-    unit_interval_dists = {"Beta"}
-
-    if dist_name in positive_dists:
-        return "positive"
-    elif dist_name in unit_interval_dists:
-        return "unit_interval"
-    else:
-        return "none"
 
 
 def format_validation_report(

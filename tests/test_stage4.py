@@ -5,8 +5,6 @@ import pandas as pd
 import pytest
 
 from dsem_agent.models.prior_predictive import (
-    _get_constraint_from_distribution,
-    _validate_prior_predictive_samples,
     format_validation_report,
 )
 from dsem_agent.orchestrator.schemas_model import (
@@ -211,49 +209,6 @@ class TestSSMModelBuilder:
 
 class TestPriorValidation:
     """Test prior predictive validation helpers."""
-
-    def test_get_constraint_positive(self):
-        """HalfNormal implies positive constraint."""
-        assert _get_constraint_from_distribution("HalfNormal") == "positive"
-        assert _get_constraint_from_distribution("Gamma") == "positive"
-        assert _get_constraint_from_distribution("Exponential") == "positive"
-
-    def test_get_constraint_unit_interval(self):
-        """Beta implies unit_interval constraint."""
-        assert _get_constraint_from_distribution("Beta") == "unit_interval"
-
-    def test_get_constraint_none(self):
-        """Normal has no implicit constraint."""
-        assert _get_constraint_from_distribution("Normal") == "none"
-        assert _get_constraint_from_distribution("Unknown") == "none"
-
-    def test_validate_prior_predictive_samples_valid(self):
-        """Valid samples pass validation."""
-        samples = np.random.randn(100) + 5
-        result = _validate_prior_predictive_samples("mood", samples, "Normal")
-        assert result.is_valid
-        assert result.issue is None
-
-    def test_validate_prior_predictive_samples_nan(self):
-        """NaN samples fail validation."""
-        samples = np.array([1.0, 2.0, np.nan, 4.0])
-        result = _validate_prior_predictive_samples("mood", samples, "Normal")
-        assert not result.is_valid
-        assert "NaN/Inf" in result.issue
-
-    def test_validate_prior_predictive_samples_negative_poisson(self):
-        """Negative samples fail for Poisson."""
-        samples = np.array([1.0, 2.0, -1.0, 4.0])
-        result = _validate_prior_predictive_samples("count", samples, "Poisson")
-        assert not result.is_valid
-        assert "negative" in result.issue
-
-    def test_validate_prior_predictive_samples_outside_beta(self):
-        """Samples outside [0,1] fail for Beta."""
-        samples = np.array([0.5, 0.8, 1.5, 0.2])
-        result = _validate_prior_predictive_samples("prob", samples, "Beta")
-        assert not result.is_valid
-        assert "outside [0, 1]" in result.issue
 
     def test_format_validation_report_passed(self):
         """Report formats correctly for passed validation."""
