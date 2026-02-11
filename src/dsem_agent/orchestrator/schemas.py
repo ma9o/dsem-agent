@@ -10,7 +10,7 @@ from enum import StrEnum
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 # Valid aggregation functions for indicator specifications
-# NOTE: These are metadata for documentation - CT-SEM handles aggregation internally
+# Aggregation functions applied when bucketing raw extractions to measurement_granularity.
 VALID_AGGREGATIONS = {
     "mean",
     "sum",
@@ -245,14 +245,14 @@ class Indicator(BaseModel):
     measurement_granularity: str = Field(
         description=(
             "'finest' (one datapoint per raw entry) or 'hourly', 'daily', 'weekly', 'monthly', 'yearly'. "
-            "The resolution at which workers extract measurements."
+            "The resolution at which aggregated observations enter the model."
         ),
     )
     measurement_dtype: str = Field(
         description="'continuous', 'binary', 'count', 'ordinal', 'categorical'"
     )
     aggregation: str = Field(
-        description=f"Aggregation function (metadata). Available: {', '.join(sorted(VALID_AGGREGATIONS))}",
+        description=f"Aggregation function applied when bucketing raw extractions to measurement_granularity. Available: {', '.join(sorted(VALID_AGGREGATIONS))}",
     )
 
     @field_validator("aggregation")

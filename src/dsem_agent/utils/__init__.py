@@ -1,7 +1,6 @@
 """Utility functions for dsem-agent."""
 
-# NOTE: Aggregation utilities have been removed.
-# CT-SEM handles raw timestamped data directly without upfront aggregation.
+# Aggregation utilities in dsem_agent.utils.aggregations
 
 from dsem_agent.utils.parametric_id import (
     ParametricIDResult,

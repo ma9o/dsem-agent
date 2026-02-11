@@ -2,9 +2,6 @@
 
 Fits the CT-SEM model and runs counterfactual interventions to
 estimate treatment effects, ranked by effect size.
-
-NOTE: Uses SSMModelBuilder with raw timestamped data.
-No upfront aggregation - CT-SEM handles irregular time intervals directly.
 """
 
 from typing import Any
@@ -35,19 +32,20 @@ def fit_model(stage4_result: dict, raw_data: pl.DataFrame) -> Any:
     try:
         builder = SSMModelBuilder(model_spec=model_spec, priors=priors)
 
-        # Convert raw data to wide format
+        # Convert data to wide format
         if raw_data.is_empty():
             return {"fitted": False, "error": "No data available"}
 
+        time_col = "time_bucket" if "time_bucket" in raw_data.columns else "timestamp"
         wide_data = (
             raw_data.with_columns(pl.col("value").cast(pl.Float64, strict=False))
-            .pivot(on="indicator", index="timestamp", values="value")
-            .sort("timestamp")
+            .pivot(on="indicator", index=time_col, values="value")
+            .sort(time_col)
         )
 
         X = wide_data.to_pandas()
-        if "timestamp" in X.columns:
-            X = X.rename(columns={"timestamp": "time"})
+        if time_col in X.columns:
+            X = X.rename(columns={time_col: "time"})
 
         # Fit the model — returns InferenceResult (default: SVI)
         result = builder.fit(X)
@@ -97,15 +95,16 @@ def run_power_scaling(fitted_result: dict, raw_data: pl.DataFrame) -> dict:
         builder = fitted_result["builder"]
         ssm_model = builder._model
 
-        # Convert raw data to wide format
+        # Convert data to wide format
+        time_col = "time_bucket" if "time_bucket" in raw_data.columns else "timestamp"
         wide_data = (
             raw_data.with_columns(pl.col("value").cast(pl.Float64, strict=False))
-            .pivot(on="indicator", index="timestamp", values="value")
-            .sort("timestamp")
+            .pivot(on="indicator", index=time_col, values="value")
+            .sort(time_col)
         )
         X = wide_data.to_pandas()
-        if "timestamp" in X.columns:
-            X = X.rename(columns={"timestamp": "time"})
+        if time_col in X.columns:
+            X = X.rename(columns={time_col: "time"})
 
         observations = jnp.array(X.drop(columns=["time"]).values, dtype=jnp.float32)
         times = jnp.array(X["time"].values, dtype=jnp.float32)

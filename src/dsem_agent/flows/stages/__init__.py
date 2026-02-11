@@ -13,6 +13,7 @@ from .stage2_workers import (
     populate_indicators,
 )
 from .stage3_validation import (
+    aggregate_measurements,
     combine_worker_results,
     validate_extraction,
 )
@@ -39,7 +40,8 @@ __all__ = [
     # Stage 2: Extract
     "load_worker_chunks",
     "populate_indicators",
-    # Stage 3: Validate
+    # Stage 3: Validate & Aggregate
+    "aggregate_measurements",
     "combine_worker_results",
     "validate_extraction",
     # Stage 4

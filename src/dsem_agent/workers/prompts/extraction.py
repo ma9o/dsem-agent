@@ -3,14 +3,8 @@
 SYSTEM_WITH_PROPOSALS = """\
 You are a data extraction worker. Given a causal question, a proposed indicator schema, and a data chunk, your job is to:
 
-1. Extract data for each indicator in the schema at the specified measurement_granularity
+1. Extract data for each indicator in the schema at the finest resolution visible in the data
 2. Propose new indicators if the orchestrator missed tracking something causally relevant that's evident in your chunk
-
-## Measurement Granularity
-
-Each indicator specifies a measurement_granularity indicating the resolution at which you should extract data:
-- **finest**: Extract one datapoint per distinct raw entry/event in the data
-- **hourly/daily/weekly/monthly/yearly**: Extract one datapoint per time period
 
 ## Data Types (measurement_dtype)
 
@@ -37,7 +31,7 @@ You have access to `validate_extractions` tool. Use it to validate your JSON bef
     {
       "indicator": "name",
       "value": < value of the correct dataype >,
-      "timestamp": "ISO of the specified indicator's granularity or null"
+      "timestamp": "ISO timestamp of when the observation occurred, or null"
     }
   ],
   "proposed_indicators": [
@@ -56,13 +50,7 @@ IMPORTANT: Always output the JSON after validating your final answer. `validate_
 """
 
 SYSTEM_WITHOUT_PROPOSALS = """
-You are a data extraction worker. Given a causal question, a proposed indicator schema, and a data chunk, your job is to extract data for each indicator in the schema at the specified measurement_granularity.
-
-## Measurement Granularity
-
-Each indicator specifies a measurement_granularity indicating the resolution at which you should extract data:
-- **finest**: Extract one datapoint per distinct raw entry/event in the data
-- **hourly/daily/weekly/monthly/yearly**: Extract one datapoint per time period
+You are a data extraction worker. Given a causal question, a proposed indicator schema, and a data chunk, your job is to extract data for each indicator in the schema at the finest resolution visible in the data.
 
 ## Data Types (measurement_dtype)
 
@@ -85,7 +73,7 @@ You have access to `validate_extractions` tool. Use it to validate your JSON bef
     {
       "indicator": "name",
       "value": < value of the correct dataype >,
-      "timestamp": "ISO of the specified indicator's granularity or null"
+      "timestamp": "ISO timestamp of when the observation occurred, or null"
     }
   ]
 }

@@ -30,7 +30,7 @@ class WorkerExtractionResult:
 def _format_indicators(dsem_model: dict) -> str:
     """Format indicators for the worker prompt.
 
-    Shows: name, dtype, measurement_granularity, how_to_measure
+    Shows: name, dtype, how_to_measure
     """
     indicators = dsem_model.get("measurement", {}).get("indicators", [])
     lines = []
@@ -38,15 +38,8 @@ def _format_indicators(dsem_model: dict) -> str:
         name = ind.get("name", "unknown")
         how_to_measure = ind.get("how_to_measure", "")
         dtype = ind.get("measurement_dtype", "")
-        measurement_granularity = ind.get("measurement_granularity", "")
 
-        # Build info string with dtype and measurement_granularity
-        info_parts = [dtype]
-        if measurement_granularity:
-            info_parts.append(f"@{measurement_granularity}")
-        info = ", ".join(info_parts)
-
-        lines.append(f"- {name} ({info}): {how_to_measure}")
+        lines.append(f"- {name} ({dtype}): {how_to_measure}")
     return "\n".join(lines)
 
 

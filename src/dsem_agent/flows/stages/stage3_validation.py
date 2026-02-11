@@ -1,12 +1,13 @@
-"""Stage 3: Validate extracted data.
+"""Stage 3: Validate and aggregate extracted data.
 
 Validation checks (semantic only - Polars handles structural validation):
 1. Variance: Indicator has variance > 0 (constant values = zero information)
 2. Sample size: Enough observations for temporal modeling
 
-NOTE: Upfront aggregation has been removed. The CT-SEM model handles
-raw timestamped data directly, discretizing at inference time based on
-actual observation intervals.
+Aggregation: Workers extract at the finest resolution visible in their chunk.
+aggregate_measurements() buckets timestamps and applies each indicator's
+aggregation function to reach measurement_granularity. CT-SEM discretization
+then handles measurement_granularity -> continuous time.
 
 See docs/reference/pipeline.md for full specification.
 """
@@ -16,6 +17,8 @@ from typing import TYPE_CHECKING
 import polars as pl
 from prefect import task
 from prefect.cache_policies import INPUTS
+
+from dsem_agent.utils.aggregations import aggregate_worker_measurements
 
 if TYPE_CHECKING:
     from dsem_agent.workers.agents import WorkerResult
@@ -165,3 +168,26 @@ def combine_worker_results(
         return pl.DataFrame({"indicator": [], "value": [], "timestamp": []})
 
     return pl.concat(dataframes, how="vertical")
+
+
+@task(cache_policy=INPUTS)
+def aggregate_measurements(
+    dsem_model: dict,
+    worker_results: list["WorkerResult"],
+) -> dict[str, pl.DataFrame]:
+    """Aggregate raw worker extractions to measurement_granularity.
+
+    Workers extract at the finest resolution visible in their chunk.
+    This task buckets timestamps and applies each indicator's aggregation
+    function to reach measurement_granularity.
+
+    Args:
+        dsem_model: The full DSEM model with measurement model
+        worker_results: List of WorkerResults from Stage 2
+
+    Returns:
+        Dict keyed by granularity level (e.g. "daily", "hourly", "finest").
+        Each value is a DataFrame with columns (indicator, value, time_bucket).
+    """
+    worker_dfs = [wr.dataframe for wr in worker_results]
+    return aggregate_worker_measurements(worker_dfs, dsem_model)

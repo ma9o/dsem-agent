@@ -51,16 +51,17 @@ def parametric_id_task(
         if raw_data.is_empty():
             return {"checked": False, "error": "No data available"}
 
-        # Pivot raw data to wide format
+        # Pivot data to wide format
+        time_col = "time_bucket" if "time_bucket" in raw_data.columns else "timestamp"
         wide_data = (
             raw_data.with_columns(pl.col("value").cast(pl.Float64, strict=False))
-            .pivot(on="indicator", index="timestamp", values="value")
-            .sort("timestamp")
+            .pivot(on="indicator", index=time_col, values="value")
+            .sort(time_col)
         )
 
         X = wide_data.to_pandas()
-        if "timestamp" in X.columns:
-            X = X.rename(columns={"timestamp": "time"})
+        if time_col in X.columns:
+            X = X.rename(columns={time_col: "time"})
 
         # Build the model
         builder.build_model(X)
