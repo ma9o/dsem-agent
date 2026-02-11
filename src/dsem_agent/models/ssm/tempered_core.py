@@ -49,6 +49,7 @@ def run_tempered_smc(
     waste_free: bool = False,
     n_leapfrog: int = 5,
     method_name: str = "tempered_smc",
+    likelihood_backend=None,
     extra_diagnostics: dict[str, Any] | None = None,
     print_prefix: str = "Tempered SMC",
 ) -> InferenceResult:
@@ -94,16 +95,29 @@ def run_tempered_smc(
             f"waste_free requires N % n_mh_steps == 0, got N={N}, n_mh_steps={n_mh_steps}"
         )
 
+    if likelihood_backend is None:
+        raise ValueError(
+            "likelihood_backend is required. Use model.make_likelihood_backend() for the default."
+        )
+
     # 1. Discover model sites
     rng_key, trace_key = random.split(rng_key)
-    site_info = _discover_sites(model, observations, times, subject_ids, trace_key)
+    site_info = _discover_sites(
+        model, observations, times, subject_ids, trace_key, likelihood_backend
+    )
     example_unc = {name: info["transform"].inv(info["value"]) for name, info in site_info.items()}
     flat_example, unravel_fn = ravel_pytree(example_unc)
     D = flat_example.shape[0]
 
     # 2. Build differentiable evaluators
     log_lik_fn, log_prior_unc_fn = _build_eval_fns(
-        model, observations, times, subject_ids, site_info, unravel_fn
+        model,
+        observations,
+        times,
+        subject_ids,
+        site_info,
+        unravel_fn,
+        likelihood_backend=likelihood_backend,
     )
 
     # Safe value-and-grad for log-likelihood

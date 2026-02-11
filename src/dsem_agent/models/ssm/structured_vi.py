@@ -348,6 +348,19 @@ def fit_structured_vi(
     Uses the ELBO from structured VI as the log-density for a tempered SMC
     sampler over the parameter space.
     """
+    manifest_dist = (
+        model.spec.manifest_dist.value
+        if hasattr(model.spec.manifest_dist, "value")
+        else str(model.spec.manifest_dist)
+    )
+    backend = StructuredVILikelihood(
+        n_latent=model.spec.n_latent,
+        n_manifest=model.spec.n_manifest,
+        manifest_dist=manifest_dist,
+        n_vi_steps=n_vi_steps,
+        n_mc_samples=n_mc_samples,
+        vi_lr=vi_lr,
+    )
     return run_tempered_smc(
         model,
         observations,
@@ -365,6 +378,7 @@ def fit_structured_vi(
         waste_free=waste_free,
         n_leapfrog=n_leapfrog,
         method_name="structured_vi",
+        likelihood_backend=backend,
         extra_diagnostics={
             "n_vi_steps": n_vi_steps,
             "n_mc_samples": n_mc_samples,

@@ -398,8 +398,9 @@ def profile_likelihood(
     rng_key = random.PRNGKey(seed)
 
     # 1. Discover sites
+    backend = model.make_likelihood_backend()
     rng_key, trace_key = random.split(rng_key)
-    site_info = _discover_sites(model, observations, times, subject_ids, trace_key)
+    site_info = _discover_sites(model, observations, times, subject_ids, trace_key, backend)
     example_unc = {name: info["transform"].inv(info["value"]) for name, info in site_info.items()}
     flat_example, unravel_fn = ravel_pytree(example_unc)
     D = flat_example.shape[0]
@@ -407,7 +408,7 @@ def profile_likelihood(
 
     # 2. Build eval fns
     log_lik_fn, log_prior_unc_fn = _build_eval_fns(
-        model, observations, times, subject_ids, site_info, unravel_fn
+        model, observations, times, subject_ids, site_info, unravel_fn, backend
     )
 
     def neg_log_post(z):
@@ -584,9 +585,10 @@ def sbc_check(
     times = jnp.arange(T, dtype=jnp.float32) * dt
 
     # Discover sites from dummy data
+    backend = model.make_likelihood_backend()
     dummy_obs = jnp.zeros((T, model.spec.n_manifest))
     rng_key, trace_key = random.split(rng_key)
-    site_info = _discover_sites(model, dummy_obs, times, None, trace_key)
+    site_info = _discover_sites(model, dummy_obs, times, None, trace_key, backend)
     param_names = sorted(site_info.keys())
 
     example_unc = {name: info["transform"].inv(info["value"]) for name, info in site_info.items()}
@@ -653,7 +655,9 @@ def sbc_check(
         # g. Likelihood rank (data-dependent test quantity)
         if available:
             # Can build unconstrained vectors from raw param samples
-            log_lik_fn, _ = _build_eval_fns(model, y_star, times, None, site_info, unravel_fn)
+            log_lik_fn, _ = _build_eval_fns(
+                model, y_star, times, None, site_info, unravel_fn, backend
+            )
             true_ll = float(log_lik_fn(true_z))
 
             post_z_list = []
@@ -728,13 +732,14 @@ def power_scaling_sensitivity(
     rng_key = random.PRNGKey(seed)
 
     # 1. Discover sites and build eval functions
+    backend = model.make_likelihood_backend()
     rng_key, trace_key = random.split(rng_key)
-    site_info = _discover_sites(model, observations, times, subject_ids, trace_key)
+    site_info = _discover_sites(model, observations, times, subject_ids, trace_key, backend)
     example_unc = {name: info["transform"].inv(info["value"]) for name, info in site_info.items()}
     _, unravel_fn = ravel_pytree(example_unc)
 
     log_lik_fn, log_prior_unc_fn = _build_eval_fns(
-        model, observations, times, subject_ids, site_info, unravel_fn
+        model, observations, times, subject_ids, site_info, unravel_fn, backend
     )
 
     param_names = sorted(site_info.keys())

@@ -14,6 +14,7 @@ model; this module provides fit() to run inference with different backends:
 
 from __future__ import annotations
 
+import functools
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -149,7 +150,8 @@ def prior_predictive(
         Dict of prior predictive samples
     """
     rng_key = random.PRNGKey(seed)
-    blocked_model = handlers.block(model.model, hide=["log_likelihood"])
+    model_fn = functools.partial(model.model, likelihood_backend=model.make_likelihood_backend())
+    blocked_model = handlers.block(model_fn, hide=["log_likelihood"])
     predictive = Predictive(blocked_model, num_samples=num_samples)
     dummy_obs = jnp.zeros((len(times), model.spec.n_manifest))
     return predictive(rng_key, dummy_obs, times)
@@ -188,8 +190,9 @@ def _fit_nuts(
     Returns:
         InferenceResult with NUTS samples
     """
+    model_fn = functools.partial(model.model, likelihood_backend=model.make_likelihood_backend())
     kernel = NUTS(
-        model.model,
+        model_fn,
         init_strategy=init_to_median(num_samples=15),
         target_accept_prob=target_accept_prob,
         max_tree_depth=max_tree_depth,
@@ -246,15 +249,16 @@ def _fit_svi(
     Returns:
         InferenceResult with approximate posterior samples
     """
+    model_fn = functools.partial(model.model, likelihood_backend=model.make_likelihood_backend())
     guide_cls = {
         "normal": AutoNormal,
         "mvn": AutoMultivariateNormal,
         "delta": AutoDelta,
     }[guide_type]
-    guide = guide_cls(model.model)
+    guide = guide_cls(model_fn)
 
     optimizer = ClippedAdam(step_size=learning_rate)
-    svi = SVI(model.model, guide, optimizer, Trace_ELBO())
+    svi = SVI(model_fn, guide, optimizer, Trace_ELBO())
 
     rng_key = random.PRNGKey(seed)
     svi_result = svi.run(rng_key, num_steps, observations, times, subject_ids)
@@ -262,7 +266,7 @@ def _fit_svi(
     # Draw posterior samples from the fitted guide
     sample_key = random.PRNGKey(seed + 1)
     predictive = Predictive(
-        model.model,
+        model_fn,
         guide=guide,
         params=svi_result.params,
         num_samples=num_samples,

@@ -450,11 +450,39 @@ class SSMModel:
         numpyro.deterministic("t0_cov", t0_chol @ t0_chol.T)
         return t0_means, t0_chol
 
+    def make_likelihood_backend(self):
+        """Construct the default likelihood backend from model configuration.
+
+        Uses self.likelihood to select between Kalman and Particle backends.
+        Callers that need a different backend (Laplace, Structured VI, DPF)
+        construct it themselves instead of calling this.
+        """
+        spec = self.spec
+        if self.likelihood == "kalman":
+            from dsem_agent.models.likelihoods.kalman import KalmanLikelihood
+
+            return KalmanLikelihood(
+                n_latent=spec.n_latent,
+                n_manifest=spec.n_manifest,
+            )
+        else:
+            from dsem_agent.models.likelihoods.particle import ParticleLikelihood
+
+            return ParticleLikelihood(
+                n_latent=spec.n_latent,
+                n_manifest=spec.n_manifest,
+                n_particles=self.n_particles,
+                rng_key=self.pf_key,
+                manifest_dist=spec.manifest_dist.value,
+                diffusion_dist=spec.diffusion_dist.value,
+            )
+
     def model(
         self,
         observations: jnp.ndarray,
         times: jnp.ndarray,
         subject_ids: jnp.ndarray | None = None,
+        likelihood_backend=None,
     ) -> None:
         """NumPyro model function.
 
@@ -462,8 +490,15 @@ class SSMModel:
             observations: (N, n_manifest) observed data
             times: (N,) observation times
             subject_ids: (N,) subject indices (0-indexed, for hierarchical models)
+            likelihood_backend: Likelihood backend instance (e.g. ParticleLikelihood,
+                KalmanLikelihood, LaplaceLikelihood). Required — use
+                model.make_likelihood_backend() for the default.
         """
-        from dsem_agent.models.likelihoods.particle import ParticleLikelihood
+        if likelihood_backend is None:
+            raise ValueError(
+                "likelihood_backend is required. "
+                "Use model.make_likelihood_backend() for the default."
+            )
 
         spec = self.spec
         hierarchical = spec.hierarchical and subject_ids is not None
@@ -498,23 +533,7 @@ class SSMModel:
         if spec.diffusion_dist == NoiseFamily.STUDENT_T:
             extra_params["proc_df"] = numpyro.sample("proc_df", dist.Gamma(5.0, 1.0))
 
-        # Create likelihood backend
-        if self.likelihood == "kalman":
-            from dsem_agent.models.likelihoods.kalman import KalmanLikelihood
-
-            backend = KalmanLikelihood(
-                n_latent=spec.n_latent,
-                n_manifest=spec.n_manifest,
-            )
-        else:
-            backend = ParticleLikelihood(
-                n_latent=spec.n_latent,
-                n_manifest=spec.n_manifest,
-                n_particles=self.n_particles,
-                rng_key=self.pf_key,
-                manifest_dist=spec.manifest_dist.value,
-                diffusion_dist=spec.diffusion_dist.value,
-            )
+        backend = likelihood_backend
 
         ct_params = CTParams(drift=drift, diffusion_cov=diffusion_cov, cint=cint)
         meas_params = MeasurementParams(

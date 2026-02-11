@@ -53,5 +53,6 @@ def fit_tempered_smc(
         waste_free=waste_free,
         n_leapfrog=n_leapfrog,
         method_name="tempered_smc",
+        likelihood_backend=model.make_likelihood_backend(),
         print_prefix="Tempered SMC",
     )

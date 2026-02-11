@@ -22,6 +22,7 @@ Upgrades:
 
 from __future__ import annotations
 
+import functools
 from typing import Any
 
 import jax
@@ -51,7 +52,7 @@ from dsem_agent.models.ssm.utils import _assemble_deterministics, _discover_site
 
 
 def _svi_warmstart(
-    model,
+    model_fn,
     observations,
     times,
     subject_ids,
@@ -67,7 +68,7 @@ def _svi_warmstart(
     same unconstrained space as PGAS (both use ravel_pytree on sorted dict keys).
 
     Args:
-        model: SSMModel instance
+        model_fn: NumPyro model function (with likelihood_backend already bound)
         observations: (T, n_manifest) observed data
         times: (T,) observation times
         subject_ids: optional subject indices
@@ -83,9 +84,9 @@ def _svi_warmstart(
         block_chol_masses: dict of block_name -> (block_size, block_size) Cholesky,
             or None if blocks is None
     """
-    guide = AutoMultivariateNormal(model.model)
+    guide = AutoMultivariateNormal(model_fn)
     optimizer = ClippedAdam(step_size=learning_rate)
-    svi = SVI(model.model, guide, optimizer, Trace_ELBO())
+    svi = SVI(model_fn, guide, optimizer, Trace_ELBO())
 
     rng_key = random.PRNGKey(seed)
     svi_result = svi.run(rng_key, num_steps, observations, times, subject_ids, progress_bar=False)
@@ -604,8 +605,9 @@ def fit_pgas(
     )
 
     # 1. Discover model sites
+    backend = model.make_likelihood_backend()
     rng_key, trace_key = random.split(rng_key)
-    site_info = _discover_sites(model, clean_obs, times, subject_ids, trace_key)
+    site_info = _discover_sites(model, clean_obs, times, subject_ids, trace_key, backend)
     transforms = {name: info["transform"] for name, info in site_info.items()}
     distributions = {name: info["distribution"] for name, info in site_info.items()}
 
@@ -732,9 +734,11 @@ def fit_pgas(
     # 6. Initialize parameters and mass matrix
     chol_mass_full = jnp.eye(D)
 
+    model_fn = functools.partial(model.model, likelihood_backend=backend)
+
     if svi_warmstart:
         svi_theta, svi_chol_mass, svi_block_chols = _svi_warmstart(
-            model,
+            model_fn,
             observations,
             times,
             subject_ids,

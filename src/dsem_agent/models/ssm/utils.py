@@ -8,6 +8,7 @@ Functions used by hessmc2, pgas, tempered_smc, and parametric_id:
 
 from __future__ import annotations
 
+import functools
 from typing import TYPE_CHECKING
 
 import jax
@@ -27,10 +28,11 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-def _discover_sites(model, observations, times, subject_ids, rng_key):
+def _discover_sites(model, observations, times, subject_ids, rng_key, likelihood_backend):
     """Trace model once to discover sample sites (names, shapes, transforms)."""
+    model_fn = functools.partial(model.model, likelihood_backend=likelihood_backend)
     with handlers.seed(rng_seed=int(rng_key[0])):
-        trace = handlers.trace(model.model).get_trace(observations, times, subject_ids)
+        trace = handlers.trace(model_fn).get_trace(observations, times, subject_ids)
 
     site_info = {}
     for name, site in trace.items():
@@ -157,8 +159,13 @@ def _assemble_deterministics(
 # ---------------------------------------------------------------------------
 
 
-def _build_eval_fns(model, observations, times, subject_ids, site_info, unravel_fn):
+def _build_eval_fns(
+    model, observations, times, subject_ids, site_info, unravel_fn, likelihood_backend
+):
     """Build differentiable functions for log-likelihood and log-prior.
+
+    Args:
+        likelihood_backend: Likelihood backend instance to use for evaluation.
 
     Returns:
         log_lik_fn(z) -> scalar log p(y|theta)
@@ -167,6 +174,8 @@ def _build_eval_fns(model, observations, times, subject_ids, site_info, unravel_
     transforms = {name: info["transform"] for name, info in site_info.items()}
     distributions = {name: info["distribution"] for name, info in site_info.items()}
 
+    model_fn = functools.partial(model.model, likelihood_backend=likelihood_backend)
+
     def _constrain(z):
         unc = unravel_fn(z)
         return {name: transforms[name](unc[name]) for name in unc}, unc
@@ -174,7 +183,7 @@ def _build_eval_fns(model, observations, times, subject_ids, site_info, unravel_
     def _log_lik_fn(z):
         """Log-likelihood p(y|theta) via PF or Kalman."""
         con, _ = _constrain(z)
-        log_lik, _ = _eval_model(model.model, con, observations, times, subject_ids)
+        log_lik, _ = _eval_model(model_fn, con, observations, times, subject_ids)
         return log_lik
 
     # Checkpoint: recompute PF intermediates during backward pass instead of

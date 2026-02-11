@@ -458,9 +458,7 @@ def _train_proposal(
     for step in range(n_train_steps):
         rng_key, step_key, batch_key = random.split(rng_key, 3)
         batch_idx = random.randint(batch_key, (), 0, n_train_seqs)
-        proposal_net, opt_state, loss = _train_step(
-            proposal_net, opt_state, batch_idx, step_key
-        )
+        proposal_net, opt_state, loss = _train_step(proposal_net, opt_state, batch_idx, step_key)
         if (step + 1) % 50 == 0:
             print(f"    step {step + 1}/{n_train_steps}: VSMC loss = {float(loss):.2f}")
 
@@ -631,6 +629,15 @@ def fit_dpf(
     print("DPF: Phase 2 - Parameter inference via tempered SMC...")
 
     # Phase 2: Parameter inference via shared tempered SMC loop
+    rng_key, dpf_key = random.split(rng_key)
+    backend = DPFLikelihood(
+        n_latent=spec.n_latent,
+        n_manifest=spec.n_manifest,
+        manifest_dist=manifest_dist,
+        n_particles=n_pf_particles,
+        proposal_net=proposal_net,
+        rng_key=dpf_key,
+    )
     return run_tempered_smc(
         model,
         observations,
@@ -648,6 +655,7 @@ def fit_dpf(
         waste_free=waste_free,
         n_leapfrog=n_leapfrog,
         method_name="dpf",
+        likelihood_backend=backend,
         extra_diagnostics={
             "n_pf_particles": n_pf_particles,
             "n_train_seqs": n_train_seqs,

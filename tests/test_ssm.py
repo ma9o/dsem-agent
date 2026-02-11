@@ -156,7 +156,7 @@ class TestSSMModel:
         import numpyro
 
         with numpyro.handlers.seed(rng_seed=0), numpyro.handlers.trace() as trace:
-            model.model(observations, times)
+            model.model(observations, times, likelihood_backend=model.make_likelihood_backend())
 
         # Check that key sites exist
         assert "drift_diag_pop" in trace

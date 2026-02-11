@@ -416,6 +416,17 @@ def fit_laplace_em(
     Uses the Laplace-approximated marginal likelihood (via IEKS) as the
     log-density for a tempered SMC sampler over the parameter space.
     """
+    manifest_dist = (
+        model.spec.manifest_dist.value
+        if hasattr(model.spec.manifest_dist, "value")
+        else str(model.spec.manifest_dist)
+    )
+    backend = LaplaceLikelihood(
+        n_latent=model.spec.n_latent,
+        n_manifest=model.spec.n_manifest,
+        manifest_dist=manifest_dist,
+        n_ieks_iters=n_ieks_iters,
+    )
     return run_tempered_smc(
         model,
         observations,
@@ -433,6 +444,7 @@ def fit_laplace_em(
         waste_free=waste_free,
         n_leapfrog=n_leapfrog,
         method_name="laplace_em",
+        likelihood_backend=backend,
         extra_diagnostics={"n_ieks_iters": n_ieks_iters},
         print_prefix="Laplace-EM",
     )
