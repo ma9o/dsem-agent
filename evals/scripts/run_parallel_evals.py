@@ -23,10 +23,9 @@ from pathlib import Path
 # Add project root to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from evals.common import load_eval_config
 from inspect_ai import eval_set
 from inspect_ai.log import EvalLog
-
-from evals.common import load_eval_config
 
 # Load config
 CONFIG = load_eval_config()

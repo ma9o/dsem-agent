@@ -30,12 +30,10 @@ from inspect_ai.solver import Generate, TaskState, solver, system_message
 
 from dsem_agent.orchestrator.prompts import measurement_model
 from dsem_agent.orchestrator.schemas import LatentModel, MeasurementModel
-from dsem_agent.orchestrator.stage1b import run_stage1b, Stage1bResult
+from dsem_agent.orchestrator.stage1b import Stage1bResult, run_stage1b
 from dsem_agent.utils.effects import get_all_treatments, get_outcome_from_latent_model
 from dsem_agent.utils.llm import make_orchestrator_generate_fn
-
 from evals.common import (
-    format_chunks,
     get_eval_questions,
     get_sample_chunks_orchestrator,
     load_eval_config,
@@ -146,10 +144,10 @@ def _score_stage1b_result(
         valid_dtypes = {"continuous", "binary", "count", "ordinal", "categorical"}
         if indicator.measurement_dtype in valid_dtypes:
             pts += 1
-            details.append(f"+1 valid dtype")
+            details.append("+1 valid dtype")
 
         pts += 1  # Valid aggregation (schema-validated)
-        details.append(f"+1 valid aggregation")
+        details.append("+1 valid aggregation")
 
         if len(indicator.how_to_measure) > 50:
             pts += 1

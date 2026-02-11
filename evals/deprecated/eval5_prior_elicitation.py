@@ -27,23 +27,21 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import json
 from dataclasses import dataclass
 
+from evals.common import (
+    get_eval_questions,
+    load_dsem_model_by_question_id,
+    load_eval_config,
+)
 from inspect_ai import Task, task
 from inspect_ai.dataset import MemoryDataset, Sample
 from inspect_ai.model import get_model
 from inspect_ai.scorer import Score, Target, mean, scorer, stderr
 from inspect_ai.solver import Generate, TaskState, solver, system_message
 
-from dsem_agent.flows.stages.stage4_model import specify_model, DEFAULT_PRIORS
+from dsem_agent.flows.stages.stage4_model import DEFAULT_PRIORS, specify_model
 from dsem_agent.orchestrator.prompts import PRIOR_ELICITATION_SYSTEM
-from dsem_agent.orchestrator.stage4 import run_stage4, Stage4Result
+from dsem_agent.orchestrator.stage4 import Stage4Result, run_stage4
 from dsem_agent.utils.llm import make_orchestrator_generate_fn
-
-from evals.common import (
-    get_eval_questions,
-    load_dsem_model_by_question_id,
-    load_eval_config,
-)
-
 
 # Load config
 _CONFIG = load_eval_config()

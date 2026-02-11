@@ -10,14 +10,14 @@ Usage:
 
 import argparse
 
+from dsem_agent.orchestrator.prompts import latent_model
 from dsem_agent.utils.data import (
     CHUNK_SIZE,
-    SAMPLE_CHUNKS,
     PROCESSED_DIR,
+    SAMPLE_CHUNKS,
     get_latest_preprocessed_file,
     sample_chunks,
 )
-from dsem_agent.orchestrator.prompts import latent_model
 
 OUTPUT_FILE = PROCESSED_DIR / "orchestrator-samples-manual.txt"
 EXCLUDE_FILES = {OUTPUT_FILE.name}

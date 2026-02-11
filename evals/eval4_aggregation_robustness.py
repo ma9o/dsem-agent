@@ -33,13 +33,12 @@ from inspect_ai.solver import Generate, TaskState, solver
 
 from dsem_agent.utils.aggregations import aggregate_worker_measurements
 from dsem_agent.utils.llm import make_worker_generate_fn
-from dsem_agent.workers.prompts import WORKER_USER
 from dsem_agent.workers.core import (
-    run_worker_extraction,
     _format_indicators,
     _get_outcome_description,
+    run_worker_extraction,
 )
-
+from dsem_agent.workers.prompts import WORKER_USER
 from evals.common import (
     get_eval_questions,
     get_sample_chunks_worker,
@@ -173,7 +172,7 @@ def aggregation_solver(worker_timeout: float = 300):
                         timeout=worker_timeout,
                     )
                     return chunk_idx, result, None
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     return chunk_idx, None, f"TIMEOUT after {worker_timeout}s"
                 except Exception as e:
                     return chunk_idx, None, str(e)

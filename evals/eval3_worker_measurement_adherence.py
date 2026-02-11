@@ -27,21 +27,19 @@ from inspect_ai.model import ChatMessageSystem, ChatMessageUser, get_model
 from inspect_ai.scorer import Score, Target, mean, scorer, stderr
 from inspect_ai.solver import Generate, TaskState, solver
 
-from dsem_agent.workers.prompts import WORKER_WO_PROPOSALS_SYSTEM, WORKER_USER
+from dsem_agent.utils.llm import get_generate_config, make_worker_generate_fn, parse_json_response
 from dsem_agent.workers.core import (
-    run_worker_extraction,
     _format_indicators,
     _get_outcome_description,
+    run_worker_extraction,
 )
-from dsem_agent.utils.llm import get_generate_config, make_worker_generate_fn, parse_json_response
-
+from dsem_agent.workers.prompts import WORKER_USER, WORKER_WO_PROPOSALS_SYSTEM
 from evals.common import (
     get_eval_questions,
     get_sample_chunks_worker,
-    load_eval_config,
     load_dsem_model_by_question_id,
+    load_eval_config,
 )
-
 
 # Load config
 _CONFIG = load_eval_config()
@@ -247,7 +245,7 @@ def judge_solver(model_ids: list[str] | None = None, worker_timeout: float | Non
                         timeout=worker_timeout,
                     )
                     return model_id, result
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     return model_id, f"[TIMEOUT: Worker did not finish within {worker_timeout}s]"
                 except Exception as e:
                     return model_id, f"[ERROR: {e}]"

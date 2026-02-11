@@ -9,15 +9,15 @@ from inspect_ai.model import get_model
 from inspect_ai.solver import Generate, TaskState, solver
 from inspect_ai.tool import Tool
 
-from dsem_agent.utils.llm import get_generate_config, multi_turn_generate
 from dsem_agent.utils.data import (
     DATA_DIR,
     PROCESSED_DIR,
     get_latest_preprocessed_file,
-    sample_chunks,
     get_orchestrator_chunk_size,
     get_worker_chunk_size,
+    sample_chunks,
 )
+from dsem_agent.utils.llm import get_generate_config, multi_turn_generate
 
 
 def load_eval_config() -> dict:

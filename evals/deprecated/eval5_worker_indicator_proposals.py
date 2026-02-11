@@ -17,26 +17,29 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import asyncio
 import json
 
+from evals.common import (
+    get_eval_questions,
+    get_sample_chunks_worker,
+    load_dsem_model_by_question_id,
+    load_eval_config,
+)
 from inspect_ai import Task, task
 from inspect_ai.dataset import MemoryDataset, Sample
 from inspect_ai.model import ChatMessageSystem, ChatMessageUser, get_model
 from inspect_ai.scorer import Score, Target, mean, scorer, stderr
 from inspect_ai.solver import Generate, TaskState, solver
 
-from dsem_agent.workers.prompts import WORKER_W_PROPOSALS_SYSTEM, WORKER_USER
+from dsem_agent.utils.llm import (
+    get_generate_config,
+    make_worker_tools,
+    multi_turn_generate,
+    parse_json_response,
+)
 from dsem_agent.workers.agents import (
     _format_indicators,
     _get_outcome_description,
 )
-from dsem_agent.utils.llm import get_generate_config, make_worker_tools, multi_turn_generate, parse_json_response
-
-from evals.common import (
-    get_eval_questions,
-    get_sample_chunks_worker,
-    load_eval_config,
-    load_dsem_model_by_question_id,
-)
-
+from dsem_agent.workers.prompts import WORKER_USER, WORKER_W_PROPOSALS_SYSTEM
 
 # Load config
 _CONFIG = load_eval_config()
@@ -296,7 +299,7 @@ def judge_solver(worker_model: str | None = None, worker_timeout: float | None =
                     generate_worker_output(worker_model, chunk, question, dsem_model),
                     timeout=worker_timeout,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 worker_output = f"[TIMEOUT: Worker did not finish within {worker_timeout}s]"
             except Exception as e:
                 worker_output = f"[ERROR: {e}]"
