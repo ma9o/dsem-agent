@@ -23,7 +23,6 @@ from typing import TYPE_CHECKING, Any
 import jax
 import jax.numpy as jnp
 import jax.random as random
-import jax.scipy.linalg as jla
 
 from dsem_agent.models.likelihoods.emissions import get_emission_fn
 from dsem_agent.models.ssm.discretization import discretize_system_batched
@@ -128,16 +127,13 @@ def _log_q_trajectory(z, phi):
     m = phi["m"]
     log_S_diag = phi["log_S_diag"]
     C = phi["C"]
-    T, D = m.shape
+    T, _D = m.shape
     S_diag = jnp.exp(log_S_diag)
 
     # log q(z_T | phi_T) = log N(z_T; m_T, diag(S_T^2))
-    diff_T = z[T - 1] - m[T - 1]
-    log_q_T = (
-        -0.5 * D * jnp.log(2 * jnp.pi)
-        - jnp.sum(log_S_diag[T - 1])
-        - 0.5 * jnp.sum((diff_T / S_diag[T - 1]) ** 2)
-    )
+    from numpyro.distributions import Normal
+
+    log_q_T = Normal(m[T - 1], S_diag[T - 1]).log_prob(z[T - 1]).sum()
 
     if T == 1:
         return log_q_T
@@ -145,12 +141,7 @@ def _log_q_trajectory(z, phi):
     # log q(z_t | z_{t+1}, phi_t) for t = 0..T-2
     def _log_q_step(t):
         mean_t = m[t] + C[t] @ (z[t + 1] - m[t + 1])
-        diff_t = z[t] - mean_t
-        return (
-            -0.5 * D * jnp.log(2 * jnp.pi)
-            - jnp.sum(log_S_diag[t])
-            - 0.5 * jnp.sum((diff_t / S_diag[t]) ** 2)
-        )
+        return Normal(mean_t, S_diag[t]).log_prob(z[t]).sum()
 
     log_q_rest = jax.vmap(_log_q_step)(jnp.arange(T - 1))
     return log_q_T + jnp.sum(log_q_rest)
@@ -192,22 +183,17 @@ def _compute_elbo(
     total_emission_ll = jnp.sum(emission_lls)
 
     # 2. Transition log-probs (forward model)
+    from numpyro.distributions import MultivariateNormal
+
     def _transition_ll(z_t, z_tm1, Ad_t, Qd_t, cd_t):
         mean = Ad_t @ z_tm1 + cd_t
-        diff = z_t - mean
-        Qd_reg = Qd_t + jitter
-        _, logdet = jnp.linalg.slogdet(Qd_reg)
-        mahal = diff @ jla.solve(Qd_reg, diff, assume_a="pos")
-        return -0.5 * (D * jnp.log(2 * jnp.pi) + logdet + mahal)
+        return MultivariateNormal(mean, covariance_matrix=Qd_t + jitter).log_prob(z_t)
 
     # Initial state: z_0 | prior
     z0_pred = Ad[0] @ init_mean + cd[0]
     P0_pred = Ad[0] @ init_cov @ Ad[0].T + Qd[0]
     P0_pred = 0.5 * (P0_pred + P0_pred.T) + jitter
-    diff0 = z[0] - z0_pred
-    _, logdet0 = jnp.linalg.slogdet(P0_pred)
-    mahal0 = diff0 @ jla.solve(P0_pred, diff0, assume_a="pos")
-    init_ll = -0.5 * (D * jnp.log(2 * jnp.pi) + logdet0 + mahal0)
+    init_ll = MultivariateNormal(z0_pred, covariance_matrix=P0_pred).log_prob(z[0])
 
     if T > 1:
         trans_lls = jax.vmap(_transition_ll)(z[1:], z[:-1], Ad[1:], Qd[1:], cd[1:])
@@ -287,7 +273,7 @@ class StructuredVILikelihood:
         phi = _init_variational_params(T, n, rng_key)
 
         # Optimize variational parameters for this theta
-        optimizer = optax.adam(self.vi_lr)
+        optimizer = optax.chain(optax.clip_by_global_norm(10.0), optax.adam(self.vi_lr))
         opt_state = optimizer.init(phi)
 
         def _mc_elbo(phi, rng_key):
@@ -317,7 +303,6 @@ class StructuredVILikelihood:
             phi, opt_state, rng_key = carry
             rng_key, step_key = random.split(rng_key)
             _elbo, grads = jax.value_and_grad(_mc_elbo)(phi, step_key)
-            grads = jax.tree.map(lambda g: jnp.clip(g, -10.0, 10.0), grads)
             updates, opt_state_new = optimizer.update(grads, opt_state)
             phi_new = optax.apply_updates(phi, updates)
             return (phi_new, opt_state_new, rng_key), None
