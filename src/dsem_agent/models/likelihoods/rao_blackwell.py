@@ -201,6 +201,28 @@ def _kalman_update_gaussian(
     return m_upd, P_upd, log_marg
 
 
+def _linearized_obs_params(
+    manifest_dist: str,
+    eta_pred: jnp.ndarray,
+    y: jnp.ndarray,
+    mask_float: jnp.ndarray,
+    params: dict,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Compute pseudo-observation noise and residual for linearized EKF update."""
+    n_manifest = eta_pred.shape[0]
+    if manifest_dist == "poisson":
+        rate = jnp.exp(eta_pred)
+        return jnp.diag(rate + 1e-8), (y - rate) * mask_float
+    elif manifest_dist == "gamma":
+        mean_pred = jnp.exp(eta_pred)
+        shape = params.get("obs_shape", 1.0)
+        return jnp.diag(mean_pred**2 / (shape + 1e-8) + 1e-8), (y - mean_pred) * mask_float
+    else:
+        # Gaussian, Student-t, or fallback
+        manifest_cov = params.get("manifest_cov", jnp.eye(n_manifest) * 0.1)
+        return manifest_cov + jnp.eye(n_manifest) * 1e-8, (y - eta_pred) * mask_float
+
+
 def _linearized_update(
     m: jnp.ndarray,
     P: jnp.ndarray,
@@ -221,34 +243,8 @@ def _linearized_update(
     n_manifest = H.shape[0]
     mask_float = obs_mask.astype(jnp.float32)
 
-    # Compute the predicted observation and pseudo-Jacobian
-    eta_pred = H @ m + d  # predicted linear predictor
-
-    if manifest_dist == "poisson":
-        # g(eta) = exp(eta), so g'(eta) = exp(eta)
-        rate = jnp.exp(eta_pred)
-        # Pseudo-observation noise: Var[y|eta] = rate (Poisson variance)
-        R_pseudo = jnp.diag(rate + 1e-8)
-        # Pseudo-innovation: y - E[y|eta] = y - rate
-        v = (y - rate) * mask_float
-    elif manifest_dist == "student_t":
-        # Location-scale: y ~ t(df, eta, scale)
-        # Linearization: same as Gaussian but with heavier tails
-        manifest_cov = params.get("manifest_cov", jnp.eye(n_manifest) * 0.1)
-        R_pseudo = manifest_cov + jnp.eye(n_manifest) * 1e-8
-        v = (y - eta_pred) * mask_float
-    elif manifest_dist == "gamma":
-        # g(eta) = exp(eta), mean = exp(eta)
-        mean_pred = jnp.exp(eta_pred)
-        shape = params.get("obs_shape", 1.0)
-        # Var[y|eta] = mean^2 / shape (Gamma variance)
-        R_pseudo = jnp.diag(mean_pred**2 / (shape + 1e-8) + 1e-8)
-        v = (y - mean_pred) * mask_float
-    else:
-        # Fallback: Gaussian
-        manifest_cov = params.get("manifest_cov", jnp.eye(n_manifest) * 0.1)
-        R_pseudo = manifest_cov + jnp.eye(n_manifest) * 1e-8
-        v = (y - eta_pred) * mask_float
+    eta_pred = H @ m + d
+    R_pseudo, v = _linearized_obs_params(manifest_dist, eta_pred, y, mask_float, params)
 
     # Inflate for missing
     large_var = 1e10
