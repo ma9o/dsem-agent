@@ -197,19 +197,6 @@ def _node_name(construct: str, timestep: str) -> str:
     return f"{construct}_{timestep}"
 
 
-def _parse_node_name(node: str) -> tuple[str, str | None]:
-    """Parse node name back to (construct, timestep).
-
-    Returns (construct, timestep) where timestep is 't', '{t-1}', or None for time-invariant.
-    """
-    if node.endswith("_t"):
-        return node[:-2], "t"
-    elif node.endswith("_{t-1}"):
-        return node[:-6], "{t-1}"
-    else:
-        return node, None
-
-
 def unroll_temporal_dag(
     latent_model: dict,
     observed_constructs: set[str],
