@@ -491,6 +491,7 @@ class TestRBPFGradient:
     def test_gradient_finite_student_t(self):
         self._grad_test("student_t", {"obs_df": 5.0})
 
+    @pytest.mark.slow
     def test_gradient_finite_gamma(self):
         self._grad_test("gamma", {"obs_shape": 2.0})
 
@@ -913,6 +914,7 @@ class TestRBPFKalmanConsistency:
         ll_rb = self._rbpf_ll(ct, meas, init, obs, dt, n_particles=1000)
         assert abs(ll_rb - ll_kf) < 1.5, f"RBPF={ll_rb:.2f}, Kalman={ll_kf:.2f}"
 
+    @pytest.mark.slow
     def test_kalman_match_irregular_dt(self):
         """RBPF ≈ Kalman with irregular time intervals."""
         ct, meas, init = _make_standard_params()
@@ -991,6 +993,7 @@ class TestRBPFGradientConsistency:
             grad_fd[i] = (float(fn(x_plus)) - float(fn(x_minus))) / (2 * eps)
         return jnp.array(grad_fd)
 
+    @pytest.mark.slow
     def test_grad_drift_gaussian(self):
         """RBPF gradient w.r.t. drift matches finite differences (Gaussian obs)."""
         ct, meas, init = _make_standard_params()

@@ -20,6 +20,7 @@ from tests.helpers import assert_recovery_ci
 class TestLaplaceEM:
     """Laplace-EM smoke and recovery tests on 1D LGSS."""
 
+    @pytest.mark.slow
     @pytest.mark.timeout(120)
     def test_laplace_em_smoke(self, lgss_data):
         """Laplace-EM pipeline check on 1D LGSS (D=3).
@@ -122,6 +123,7 @@ class TestLaplaceEM:
 class TestStructuredVI:
     """Structured VI smoke and recovery tests on 1D LGSS."""
 
+    @pytest.mark.slow
     @pytest.mark.timeout(120)
     def test_structured_vi_smoke(self, lgss_data):
         """Structured VI pipeline check on 1D LGSS (D=3).
@@ -215,6 +217,7 @@ class TestStructuredVI:
 class TestDPF:
     """DPF smoke and recovery tests on 1D LGSS."""
 
+    @pytest.mark.slow
     @pytest.mark.timeout(180)
     def test_dpf_smoke(self, lgss_data):
         """DPF pipeline check on 1D LGSS (D=3).

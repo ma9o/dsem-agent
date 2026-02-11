@@ -77,6 +77,7 @@ class TestHessMC2Recovery:
 class TestPGASRecovery:
     """PGAS smoke and recovery tests on 1D LGSS."""
 
+    @pytest.mark.slow
     @pytest.mark.timeout(60)
     def test_pgas_smoke(self, lgss_data):
         """PGAS pipeline check on 1D LGSS (D=3).
@@ -172,6 +173,7 @@ class TestPGASRecovery:
 class TestTemperedSMCRecovery:
     """Tempered SMC smoke and recovery tests on 1D LGSS."""
 
+    @pytest.mark.slow
     @pytest.mark.timeout(60)
     def test_tempered_smc_smoke(self, lgss_data):
         """Tempered SMC pipeline check on 1D LGSS (D=3).

@@ -335,6 +335,7 @@ class TestSimulateSSM:
 class TestProfileLikelihood:
     """Test profile likelihood function."""
 
+    @pytest.mark.slow
     def test_identified_model(self):
         """Well-identified model: all params should be classified as identified."""
         from dsem_agent.utils.parametric_id import profile_likelihood
@@ -374,6 +375,7 @@ class TestProfileLikelihood:
         n_struct = sum(1 for v in summary.values() if v == "structurally_unidentifiable")
         assert n_struct == 0, f"Unexpected structural non-identifiability: {summary}"
 
+    @pytest.mark.slow
     def test_non_identified_model(self):
         """Non-identified model (2 latent, 1 manifest) should flag issues."""
         from dsem_agent.utils.parametric_id import profile_likelihood, simulate_ssm
@@ -518,6 +520,7 @@ class TestProfileLikelihoodResult:
 class TestSBCCheck:
     """Test simulation-based calibration."""
 
+    @pytest.mark.slow
     def test_sbc_basic_structure(self):
         """SBC result should have correct shapes and fields."""
         from dsem_agent.utils.parametric_id import sbc_check
@@ -636,6 +639,7 @@ class TestPowerScalingResult:
 class TestPowerScalingSensitivity:
     """Test post-fit power-scaling sensitivity."""
 
+    @pytest.mark.slow
     def test_power_scaling_basic(self):
         """After fitting with simple data, power scaling should produce valid output."""
         from dsem_agent.models.ssm.inference import InferenceResult

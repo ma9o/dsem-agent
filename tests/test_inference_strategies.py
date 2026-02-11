@@ -1552,6 +1552,7 @@ class TestHessMC2Smoke:
     quickly. Recovery test is in tests/test_recovery.py.
     """
 
+    @pytest.mark.slow
     @pytest.mark.timeout(30)
     def test_lgss_hessian_smoke(self, lgss_data):
         """Hess-MC² Hessian proposal on 1D LGSS (D=3) — pipeline check.
@@ -1754,6 +1755,7 @@ class TestTemperedSMCAdaptive:
 
         return {"observations": observations, "times": times, "spec": spec}
 
+    @pytest.mark.slow
     @pytest.mark.timeout(60)
     def test_adaptive_tempering_reaches_beta_one(self, lgss_data):
         """Adaptive tempering should reach beta=1.0."""
@@ -1824,6 +1826,7 @@ class TestTemperedSMCWasteFree:
 
         return {"observations": observations, "times": times, "spec": spec}
 
+    @pytest.mark.slow
     @pytest.mark.timeout(60)
     def test_waste_free_runs(self, lgss_data):
         """Waste-free mode should complete without error."""
@@ -1920,6 +1923,7 @@ class TestTemperedSMCMultiStepHMC:
 
         return {"observations": observations, "times": times, "spec": spec}
 
+    @pytest.mark.slow
     @pytest.mark.timeout(60)
     def test_multi_step_hmc_runs(self, lgss_data):
         """n_leapfrog=5 should complete without error."""
@@ -1993,6 +1997,7 @@ class TestPGASPreconditioned:
 
         return {"observations": observations, "times": times, "spec": spec}
 
+    @pytest.mark.slow
     @pytest.mark.timeout(60)
     def test_pgas_preconditioned_runs(self, lgss_data):
         """PGAS with preconditioned HMC should complete without error."""
@@ -2062,6 +2067,7 @@ class TestPGASOptimalProposal:
 
         return {"observations": observations, "times": times, "spec": spec}
 
+    @pytest.mark.slow
     @pytest.mark.timeout(60)
     def test_pgas_optimal_proposal_gaussian(self, lgss_data):
         """PGAS with optimal proposal should complete for Gaussian obs."""
@@ -2084,6 +2090,7 @@ class TestPGASOptimalProposal:
         assert isinstance(result, InferenceResult)
         assert result.diagnostics["gaussian_obs"] is True
 
+    @pytest.mark.slow
     @pytest.mark.timeout(60)
     def test_pgas_fallback_for_poisson(self):
         """PGAS should fall back to gradient proposal for non-Gaussian obs."""
@@ -2165,6 +2172,7 @@ class TestPGASBlockSampling:
 
         return {"observations": observations, "times": times, "spec": spec}
 
+    @pytest.mark.slow
     @pytest.mark.timeout(60)
     def test_pgas_block_sampling_runs(self, lgss_data):
         """PGAS with block sampling should complete and have per-block diagnostics."""
