@@ -2,8 +2,7 @@
 
 This module provides reusable fixtures to reduce duplication across test files:
 - Factory fixtures for creating schema objects (constructs, indicators)
-- Canonical graph fixtures (simple chains, confounded graphs, front-door)
-- Sample DataFrames for aggregation tests
+- Stage 1b fixtures (identifiability / proxy resolution)
 - Shared SSM data fixtures (lgss_data for recovery tests)
 
 For non-fixture helpers (MockPrediction, make_mock_generate), see helpers.py.
@@ -11,15 +10,12 @@ For non-fixture helpers (MockPrediction, make_mock_generate), see helpers.py.
 
 import jax.numpy as jnp
 import jax.random as random
-import polars as pl
 import pytest
 
 from dsem_agent.models.ssm import SSMSpec
 from dsem_agent.orchestrator.schemas import (
-    CausalEdge,
     Construct,
     Indicator,
-    LatentModel,
     Role,
     TemporalStatus,
 )
@@ -86,139 +82,6 @@ def indicator_factory():
         )
 
     return _make
-
-
-@pytest.fixture
-def latent_model_factory(construct_factory):
-    """Factory for creating LatentModel objects.
-
-    Usage:
-        def test_something(latent_model_factory):
-            model = latent_model_factory(
-                constructs=[("X", "daily", Role.EXOGENOUS), ("Y", "daily", Role.ENDOGENOUS, True)],
-                edges=[("X", "Y")]
-            )
-    """
-
-    def _make(
-        constructs: list[tuple],
-        edges: list[tuple[str, str]],
-    ) -> LatentModel:
-        construct_objs = []
-        for c in constructs:
-            if len(c) == 3:
-                name, gran, role = c
-                is_outcome = False
-            else:
-                name, gran, role, is_outcome = c
-            construct_objs.append(construct_factory(name, gran, role, is_outcome))
-
-        edge_objs = [
-            CausalEdge(cause=cause, effect=effect, description=f"{cause} causes {effect}")
-            for cause, effect in edges
-        ]
-
-        return LatentModel(constructs=construct_objs, edges=edge_objs)
-
-    return _make
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# CANONICAL GRAPH FIXTURES (dict format for identifiability tests)
-# ══════════════════════════════════════════════════════════════════════════════
-
-
-@pytest.fixture
-def simple_chain_latent():
-    """Simple chain: A -> B -> C (all observable, always identifiable)."""
-    return {
-        "constructs": [
-            {"name": "A", "role": "exogenous"},
-            {"name": "B", "role": "endogenous"},
-            {"name": "C", "role": "endogenous", "is_outcome": True},
-        ],
-        "edges": [
-            {"cause": "A", "effect": "B", "description": "A causes B"},
-            {"cause": "B", "effect": "C", "description": "B causes C"},
-        ],
-    }
-
-
-@pytest.fixture
-def simple_chain_measurement():
-    """Measurement model for simple_chain_latent (all observed)."""
-    return {
-        "indicators": [
-            {"name": "a_ind", "construct": "A", "how_to_measure": "test"},
-            {"name": "b_ind", "construct": "B", "how_to_measure": "test"},
-            {"name": "c_ind", "construct": "C", "how_to_measure": "test"},
-        ]
-    }
-
-
-@pytest.fixture
-def confounded_latent():
-    """Confounded graph: A -> B with U -> A, U -> B (U unobserved).
-
-    Creates A <-> B in projected ADMG, blocking identification.
-    """
-    return {
-        "constructs": [
-            {"name": "A", "role": "endogenous"},
-            {"name": "B", "role": "endogenous", "is_outcome": True},
-            {"name": "U", "role": "exogenous"},  # Unobserved confounder
-        ],
-        "edges": [
-            {"cause": "A", "effect": "B", "description": "A causes B"},
-            {"cause": "U", "effect": "A", "description": "U causes A"},
-            {"cause": "U", "effect": "B", "description": "U causes B"},
-        ],
-    }
-
-
-@pytest.fixture
-def confounded_measurement():
-    """Measurement model for confounded_latent (U unobserved)."""
-    return {
-        "indicators": [
-            {"name": "a_ind", "construct": "A", "how_to_measure": "test"},
-            {"name": "b_ind", "construct": "B", "how_to_measure": "test"},
-        ]
-    }
-
-
-@pytest.fixture
-def frontdoor_latent():
-    """Front-door graph: X -> M -> Y with U -> X, U -> Y.
-
-    X -> Y is identifiable via front-door criterion through M.
-    """
-    return {
-        "constructs": [
-            {"name": "X", "role": "endogenous"},
-            {"name": "M", "role": "endogenous"},  # Mediator
-            {"name": "Y", "role": "endogenous", "is_outcome": True},
-            {"name": "U", "role": "exogenous"},  # Unobserved confounder
-        ],
-        "edges": [
-            {"cause": "X", "effect": "M", "description": "X causes M"},
-            {"cause": "M", "effect": "Y", "description": "M causes Y"},
-            {"cause": "U", "effect": "X", "description": "U causes X"},
-            {"cause": "U", "effect": "Y", "description": "U causes Y"},
-        ],
-    }
-
-
-@pytest.fixture
-def frontdoor_measurement():
-    """Measurement model for frontdoor_latent (U unobserved)."""
-    return {
-        "indicators": [
-            {"name": "x_ind", "construct": "X", "how_to_measure": "test"},
-            {"name": "m_ind", "construct": "M", "how_to_measure": "test"},
-            {"name": "y_ind", "construct": "Y", "how_to_measure": "test"},
-        ]
-    }
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -418,100 +281,6 @@ def stage1b_dummy_chunks():
         "Day 2: Patient took 15mg treatment, outcome score was 7.",
         "Day 3: Patient took 10mg treatment, outcome score was 6.",
     ]
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# POLARS DATAFRAME FIXTURES
-# ══════════════════════════════════════════════════════════════════════════════
-
-
-@pytest.fixture
-def sample_aggregation_df():
-    """Sample DataFrame for aggregation tests with group/value columns."""
-    return pl.DataFrame(
-        {
-            "group": ["A", "A", "A", "B", "B", "B"],
-            "value": [1.0, 2.0, 3.0, 10.0, 20.0, 30.0],
-        }
-    )
-
-
-@pytest.fixture
-def sample_grouped_df():
-    """Sample DataFrame for grouped aggregation tests."""
-    return pl.DataFrame(
-        {
-            "group": ["A", "A", "B", "B"],
-            "value": [1.0, 3.0, 10.0, 20.0],
-        }
-    )
-
-
-@pytest.fixture
-def daily_aggregation_schema():
-    """DSEMModel schema with daily causal_granularity constructs."""
-    return {
-        "latent": {
-            "constructs": [
-                {"name": "body_temp", "causal_granularity": "daily"},
-                {"name": "activity", "causal_granularity": "daily"},
-            ],
-            "edges": [],
-        },
-        "measurement": {
-            "indicators": [
-                {
-                    "name": "temperature",
-                    "construct_name": "body_temp",
-                    "aggregation": "mean",
-                },
-                {
-                    "name": "step_count",
-                    "construct_name": "activity",
-                    "aggregation": "sum",
-                },
-            ],
-        },
-    }
-
-
-@pytest.fixture
-def worker_measurement_dfs():
-    """Sample worker dataframes with timestamps.
-
-    Data layout:
-    - 2024-01-01: temperature=[20, 22], step_count=[5000, 2000]
-    - 2024-01-02: temperature=[24], step_count=[3000, 4000]
-    """
-    df1 = pl.DataFrame(
-        {
-            "indicator": [
-                "temperature",
-                "temperature",
-                "step_count",
-                "step_count",
-            ],
-            "value": [20.0, 22.0, 5000, 3000],
-            "timestamp": [
-                "2024-01-01 10:00",
-                "2024-01-01 14:00",
-                "2024-01-01 08:00",
-                "2024-01-02 09:00",
-            ],
-        },
-        schema={"indicator": pl.Utf8, "value": pl.Object, "timestamp": pl.Utf8},
-    )
-
-    df2 = pl.DataFrame(
-        {
-            "indicator": ["temperature", "step_count", "step_count"],
-            "value": [24.0, 2000, 4000],
-            "timestamp": ["2024-01-02 12:00", "2024-01-01 20:00", "2024-01-02 18:00"],
-        },
-        schema={"indicator": pl.Utf8, "value": pl.Object, "timestamp": pl.Utf8},
-    )
-
-    return [df1, df2]
 
 
 # ══════════════════════════════════════════════════════════════════════════════
