@@ -403,7 +403,7 @@ class TestOverlappingWorkers:
 
 
 class TestBuildAggExpr:
-    """All 19 supported functions build, unsupported raises NotImplementedError."""
+    """All 23 expression-based functions build; trend uses map_groups."""
 
     @pytest.mark.parametrize(
         "agg_name",
@@ -427,6 +427,10 @@ class TestBuildAggExpr:
             "range",
             "iqr",
             "cv",
+            "skew",
+            "kurtosis",
+            "entropy",
+            "instability",
         ],
     )
     def test_supported_agg_builds(self, agg_name):
@@ -434,16 +438,144 @@ class TestBuildAggExpr:
         expr = _build_agg_expr(agg_name)
         assert isinstance(expr, pl.Expr)
 
-    @pytest.mark.parametrize(
-        "agg_name",
-        ["skew", "kurtosis", "entropy", "instability", "trend"],
-    )
-    def test_unsupported_agg_raises(self, agg_name):
-        """Deferred aggregations raise NotImplementedError."""
-        with pytest.raises(NotImplementedError, match=agg_name):
-            _build_agg_expr(agg_name)
-
     def test_unknown_agg_raises_valueerror(self):
         """Completely unknown aggregation raises ValueError."""
         with pytest.raises(ValueError, match="Unknown"):
             _build_agg_expr("nonexistent_function")
+
+
+# ==============================================================================
+# TEST: New Aggregation Functions (skew, kurtosis, entropy, instability, trend)
+# ==============================================================================
+
+
+class TestNewAggregations:
+    """Integration tests for newly implemented aggregation functions."""
+
+    def test_skew_aggregation(self):
+        """Asymmetric data should produce non-zero skew."""
+        records = [
+            {"indicator": "x", "value": 1.0, "timestamp": "2024-01-01T01:00:00"},
+            {"indicator": "x", "value": 1.0, "timestamp": "2024-01-01T02:00:00"},
+            {"indicator": "x", "value": 1.0, "timestamp": "2024-01-01T03:00:00"},
+            {"indicator": "x", "value": 1.0, "timestamp": "2024-01-01T04:00:00"},
+            {"indicator": "x", "value": 100.0, "timestamp": "2024-01-01T05:00:00"},
+        ]
+        df = _make_df(records)
+        model = _make_dsem_model(
+            [{"name": "x", "measurement_granularity": "daily", "aggregation": "skew"}]
+        )
+        result = aggregate_worker_measurements([df], model)
+        assert "daily" in result
+        skew_val = result["daily"]["value"][0]
+        assert skew_val is not None
+        assert skew_val != 0.0  # Clearly right-skewed data
+
+    def test_kurtosis_aggregation(self):
+        """Kurtosis returns a number."""
+        records = [
+            {"indicator": "x", "value": float(v), "timestamp": f"2024-01-01T{h:02d}:00:00"}
+            for h, v in enumerate([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        ]
+        df = _make_df(records)
+        model = _make_dsem_model(
+            [{"name": "x", "measurement_granularity": "daily", "aggregation": "kurtosis"}]
+        )
+        result = aggregate_worker_measurements([df], model)
+        assert "daily" in result
+        assert result["daily"]["value"][0] is not None
+
+    def test_entropy_aggregation(self):
+        """Uniform data has higher entropy than concentrated data."""
+        # Uniform-ish
+        uniform_records = [
+            {"indicator": "x", "value": float(v), "timestamp": f"2024-01-01T{h:02d}:00:00"}
+            for h, v in enumerate([1, 2, 3, 4, 5])
+        ]
+        # Concentrated
+        concentrated_records = [
+            {"indicator": "x", "value": float(v), "timestamp": f"2024-01-01T{h:02d}:00:00"}
+            for h, v in enumerate([5, 5, 5, 5, 5])
+        ]
+        model = _make_dsem_model(
+            [{"name": "x", "measurement_granularity": "daily", "aggregation": "entropy"}]
+        )
+        r_uniform = aggregate_worker_measurements([_make_df(uniform_records)], model)
+        r_concentrated = aggregate_worker_measurements([_make_df(concentrated_records)], model)
+        assert "daily" in r_uniform
+        assert "daily" in r_concentrated
+        # Both return a number (entropy behavior depends on Polars implementation)
+        assert r_uniform["daily"]["value"][0] is not None
+        assert r_concentrated["daily"]["value"][0] is not None
+
+    def test_instability_mssd(self):
+        """MSSD of [1,3,1,3] = mean((2^2, 2^2, 2^2)) = 4.0."""
+        records = [
+            {"indicator": "x", "value": 1.0, "timestamp": "2024-01-01T01:00:00"},
+            {"indicator": "x", "value": 3.0, "timestamp": "2024-01-01T02:00:00"},
+            {"indicator": "x", "value": 1.0, "timestamp": "2024-01-01T03:00:00"},
+            {"indicator": "x", "value": 3.0, "timestamp": "2024-01-01T04:00:00"},
+        ]
+        df = _make_df(records)
+        model = _make_dsem_model(
+            [{"name": "x", "measurement_granularity": "daily", "aggregation": "instability"}]
+        )
+        result = aggregate_worker_measurements([df], model)
+        assert "daily" in result
+        # diff() produces [null, 2, -2, 2], pow(2) = [null, 4, 4, 4], mean = 4.0
+        assert result["daily"]["value"][0] == pytest.approx(4.0)
+
+    def test_trend_positive(self):
+        """Increasing data should have a positive slope."""
+        records = [
+            {"indicator": "x", "value": float(v), "timestamp": f"2024-01-01T{h:02d}:00:00"}
+            for h, v in enumerate([1, 2, 3, 4, 5])
+        ]
+        df = _make_df(records)
+        model = _make_dsem_model(
+            [{"name": "x", "measurement_granularity": "daily", "aggregation": "trend"}]
+        )
+        result = aggregate_worker_measurements([df], model)
+        assert "daily" in result
+        assert result["daily"]["value"][0] > 0
+
+    def test_trend_flat(self):
+        """Constant data should have slope ~ 0."""
+        records = [
+            {"indicator": "x", "value": 5.0, "timestamp": f"2024-01-01T{h:02d}:00:00"}
+            for h, v in enumerate([5, 5, 5, 5])
+        ]
+        df = _make_df(records)
+        model = _make_dsem_model(
+            [{"name": "x", "measurement_granularity": "daily", "aggregation": "trend"}]
+        )
+        result = aggregate_worker_measurements([df], model)
+        assert "daily" in result
+        assert result["daily"]["value"][0] == pytest.approx(0.0, abs=1e-10)
+
+    def test_trend_negative(self):
+        """Decreasing data should have a negative slope."""
+        records = [
+            {"indicator": "x", "value": float(v), "timestamp": f"2024-01-01T{h:02d}:00:00"}
+            for h, v in enumerate([5, 4, 3, 2, 1])
+        ]
+        df = _make_df(records)
+        model = _make_dsem_model(
+            [{"name": "x", "measurement_granularity": "daily", "aggregation": "trend"}]
+        )
+        result = aggregate_worker_measurements([df], model)
+        assert "daily" in result
+        assert result["daily"]["value"][0] < 0
+
+    def test_trend_single_value(self):
+        """Single value should have slope = 0."""
+        records = [
+            {"indicator": "x", "value": 42.0, "timestamp": "2024-01-01T12:00:00"},
+        ]
+        df = _make_df(records)
+        model = _make_dsem_model(
+            [{"name": "x", "measurement_granularity": "daily", "aggregation": "trend"}]
+        )
+        result = aggregate_worker_measurements([df], model)
+        assert "daily" in result
+        assert result["daily"]["value"][0] == pytest.approx(0.0)

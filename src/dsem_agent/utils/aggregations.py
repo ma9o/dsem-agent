@@ -10,6 +10,7 @@ handles measurement_granularity -> continuous time.
       -> CT-SEM discretization -> continuous time
 """
 
+import numpy as np
 import polars as pl
 
 # Granularity -> Polars truncation interval
@@ -21,15 +22,16 @@ _TRUNCATE_INTERVAL = {
     "yearly": "1y",
 }
 
-# Aggregations that are not yet implemented
-_DEFERRED_AGGREGATIONS = {"skew", "kurtosis", "entropy", "instability", "trend"}
+# Aggregations that require map_groups (cannot be expressed as a single Polars expr)
+_MAP_GROUPS_AGGREGATIONS = {"trend"}
 
 
 def _build_agg_expr(agg_name: str) -> pl.Expr:
     """Map an aggregation name to a Polars expression over the 'value' column.
 
-    Supports 19 of 24 aggregation functions. Raises NotImplementedError for
-    skew, kurtosis, entropy, instability, trend.
+    Supports 23 of 24 aggregation functions as expressions. The 'trend'
+    aggregation requires map_groups and is handled separately in
+    aggregate_worker_measurements.
     """
     col = pl.col("value")
 
@@ -45,6 +47,9 @@ def _build_agg_expr(agg_name: str) -> pl.Expr:
         "count": col.count(),
         "median": col.median(),
         "n_unique": col.n_unique(),
+        "skew": col.skew(),
+        "kurtosis": col.kurtosis(),
+        "entropy": col.entropy(),
     }
 
     if agg_name in simple:
@@ -72,13 +77,33 @@ def _build_agg_expr(agg_name: str) -> pl.Expr:
     if agg_name == "cv":
         return (col.std() / col.mean()).alias("value")
 
-    if agg_name in _DEFERRED_AGGREGATIONS:
-        raise NotImplementedError(
-            f"Aggregation '{agg_name}' is not yet implemented. "
-            f"Deferred: {', '.join(sorted(_DEFERRED_AGGREGATIONS))}"
-        )
+    # MSSD: mean squared successive differences
+    if agg_name == "instability":
+        return (col.diff().pow(2).mean()).alias("value")
 
     raise ValueError(f"Unknown aggregation function: '{agg_name}'")
+
+
+def _build_map_groups_fn(agg_name: str):
+    """Return a callable for use with group_by().map_groups().
+
+    Used for aggregations that cannot be expressed as a single Polars expression.
+    """
+    if agg_name == "trend":
+
+        def _ols_slope(df: pl.DataFrame) -> pl.DataFrame:
+            values = df["value"].to_numpy()
+            n = len(values)
+            if n < 2:
+                slope = 0.0
+            else:
+                x = np.arange(n, dtype=np.float64)
+                slope = float(np.polyfit(x, values, 1)[0])
+            return df.head(1).with_columns(pl.lit(slope).alias("value"))
+
+        return _ols_slope
+
+    raise ValueError(f"Unknown map_groups aggregation: '{agg_name}'")
 
 
 def aggregate_worker_measurements(
@@ -187,14 +212,23 @@ def aggregate_worker_measurements(
                     continue
 
                 agg_name = indicator_info[ind_name]["aggregation"]
-                agg_expr = _build_agg_expr(agg_name)
 
-                agged = (
-                    ind_data.group_by("time_bucket", maintain_order=True)
-                    .agg(agg_expr)
-                    .with_columns(pl.lit(ind_name).alias("indicator"))
-                    .select("indicator", "value", "time_bucket")
-                )
+                if agg_name in _MAP_GROUPS_AGGREGATIONS:
+                    fn = _build_map_groups_fn(agg_name)
+                    agged = (
+                        ind_data.group_by("time_bucket", maintain_order=True)
+                        .map_groups(fn)
+                        .with_columns(pl.lit(ind_name).alias("indicator"))
+                        .select("indicator", "value", "time_bucket")
+                    )
+                else:
+                    agg_expr = _build_agg_expr(agg_name)
+                    agged = (
+                        ind_data.group_by("time_bucket", maintain_order=True)
+                        .agg(agg_expr)
+                        .with_columns(pl.lit(ind_name).alias("indicator"))
+                        .select("indicator", "value", "time_bucket")
+                    )
                 agg_frames.append(agged)
 
             if agg_frames:
