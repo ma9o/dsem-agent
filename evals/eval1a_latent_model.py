@@ -30,7 +30,7 @@ from inspect_ai.solver import Generate, TaskState, solver, system_message
 
 from dsem_agent.orchestrator.prompts import latent_model
 from dsem_agent.orchestrator.schemas import LatentModel
-from dsem_agent.orchestrator.scoring import _count_rule_points_detailed
+from dsem_agent.orchestrator.scoring import _count_rule_points
 from dsem_agent.orchestrator.stage1a import Stage1aResult, run_stage1a
 from dsem_agent.utils.llm import make_orchestrator_generate_fn
 from evals.common import (
@@ -119,16 +119,14 @@ def latent_model_scorer():
                 explanation=f"ERROR: Schema validation failed - {e}",
             )
 
-        # Count points with detailed breakdown
-        scoring = _count_rule_points_detailed(structure)
+        # Count points
+        total = _count_rule_points(structure)
 
         return Score(
-            value=scoring["total"],
+            value=total,
             answer=json.dumps(result.latent_model, indent=2)[:500],
-            explanation=scoring["breakdown"],
+            explanation=f"Score: {total} points",
             metadata={
-                "constructs": scoring["constructs"],
-                "edges": scoring["edges"],
                 "n_constructs": len(structure.constructs),
                 "n_edges": len(structure.edges),
             },
