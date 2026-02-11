@@ -1,0 +1,481 @@
+"""Inspect AI evaluation for functional specification quality.
+
+Evaluates the LLM's ability to propose a correct ModelSpec given a dsem_model.
+Tests Stage 4's propose_model_spec() against reference dsem_models, scoring
+across 5 dimensions: likelihoods, link functions, AR structure, model clock,
+and parameter constraints.
+
+Usage:
+    inspect eval evals/eval5_functional_spec.py --model anthropic/claude-sonnet-4-5-20250929
+    inspect eval evals/eval5_functional_spec.py --model google/vertex/gemini-3-flash-preview
+"""
+
+import sys
+from collections import Counter
+from pathlib import Path
+
+# Add project root to path for evals.common import
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from inspect_ai import Task, task
+from inspect_ai.dataset import MemoryDataset, Sample
+from inspect_ai.model import get_model
+from inspect_ai.scorer import Score, Target, accuracy, scorer, stderr
+from inspect_ai.solver import Generate, TaskState, solver
+
+from dsem_agent.orchestrator.stage4_orchestrator import propose_model_spec
+from dsem_agent.utils.llm import make_orchestrator_generate_fn
+from evals.common import (
+    get_eval_questions,
+    load_dsem_model_by_question_id,
+)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Scoring rubric constants
+# ══════════════════════════════════════════════════════════════════════════════
+
+VALID_LIKELIHOODS: dict[str, set[str]] = {
+    "binary": {"Bernoulli"},
+    "count": {"Poisson", "NegativeBinomial"},
+    "continuous": {"Normal", "Gamma", "Beta"},
+    "ordinal": {"OrderedLogistic"},
+    "categorical": {"Categorical", "OrderedLogistic"},
+}
+
+VALID_LINKS: dict[str, set[str]] = {
+    "Bernoulli": {"logit", "probit"},
+    "Poisson": {"log"},
+    "NegativeBinomial": {"log"},
+    "Normal": {"identity"},
+    "Gamma": {"log"},
+    "Beta": {"logit"},
+    "OrderedLogistic": {"cumulative_logit"},
+    "Categorical": {"softmax"},
+}
+
+EXPECTED_CONSTRAINTS: dict[str, str] = {
+    "ar_coefficient": "unit_interval",
+    "residual_sd": "positive",
+    "fixed_effect": "none",
+    "loading": "positive",
+    "random_intercept_sd": "positive",
+    "random_slope_sd": "positive",
+    "correlation": "correlation",
+}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Dataset
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def build_synthetic_data_summary(dsem_model: dict) -> str:
+    """Build a synthetic data summary from dsem_model structure.
+
+    Provides enough context for the LLM to propose a sensible model spec
+    without needing real data.
+    """
+    indicators = dsem_model.get("measurement", {}).get("indicators", [])
+    constructs = dsem_model.get("latent", {}).get("constructs", [])
+
+    lines = ["Data Summary (synthetic from model structure):"]
+    lines.append(f"  Total indicators: {len(indicators)}")
+    lines.append(f"  Total constructs: {len(constructs)}")
+
+    # Summarize granularities
+    grans = Counter(ind.get("measurement_granularity", "unknown") for ind in indicators)
+    lines.append(f"  Granularities: {dict(grans)}")
+
+    # Summarize dtypes
+    dtypes = Counter(ind.get("measurement_dtype", "unknown") for ind in indicators)
+    lines.append(f"  Data types: {dict(dtypes)}")
+
+    # Per-indicator summary
+    lines.append("  Per indicator:")
+    for ind in indicators:
+        name = ind.get("name", "?")
+        dtype = ind.get("measurement_dtype", "?")
+        gran = ind.get("measurement_granularity", "?")
+        construct = ind.get("construct", "?")
+        lines.append(f"    {name}: dtype={dtype}, granularity={gran}, construct={construct}")
+
+    # Construct temporal info
+    tv_constructs = [
+        c["name"]
+        for c in constructs
+        if c.get("temporal_status") == "time_varying" and c.get("role") == "endogenous"
+    ]
+    if tv_constructs:
+        lines.append(f"  Time-varying endogenous constructs ({len(tv_constructs)}):")
+        for name in tv_constructs[:10]:
+            lines.append(f"    - {name}")
+        if len(tv_constructs) > 10:
+            lines.append(f"    ... and {len(tv_constructs) - 10} more")
+
+    return "\n".join(lines)
+
+
+def create_eval_dataset() -> MemoryDataset:
+    """Create evaluation dataset from all 5 dsem_models."""
+    questions = get_eval_questions()
+
+    samples = []
+    for q in questions:
+        question_id = q["id"]
+        question = q["question"]
+        dsem_model = load_dsem_model_by_question_id(question_id)
+        data_summary = build_synthetic_data_summary(dsem_model)
+
+        samples.append(
+            Sample(
+                input=f"Propose a model specification for: {question}",
+                id=f"q{question_id}",
+                metadata={
+                    "question_id": question_id,
+                    "question": question,
+                    "dsem_model": dsem_model,
+                    "data_summary": data_summary,
+                },
+            )
+        )
+
+    return MemoryDataset(samples)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Solver
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def functional_spec_solver():
+    """Solver that calls propose_model_spec() and stores the result."""
+
+    @solver
+    def _solver():
+        async def solve(state: TaskState, generate: Generate) -> TaskState:  # noqa: ARG001
+            model = get_model()
+            gen_fn = make_orchestrator_generate_fn(model)
+
+            dsem_model = state.metadata["dsem_model"]
+            data_summary = state.metadata["data_summary"]
+            question = state.metadata["question"]
+
+            result = await propose_model_spec(
+                dsem_model=dsem_model,
+                data_summary=data_summary,
+                question=question,
+                generate=gen_fn,
+            )
+
+            state.metadata["model_spec"] = result.model_spec.model_dump()
+            state.output.completion = result.raw_response
+            return state
+
+        return solve
+
+    return _solver()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Scoring
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def _score_functional_spec(model_spec: dict, dsem_model: dict) -> dict:
+    """Score a ModelSpec against a reference dsem_model.
+
+    Returns dict with:
+        - total_points: raw points earned
+        - max_points: maximum possible points
+        - dimension_scores: per-dimension breakdown
+    """
+    indicators = dsem_model.get("measurement", {}).get("indicators", [])
+    constructs = dsem_model.get("latent", {}).get("constructs", [])
+    edges = dsem_model.get("latent", {}).get("edges", [])
+
+    likelihoods = model_spec.get("likelihoods", [])
+    parameters = model_spec.get("parameters", [])
+    model_clock = model_spec.get("model_clock", "")
+
+    # Likelihood lookup: variable -> (distribution, link)
+    likelihood_by_var = {}
+    for lik in likelihoods:
+        var = lik.get("variable", "")
+        likelihood_by_var[var] = {
+            "distribution": lik.get("distribution", ""),
+            "link": lik.get("link", ""),
+        }
+
+    # ── Dimension 1: Likelihood correctness (+2 per correct) ──
+    likelihood_points = 0
+    likelihood_max = len(indicators) * 2
+    likelihood_details = []
+
+    for ind in indicators:
+        name = ind["name"]
+        dtype = ind.get("measurement_dtype", "continuous")
+        valid_dists = VALID_LIKELIHOODS.get(dtype, set())
+
+        if name in likelihood_by_var:
+            dist = likelihood_by_var[name]["distribution"]
+            if dist in valid_dists:
+                likelihood_points += 2
+                likelihood_details.append(f"{name}: OK ({dist} for {dtype})")
+            else:
+                likelihood_details.append(
+                    f"{name}: WRONG ({dist} for {dtype}, expected one of {valid_dists})"
+                )
+        else:
+            likelihood_details.append(f"{name}: MISSING (no likelihood specified)")
+
+    # ── Dimension 2: Link function correctness (+1 per correct, requires correct dist) ──
+    link_points = 0
+    link_max = len(indicators)
+    link_details = []
+
+    for ind in indicators:
+        name = ind["name"]
+        dtype = ind.get("measurement_dtype", "continuous")
+        valid_dists = VALID_LIKELIHOODS.get(dtype, set())
+
+        if name in likelihood_by_var:
+            dist = likelihood_by_var[name]["distribution"]
+            link = likelihood_by_var[name]["link"]
+
+            # Only score link if distribution is correct
+            if dist in valid_dists:
+                valid_links = VALID_LINKS.get(dist, set())
+                if link in valid_links:
+                    link_points += 1
+                    link_details.append(f"{name}: OK ({link} for {dist})")
+                else:
+                    link_details.append(
+                        f"{name}: WRONG ({link} for {dist}, expected one of {valid_links})"
+                    )
+            else:
+                link_details.append(f"{name}: SKIP (distribution wrong)")
+        else:
+            link_details.append(f"{name}: MISSING")
+
+    # ── Dimension 3: AR(1) structure (+3 per TV endogenous with ar_coefficient) ──
+    tv_endogenous = [
+        c["name"]
+        for c in constructs
+        if c.get("temporal_status") == "time_varying" and c.get("role") == "endogenous"
+    ]
+    ar_max = len(tv_endogenous) * 3
+
+    # Check which constructs have an ar_coefficient parameter
+    param_roles = {}
+    for p in parameters:
+        role = p.get("role", "")
+        name = p.get("name", "")
+        param_roles.setdefault(role, []).append(name)
+
+    ar_params = set(param_roles.get("ar_coefficient", []))
+
+    ar_points = 0
+    ar_details = []
+    for construct_name in tv_endogenous:
+        # Check if any ar_coefficient parameter references this construct
+        # Heuristic: parameter name contains a normalized form of the construct name
+        construct_lower = construct_name.lower().replace(" ", "_")
+        has_ar = any(
+            construct_lower in p_name.lower() or construct_name.lower() in p_name.lower()
+            for p_name in ar_params
+        )
+        if has_ar:
+            ar_points += 3
+            ar_details.append(f"{construct_name}: OK (has AR coefficient)")
+        else:
+            ar_details.append(f"{construct_name}: MISSING (no AR coefficient found)")
+
+    # ── Dimension 4: Model clock (+5 if matches dominant granularity) ──
+    clock_max = 5
+    granularities = [ind.get("measurement_granularity", "finest") for ind in indicators]
+    gran_counts = Counter(granularities)
+
+    # Dominant granularity (excluding "finest" if there are others)
+    non_finest = {k: v for k, v in gran_counts.items() if k != "finest"}
+    if non_finest:
+        dominant = max(non_finest, key=non_finest.get)
+    else:
+        dominant = "finest"
+
+    clock_points = 5 if model_clock == dominant else 0
+    clock_detail = (
+        f"model_clock={model_clock}, dominant_granularity={dominant}"
+        f" -> {'MATCH' if clock_points else 'MISMATCH'}"
+    )
+
+    # ── Dimension 5: Parameter constraints (+1 per correct) ──
+    constraint_points = 0
+    constraint_max = len(parameters)
+    constraint_details = []
+
+    for p in parameters:
+        role = p.get("role", "")
+        constraint = p.get("constraint", "")
+        expected = EXPECTED_CONSTRAINTS.get(role)
+
+        if expected is not None:
+            if constraint == expected:
+                constraint_points += 1
+                constraint_details.append(f"{p['name']}: OK ({constraint})")
+            else:
+                constraint_details.append(f"{p['name']}: WRONG ({constraint}, expected {expected})")
+        else:
+            # Unknown role — give point if any constraint is set
+            constraint_points += 1
+            constraint_details.append(f"{p['name']}: OK (unknown role, accepted)")
+
+    # ── Bonuses ──
+    bonus_points = 0
+    bonus_max = 8  # 5 + 3
+    bonus_details = []
+
+    # Full likelihood coverage: all indicators have a likelihood
+    covered_indicators = set(likelihood_by_var.keys())
+    all_indicator_names = {ind["name"] for ind in indicators}
+    if all_indicator_names <= covered_indicators:
+        bonus_points += 5
+        bonus_details.append("Full likelihood coverage: +5")
+    else:
+        missing = all_indicator_names - covered_indicators
+        bonus_details.append(f"Missing likelihood coverage for: {missing}")
+
+    # Full edge coverage: all edges have at least one parameter
+    edge_pairs = {(e["cause"], e["effect"]) for e in edges}
+    param_names_lower = {p["name"].lower() for p in parameters}
+    covered_edges = 0
+    for cause, effect in edge_pairs:
+        cause_lower = cause.lower().replace(" ", "_")
+        effect_lower = effect.lower().replace(" ", "_")
+        if any(cause_lower in pn and effect_lower in pn for pn in param_names_lower):
+            covered_edges += 1
+    if covered_edges == len(edge_pairs) and len(edge_pairs) > 0:
+        bonus_points += 3
+        bonus_details.append("Full edge coverage: +3")
+    else:
+        bonus_details.append(f"Edge coverage: {covered_edges}/{len(edge_pairs)}")
+
+    total_points = (
+        likelihood_points
+        + link_points
+        + ar_points
+        + clock_points
+        + constraint_points
+        + bonus_points
+    )
+    max_points = likelihood_max + link_max + ar_max + clock_max + constraint_max + bonus_max
+
+    return {
+        "total_points": total_points,
+        "max_points": max_points,
+        "score": total_points / max_points if max_points > 0 else 0.0,
+        "dimensions": {
+            "likelihood": {
+                "points": likelihood_points,
+                "max": likelihood_max,
+                "details": likelihood_details,
+            },
+            "link": {
+                "points": link_points,
+                "max": link_max,
+                "details": link_details,
+            },
+            "ar_structure": {
+                "points": ar_points,
+                "max": ar_max,
+                "details": ar_details,
+            },
+            "model_clock": {
+                "points": clock_points,
+                "max": clock_max,
+                "detail": clock_detail,
+            },
+            "constraints": {
+                "points": constraint_points,
+                "max": constraint_max,
+                "details": constraint_details,
+            },
+            "bonuses": {
+                "points": bonus_points,
+                "max": bonus_max,
+                "details": bonus_details,
+            },
+        },
+    }
+
+
+@scorer(metrics=[accuracy(), stderr()])
+def functional_spec_scorer():
+    """Score functional specification quality.
+
+    Normalizes the multi-dimensional score to [0, 1] for the accuracy metric.
+    Threshold: >= 0.5 is scored as "C" (correct).
+    """
+
+    async def score(state: TaskState, target: Target) -> Score:  # noqa: ARG001
+        model_spec = state.metadata.get("model_spec")
+        dsem_model = state.metadata.get("dsem_model")
+
+        if model_spec is None:
+            return Score(
+                value="I",
+                answer="NO_SPEC",
+                explanation="No model_spec produced",
+            )
+
+        result = _score_functional_spec(model_spec, dsem_model)
+        normalized = result["score"]
+
+        # Build explanation from dimension scores
+        explanation_lines = [
+            f"Score: {result['total_points']}/{result['max_points']} = {normalized:.2%}",
+        ]
+        for dim_name, dim_data in result["dimensions"].items():
+            if isinstance(dim_data.get("details"), list):
+                explanation_lines.append(f"  {dim_name}: {dim_data['points']}/{dim_data['max']}")
+            elif "detail" in dim_data:
+                explanation_lines.append(
+                    f"  {dim_name}: {dim_data['points']}/{dim_data['max']} ({dim_data['detail']})"
+                )
+
+        value = "C" if normalized >= 0.5 else "I"
+
+        return Score(
+            value=value,
+            answer=f"{normalized:.2%}",
+            explanation="\n".join(explanation_lines),
+            metadata={
+                "normalized_score": normalized,
+                "total_points": result["total_points"],
+                "max_points": result["max_points"],
+                "dimensions": {
+                    k: {"points": v["points"], "max": v["max"]}
+                    for k, v in result["dimensions"].items()
+                },
+            },
+        )
+
+    return score
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Task
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+@task
+def functional_spec_eval():
+    """Evaluate LLM's functional specification quality.
+
+    Tests Stage 4's propose_model_spec() against 5 reference dsem_models,
+    scoring on likelihoods, links, AR structure, model clock, and constraints.
+    """
+    return Task(
+        dataset=create_eval_dataset(),
+        solver=[functional_spec_solver()],
+        scorer=functional_spec_scorer(),
+    )
