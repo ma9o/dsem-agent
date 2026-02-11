@@ -119,7 +119,7 @@ The `model()` method is a standard NumPyro model function. It:
 1. Samples all free parameters from their prior distributions via `_sample_drift()`, `_sample_diffusion()`, `_sample_cint()`, `_sample_lambda()`, `_sample_manifest_params()`, `_sample_t0_params()`.
 2. Converts Cholesky factors to covariance matrices.
 3. Samples noise family hyperparameters (e.g., `obs_df` for Student-t).
-4. Instantiates the likelihood backend (`KalmanLikelihood` or `ParticleLikelihood`).
+4. Delegates to the likelihood backend (`KalmanLikelihood` or `ParticleLikelihood`), passed in via `likelihood_backend` argument.
 5. Packs parameters into `CTParams`, `MeasurementParams`, `InitialStateParams`.
 6. Calls `backend.compute_log_likelihood()` and injects the result via `numpyro.factor("log_likelihood", ll)`.
 
@@ -261,10 +261,6 @@ Differentiable filtering library. Provides two backends:
 
 Both are invoked through `cuthbert.filtering.filter()`.
 
-### dynamax (indirect)
-
-Not directly imported, but cuthbert's Kalman filter implementation follows the same conventions as the dynamax library for linear Gaussian SSMs (prediction-error decomposition, square-root form via Cholesky factors).
-
 ### Data flow summary
 
 ```
@@ -293,7 +289,8 @@ inference.fit()
     |
     +-- SVI (default): ELBO optimization via ClippedAdam
     +-- NUTS: HMC with differentiable log-joint
-    +-- Hess-MC2 / PGAS / Tempered SMC: advanced SMC backends
+    +-- Hess-MC2 / PGAS / Tempered SMC: SMC-based backends
+    +-- Laplace-EM / Structured VI / DPF: specialized backends
     |
     v
 InferenceResult (posterior samples + diagnostics)
@@ -305,8 +302,14 @@ InferenceResult (posterior samples + diagnostics)
 - `src/dsem_agent/models/ssm/discretization.py` -- CT-to-DT conversion
 - `src/dsem_agent/models/ssm/inference.py` -- fit(), SVI, NUTS backends
 - `src/dsem_agent/models/ssm/utils.py` -- shared SMC utilities
+- `src/dsem_agent/models/ssm/mcmc_utils.py` -- shared MCMC building blocks (HMC, tempering)
+- `src/dsem_agent/models/ssm/tempered_core.py` -- core SMC loop shared by tempered/laplace/svi/dpf
+- `src/dsem_agent/models/ssm/laplace_em.py` -- IEKS + Laplace approximation
+- `src/dsem_agent/models/ssm/structured_vi.py` -- backward-factored structured VI
+- `src/dsem_agent/models/ssm/dpf.py` -- differentiable PF with learned proposal
 - `src/dsem_agent/models/likelihoods/base.py` -- CTParams, MeasurementParams, LikelihoodBackend protocol
 - `src/dsem_agent/models/likelihoods/kalman.py` -- KalmanLikelihood
 - `src/dsem_agent/models/likelihoods/particle.py` -- ParticleLikelihood, SSMAdapter
+- `src/dsem_agent/models/likelihoods/emissions.py` -- canonical emission log-probs
 - `src/dsem_agent/models/likelihoods/rao_blackwell.py` -- Rao-Blackwell callbacks, RBState
-- `src/dsem_agent/models/ssm_builder.py` -- SSMModelBuilder, model_spec_to_ssm_spec
+- `src/dsem_agent/models/ssm_builder.py` -- SSMModelBuilder

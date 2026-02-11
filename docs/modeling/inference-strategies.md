@@ -82,7 +82,7 @@ When dynamics are linear-Gaussian but observations are non-Gaussian, the Kalman 
 
 ## Inference Methods
 
-The `fit()` dispatcher in `src/dsem_agent/models/ssm/inference.py` routes to five methods:
+The `fit()` dispatcher in `src/dsem_agent/models/ssm/inference.py` routes to eight methods:
 
 | Method | Key | Type | Likelihood | Best For |
 |--------|-----|------|------------|----------|
@@ -91,6 +91,9 @@ The `fit()` dispatcher in `src/dsem_agent/models/ssm/inference.py` routes to fiv
 | Hess-MC^2 | `"hessmc2"` | SMC | Any | Multimodal posteriors, gradient-rich proposals |
 | PGAS | `"pgas"` | Gibbs + CSMC | Direct (no PF) | Non-Gaussian obs, trajectory-aware inference |
 | Tempered SMC | `"tempered_smc"` | SMC + tempering | Any | Robust bridging from prior to posterior |
+| Laplace-EM | `"laplace_em"` | IEKS + Laplace | Laplace approx | Fast mode-finding, linear-ish models |
+| Structured VI | `"structured_vi"` | Variational | Any | Trajectory-aware variational posterior |
+| DPF | `"dpf"` | Learned proposal PF | Learned | Amortized proposals for repeated inference |
 
 ### SVI (default)
 
@@ -204,11 +207,35 @@ Adaptive tempering with preconditioned HMC/MALA mutations. Bridges the prior-pos
 
 **When to use:** When the prior-posterior gap is large (vague priors, complex likelihoods), or when other methods get stuck in local modes. The tempering schedule provides a smooth path from prior to posterior.
 
+### Laplace-EM
+
+**Module:** `ssm/laplace_em.py` (`fit_laplace_em`)
+
+Iterated Extended Kalman Smoother (IEKS) finds the MAP latent trajectory, then a Laplace approximation provides the marginal likelihood. Can be used as a fast initialization for other methods or as a standalone approximate inference method via tempered SMC on the Laplace-approximated likelihood.
+
+**When to use:** Fast mode-finding for approximately linear models. Good as a warm-start for structured VI or tempered SMC.
+
+### Structured VI
+
+**Module:** `ssm/structured_vi.py` (`fit_structured_vi`)
+
+Variational inference with a backward-factored Gaussian family: q(z\_{1:T} | phi) = q(z\_T) prod q(z\_t | z\_{t+1}). This structured family captures temporal correlations that standard mean-field guides cannot. ELBO is optimized jointly over variational parameters phi and model parameters theta.
+
+**When to use:** When SVI's mean-field assumption is too restrictive and you need trajectory-aware uncertainty. Can be initialized from Laplace-EM output.
+
+### Differentiable Particle Filter (DPF)
+
+**Module:** `ssm/dpf.py` (`fit_dpf`)
+
+Learns a neural proposal network q\_phi(z\_t | z\_{t-1}, y\_t) by optimizing the VSMC bound on prior-predictive data. At inference time, the learned proposal replaces the bootstrap prior proposal, yielding lower-variance importance weights. Uses soft resampling during training for differentiability and standard systematic resampling at inference.
+
+**When to use:** When the bootstrap proposal is a poor match for the filtering distribution (high-dimensional latent states, informative observations). Amortizes proposal learning across datasets.
+
 ## Shared Infrastructure
 
 ### MCMC Utilities (`ssm/mcmc_utils.py`)
 
-Shared by PGAS and tempered SMC:
+Shared by PGAS, tempered SMC, Laplace-EM, structured VI, and DPF:
 
 - **`hmc_step`**: Generalized HMC/MALA with full mass matrix preconditioning via Cholesky factor. When `n_leapfrog=1`, reduces to preconditioned MALA. Includes MH accept/reject.
 - **`compute_weighted_chol_mass`**: Computes Cholesky of the weighted precision matrix (inverse covariance) from a particle cloud, matching the Stan/NUTS convention.
@@ -216,7 +243,7 @@ Shared by PGAS and tempered SMC:
 
 ### Site Discovery and Matrix Assembly (`ssm/utils.py`)
 
-Shared by Hess-MC^2, PGAS, and tempered SMC:
+Shared by all SMC-based methods (Hess-MC^2, PGAS, tempered SMC, Laplace-EM, structured VI, DPF):
 
 - **`_discover_sites`**: Traces the NumPyro model once to discover sample sites (names, shapes, distributions, bijective transforms).
 - **`_assemble_deterministics`**: Builds SSM matrices (drift, diffusion, lambda, etc.) from constrained parameter samples in pure JAX (no numpyro handlers), enabling vmapped evaluation over particle clouds.

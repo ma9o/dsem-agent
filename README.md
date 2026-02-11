@@ -5,7 +5,7 @@ This project explores an end-to-end, LLM-orchestrated framework for causal infer
 **Key Innovation: Continuous-Time Modeling**
 
 Unlike traditional discrete-time approaches that require upfront aggregation, this framework uses Continuous-Time Structural Equation Modeling (CT-SEM) which:
-- Handles irregularly-spaced observations natively via Kalman filtering
+- Handles irregularly-spaced observations natively via Kalman/particle filtering
 - Avoids information loss from pre-aggregation
 - Models dynamics via stochastic differential equations
 - Supports hierarchical (multi-subject) panel data
@@ -30,9 +30,8 @@ The orchestrator LLM translates these informal queries into formal causal struct
 - NetworkX for causal DAG representation
 - y0 for identifiability checks (Pearl's ID algorithm)
 - JAX/NumPyro for Bayesian CT-SEM estimation
-- dynamax for Kalman likelihood computation
-- cuthbert for differentiable particle filtering
-- Multiple inference backends: SVI, NUTS, Hess-MC², PGAS, Tempered SMC
+- cuthbert for differentiable Kalman filtering and particle filtering
+- Multiple inference backends: SVI, NUTS, Hess-MC², PGAS, Tempered SMC, Laplace-EM, Structured VI, DPF
 
 ## Documentation
 
@@ -83,14 +82,18 @@ dsem-agent/
 │   │   │   ├── hessmc2.py      # Hess-MC² (SMC with CoV L-kernels)
 │   │   │   ├── pgas.py         # PGAS (Gibbs CSMC + MALA parameters)
 │   │   │   ├── tempered_smc.py # Tempered SMC + preconditioned HMC/MALA
+│   │   │   ├── tempered_core.py # Core SMC loop shared by tempered/laplace/svi/dpf
+│   │   │   ├── laplace_em.py   # IEKS + Laplace-approximated marginal likelihood
+│   │   │   ├── structured_vi.py # Backward-factored structured VI
+│   │   │   ├── dpf.py          # Differentiable PF with learned proposal
 │   │   │   ├── mcmc_utils.py   # Shared MCMC utilities (HMC step, mass matrix)
 │   │   │   ├── utils.py        # Shared site discovery and matrix assembly
-│   │   │   ├── discretization.py # CT→DT conversion (incl. batched vmap)
-│   │   │   └── core.py         # Utility functions
+│   │   │   └── discretization.py # CT→DT conversion (incl. batched vmap)
 │   │   ├── likelihoods/        # State-space likelihood backends
 │   │   │   ├── base.py         # Protocol, CTParams, MeasurementParams, InitialStateParams
-│   │   │   ├── kalman.py       # Kalman filter via dynamax lgssm_filter
+│   │   │   ├── kalman.py       # Kalman filter via cuthbert moments filter
 │   │   │   ├── particle.py     # Bootstrap PF via cuthbert (auto-upgrades to RBPF)
+│   │   │   ├── emissions.py    # Canonical emission log-prob functions
 │   │   │   └── rao_blackwell.py # Rao-Blackwell PF (Kalman + quadrature)
 │   │   ├── ssm_builder.py      # SSMModelBuilder for pipeline integration
 │   │   └── prior_predictive.py # Prior predictive validation

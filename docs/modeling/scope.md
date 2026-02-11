@@ -24,7 +24,7 @@ Previous versions of this document had a confused understanding of scope. Here's
    - If the unobserved construct blocks identification → y0 rejects, never reaches PyMC
    - If it doesn't block identification → we estimate effects through observed paths, 
      we don't estimate the latent state itself
-   - If someone wants latent state values → wrong tool, use dynamax/pykalman
+   - If someone wants latent state values → wrong tool, use pykalman or similar
 -->
 
 This framework models dynamics of time-varying constructs with optional time-invariant covariates. This is a **causal effect estimation** framework.
@@ -79,6 +79,6 @@ The schema accepts any valid DAG. y0 determines if your target effect can be est
 
 ## Out of Scope
 
-**Latent state filtering/smoothing.** If you want to estimate the values of a construct that has no indicators, that's a state-space problem. Use `dynamax`, `pykalman`, or similar tools.
+**Latent state filtering/smoothing.** If you want to estimate the values of a construct that has no indicators, that's a state-space problem. Use `pykalman` or similar tools.
 
 This framework estimates **causal effects between constructs**, not latent state trajectories.
