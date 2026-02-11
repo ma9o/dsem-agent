@@ -10,6 +10,7 @@ Two-stage specification following Anderson & Gerbing (1988):
 from prefect import flow
 from prefect.utilities.annotations import unmapped
 
+from dsem_agent.utils.aggregations import flatten_aggregated_data
 from dsem_agent.utils.data import (
     SAMPLE_CHUNKS,
     load_query,
@@ -21,9 +22,10 @@ from dsem_agent.utils.effects import (
 )
 
 from .stages import (
+    # Stage 3
+    aggregate_measurements,
     # Stage 1b
     build_dsem_model,
-    # Stage 3
     combine_worker_results,
     # Stage 5
     fit_model,
@@ -141,12 +143,23 @@ def causal_inference_pipeline(
         dsem_model=unmapped(dsem_model),
     )
 
-    # Combine raw worker results (no upfront aggregation - CT-SEM handles irregular times)
+    # Combine raw worker results
     raw_data = combine_worker_results(worker_results)
     raw_data_result = raw_data.result() if hasattr(raw_data, "result") else raw_data
     n_observations = len(raw_data_result)
     n_unique_indicators = raw_data_result["indicator"].n_unique() if n_observations > 0 else 0
     print(f"  Combined {n_observations} observations across {n_unique_indicators} indicators")
+
+    # Aggregate to measurement_granularity
+    aggregated = aggregate_measurements(dsem_model, worker_results)
+    aggregated_result = aggregated.result() if hasattr(aggregated, "result") else aggregated
+    if aggregated_result:
+        data_for_model = flatten_aggregated_data(aggregated_result)
+        n_agg = len(data_for_model)
+        print(f"  Aggregated to {n_agg} observations across {list(aggregated_result.keys())} granularities")
+    else:
+        data_for_model = raw_data_result
+        print("  No aggregation applied (using raw data)")
 
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 3: Validate Extraction
@@ -183,7 +196,7 @@ def causal_inference_pipeline(
     stage4_result = stage4_orchestrated_flow(
         dsem_model=dsem_model,
         question=question,
-        raw_data=raw_data_result,  # Pass raw timestamped data instead of aggregated
+        raw_data=data_for_model,
         enable_literature=config.stage4_prior_elicitation.literature_search.enabled,
     )
 
@@ -229,11 +242,11 @@ def causal_inference_pipeline(
     # ══════════════════════════════════════════════════════════════════════════
     print("\n=== Stage 5: Inference ===")
     print(f"Estimating effects of {len(treatments)} treatments on {outcome}")
-    fitted = fit_model(stage4_result, raw_data_result)
+    fitted = fit_model(stage4_result, data_for_model)
 
     # Post-fit power-scaling sensitivity diagnostic
     print("\n--- Power-Scaling Sensitivity ---")
-    power_scaling = run_power_scaling(fitted, raw_data_result)
+    power_scaling = run_power_scaling(fitted, data_for_model)
     ps_result = power_scaling.result() if hasattr(power_scaling, "result") else power_scaling
     if ps_result.get("checked", False):
         diagnosis = ps_result.get("diagnosis", {})

@@ -237,3 +237,20 @@ def aggregate_worker_measurements(
                 )
 
     return results
+
+
+def flatten_aggregated_data(aggregated: dict[str, pl.DataFrame]) -> pl.DataFrame:
+    """Flatten dict[granularity -> DataFrame] to single long-format DataFrame.
+
+    Args:
+        aggregated: Dict keyed by granularity level, each with
+            columns (indicator, value, time_bucket).
+
+    Returns:
+        Single DataFrame with columns (indicator, value, time_bucket),
+        sorted by indicator then time_bucket.
+    """
+    frames = list(aggregated.values())
+    if not frames:
+        return pl.DataFrame({"indicator": [], "value": [], "time_bucket": []})
+    return pl.concat(frames, how="vertical").sort("indicator", "time_bucket")

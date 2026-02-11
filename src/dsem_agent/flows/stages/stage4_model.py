@@ -6,9 +6,6 @@ Orchestrator-Worker architecture with CT-SEM grounding:
 3. CT-SEM model is built as grounding step (validates priors compile)
 4. Prior predictive checks validate reasonableness
 
-NOTE: Uses raw timestamped data - no upfront aggregation.
-The CT-SEM model handles irregular time intervals via continuous-time discretization.
-
 See docs/modeling/functional_spec.md for design rationale.
 """
 
@@ -17,10 +14,11 @@ from prefect import flow, task
 
 
 def build_raw_data_summary(raw_data: pl.DataFrame) -> str:
-    """Build a summary of raw data for the orchestrator.
+    """Build a summary of data for the orchestrator.
 
     Args:
-        raw_data: Raw DataFrame with columns: indicator, value, timestamp
+        raw_data: DataFrame with columns: indicator, value, and either
+            timestamp (raw) or time_bucket (aggregated).
 
     Returns:
         Text summary of the data
@@ -28,7 +26,8 @@ def build_raw_data_summary(raw_data: pl.DataFrame) -> str:
     if raw_data.is_empty():
         return "No data available."
 
-    lines = ["Data Summary (raw timestamped observations):"]
+    time_col = "time_bucket" if "time_bucket" in raw_data.columns else "timestamp"
+    lines = [f"Data Summary (observations, time column: {time_col}):"]
 
     # Overall stats
     n_obs = len(raw_data)
@@ -209,18 +208,19 @@ def build_model_task(
                 "error": "No data available",
             }
 
-        # Pivot raw data: rows=timestamps, columns=indicators
+        # Pivot data: rows=time points, columns=indicators
+        time_col = "time_bucket" if "time_bucket" in raw_data.columns else "timestamp"
         wide_data = (
             raw_data.with_columns(pl.col("value").cast(pl.Float64, strict=False))
-            .pivot(on="indicator", index="timestamp", values="value")
-            .sort("timestamp")
+            .pivot(on="indicator", index=time_col, values="value")
+            .sort(time_col)
         )
 
         X = wide_data.to_pandas()
 
-        # Rename timestamp to time for SSM
-        if "timestamp" in X.columns:
-            X = X.rename(columns={"timestamp": "time"})
+        # Rename time column to "time" for SSM
+        if time_col in X.columns:
+            X = X.rename(columns={time_col: "time"})
 
         builder.build_model(X)
 
