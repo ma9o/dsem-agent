@@ -61,15 +61,19 @@ dsem-agent/
 ├── src/dsem_agent/
 │   ├── orchestrator/  # Two-stage model specification (latent + measurement)
 │   │   ├── agents.py  # Stage 1a: latent model, Stage 1b: measurement model
+│   │   ├── stage1a.py          # Stage 1a orchestration logic
+│   │   ├── stage1b.py          # Stage 1b orchestration logic
+│   │   ├── stage4_orchestrator.py   # Stage 4 orchestrator logic
+│   │   ├── scoring.py          # DSPy-compatible model scoring
 │   │   ├── prompts/   # LLM prompts for all stages
 │   │   │   ├── latent_model.py      # Stage 1a prompts
 │   │   │   ├── measurement_model.py # Stage 1b prompts
 │   │   │   └── model_proposal.py    # Stage 4 model specification prompts
 │   │   ├── schemas.py        # Construct, Indicator, LatentModel, MeasurementModel, DSEMModel
-│   │   ├── schemas_model.py  # ModelSpec, ParameterSpec for Stage 4
-│   │   └── stage4_orchestrator.py   # Stage 4 orchestrator logic
+│   │   └── schemas_model.py  # ModelSpec, ParameterSpec for Stage 4
 │   ├── workers/       # Indicator extraction + prior research LLMs
 │   │   ├── agents.py         # Stage 2 worker agents
+│   │   ├── core.py           # Worker execution core
 │   │   ├── schemas.py        # Worker output schemas
 │   │   ├── schemas_prior.py  # PriorProposal, PriorValidationResult
 │   │   ├── prior_research.py # Stage 4 worker prior research

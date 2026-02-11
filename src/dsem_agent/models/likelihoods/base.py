@@ -22,8 +22,10 @@ class CTParams(NamedTuple):
 
     where:
         A = drift matrix (n_latent x n_latent)
-        G = diffusion Cholesky factor (n_latent x n_latent)
+        G*G' = diffusion covariance (n_latent x n_latent)
         c = continuous intercept (n_latent,)
+
+    Note: diffusion_cov stores the covariance G*G', not the Cholesky factor G.
     """
 
     drift: jnp.ndarray  # (n_latent, n_latent)

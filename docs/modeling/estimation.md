@@ -47,19 +47,7 @@ Given drift `A`, diffusion covariance `Q_c = G G'`, and continuous intercept `c`
 | Discrete process noise | `Q_d = Q_inf - A_d * Q_inf * A_d'` | `compute_discrete_diffusion()` |
 | Discrete intercept | `c_d = A^{-1} * (A_d - I) * c` | `compute_discrete_cint()` via `jla.solve` |
 
-The Lyapunov equation is solved by vectorization: `(I kron A + A kron I) vec(X) = -vec(Q_c)`, then reshaping `vec(X)` back to a matrix. An iterative Smith-iteration solver (`solve_lyapunov_iterative`) is available for near-singular systems.
-
-### Matrix fraction decomposition
-
-For joint numerical stability, `matrix_fraction_decomposition()` computes all three discrete quantities from a single augmented matrix exponential:
-
-```
-        [A   Q_c  c]              [A_d   *    c_d]
-exp(dt *[0  -A'   0])  =  approx  [0    *      0 ]
-        [0   0    0]              [0    0      1 ]
-```
-
-The discrete process noise `Q_d` is extracted from the upper-right block product with `A_d'`.
+The Lyapunov equation is solved by vectorization: `(I kron A + A kron I) vec(X) = -vec(Q_c)`, then reshaping `vec(X)` back to a matrix.
 
 ### Batched discretization
 
