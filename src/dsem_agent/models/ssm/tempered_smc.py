@@ -24,7 +24,6 @@ def fit_tempered_smc(
     n_outer: int = 100,
     n_csmc_particles: int = 20,
     n_mh_steps: int = 10,
-    langevin_step_size: float = 0.5,  # noqa: ARG001
     param_step_size: float = 0.1,
     n_warmup: int | None = None,
     target_accept: float | None = None,
