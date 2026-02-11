@@ -117,14 +117,14 @@ class SSMPriors:
 
 
 class SSMModel:
-    """NumPyro state-space model definition with particle filter likelihood.
+    """NumPyro state-space model definition.
 
     Defines the probabilistic model for hierarchical Bayesian state-space models.
     Inference is handled externally by ssm.inference.fit().
 
     Features:
     - Continuous-time dynamics via stochastic differential equations
-    - Differentiable particle filter for likelihood computation
+    - Multiple likelihood backends (Kalman, particle filter)
     - Optional hierarchical structure for multiple subjects
     """
 

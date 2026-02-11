@@ -140,7 +140,7 @@ def run_interventions(
     """Run interventions and rank treatments by effect size.
 
     Args:
-        fitted_model: The fitted PyMC model
+        fitted_model: The fitted model result from fit_model
         treatments: List of treatment construct names
         dsem_model: Optional DSEM model with identifiability status
 

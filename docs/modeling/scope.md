@@ -21,7 +21,7 @@ Previous versions of this document had a confused understanding of scope. Here's
 
 5. STATE-SPACE CONCERN: We worried about "unobserved + time-varying + AR" being a state-space
    problem requiring Kalman filters. But this never arises because:
-   - If the unobserved construct blocks identification → y0 rejects, never reaches PyMC
+   - If the unobserved construct blocks identification → y0 rejects, never reaches NumPyro
    - If it doesn't block identification → we estimate effects through observed paths, 
      we don't estimate the latent state itself
    - If someone wants latent state values → wrong tool, use pykalman or similar

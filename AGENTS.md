@@ -37,7 +37,7 @@ We avoid "structural" due to SEM/SCM terminology collision:
 | Latent-to-latent DAG (what LLM proposes) | **Latent model** | SEM distinction |
 | Latent-to-observed mapping | **Measurement model** | SEM distinction |
 | DAG encoding parent-child relationships | **Topological structure** | SCM distinction (y0) |
-| Mathematical form of causal mechanisms | **Functional specification** | SCM distinction (PyMC) |
+| Mathematical form of causal mechanisms | **Functional specification** | SCM distinction (NumPyro) |
 
 ------
 
@@ -57,8 +57,17 @@ Patterns: [docs/guides/prefect.md](docs/guides/prefect.md)
 Docs: https://inspect.aisi.org.uk/
 Patterns: [docs/guides/inspect.md](docs/guides/inspect.md)
 
-## PyMC
-Docs: https://www.pymc.io/welcome.html
+## NumPyro
+Docs: https://num.pyro.ai/en/stable/
+
+## JAX
+Docs: https://docs.jax.dev/en/latest/
+
+## cuthbert
+Docs: https://github.com/cuthbert-ai/cuthbert
+- Differentiable Kalman filter via `gaussian.moments` (use `associative=False`)
+- Differentiable particle filter via `smc.particle_filter`
+- Both called through `cuthbert.filtering.filter()`
 
 ## NetworkX
 Docs: https://networkx.org/documentation/stable/

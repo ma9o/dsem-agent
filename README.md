@@ -74,7 +74,6 @@ dsem-agent/
 │   │   ├── schemas_prior.py  # PriorProposal, PriorValidationResult
 │   │   ├── prior_research.py # Stage 4 worker prior research
 │   │   └── prompts/          # Worker prompts
-│   ├── causal/        # y0 identifiability, sensitivity analysis
 │   ├── models/        # NumPyro state-space model specification
 │   │   ├── ssm/                # State-space model implementation
 │   │   │   ├── model.py        # SSMModel, SSMSpec, SSMPriors

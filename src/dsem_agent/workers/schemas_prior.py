@@ -23,7 +23,7 @@ class PriorProposal(BaseModel):
 
     parameter: str = Field(description="Name of the parameter this prior is for")
     distribution: str = Field(
-        description="PyMC distribution name (e.g., 'Normal', 'HalfNormal', 'Beta', 'Uniform')"
+        description="Distribution name (e.g., 'Normal', 'HalfNormal', 'Beta', 'Uniform')"
     )
     params: dict[str, float] = Field(
         description="Distribution parameters (e.g., {'mu': 0.3, 'sigma': 0.1})"

@@ -157,8 +157,7 @@ def validate_worker_output(
             errors.append(f"extractions[{i}]: must be a dictionary")
             continue
 
-        # Support both "indicator" and "dimension" keys for backwards compatibility
-        ind_name = ext_data.get("indicator") or ext_data.get("dimension", "<missing>")
+        ind_name = ext_data.get("indicator", "<missing>")
         value = ext_data.get("value")
 
         # Check indicator exists

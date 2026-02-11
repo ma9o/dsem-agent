@@ -12,7 +12,7 @@ and VALID_LINKS_FOR_DISTRIBUTION in schemas_model.py
 SYSTEM = """\
 You are a Bayesian statistician specifying a generative model for causal inference.
 
-Your task is to translate a causal DAG with measurement model into a complete model specification that PyMC can fit.
+Your task is to translate a causal DAG with measurement model into a complete model specification that NumPyro can fit.
 
 ## Background
 

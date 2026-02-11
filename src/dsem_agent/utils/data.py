@@ -12,8 +12,6 @@ PROCESSED_DIR = DATA_DIR / "processed"
 QUERIES_DIR = DATA_DIR / "queries"
 TRAINING_DIR = DATA_DIR / "training"
 
-# Backwards compatibility alias
-PREPROCESSED_DIR = PROCESSED_DIR
 
 
 def get_orchestrator_chunk_size() -> int:
@@ -31,8 +29,8 @@ def get_sample_chunks() -> int:
     return get_config().stage1_structure_proposal.sample_chunks
 
 
-# Backwards compatibility - evaluated at import time
-CHUNK_SIZE = get_orchestrator_chunk_size()  # Used by existing code (stage 1)
+# Module-level defaults (evaluated at import time from config)
+CHUNK_SIZE = get_orchestrator_chunk_size()
 SAMPLE_CHUNKS = get_sample_chunks()
 
 
@@ -123,7 +121,7 @@ def get_latest_preprocessed_file(
     Returns:
         Path to latest file, or None if no files found
     """
-    search_dir = directory or PREPROCESSED_DIR
+    search_dir = directory or PROCESSED_DIR
     exclude = exclude or set()
     txt_files = [f for f in search_dir.glob("*.txt") if f.name not in exclude]
 
@@ -149,14 +147,14 @@ def resolve_input_path(filename: str | None = None) -> Path:
         FileNotFoundError: If no matching file found
     """
     if filename:
-        path = PREPROCESSED_DIR / filename
+        path = PROCESSED_DIR / filename
         if not path.exists():
             raise FileNotFoundError(f"File not found: {path}")
         return path
 
     latest = get_latest_preprocessed_file()
     if not latest:
-        raise FileNotFoundError(f"No preprocessed files found in {PREPROCESSED_DIR}")
+        raise FileNotFoundError(f"No preprocessed files found in {PROCESSED_DIR}")
 
     return latest
 
