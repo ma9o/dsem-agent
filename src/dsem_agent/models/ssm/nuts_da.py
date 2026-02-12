@@ -32,7 +32,6 @@ from typing import TYPE_CHECKING, Any
 import jax
 import jax.numpy as jnp
 import jax.random as random
-import jax.scipy.linalg as jla
 import numpyro
 import numpyro.distributions as dist
 from jax import vmap
@@ -115,91 +114,48 @@ def _da_model(
     )
 
     # --- Sequential state sampling via scan ---
-    has_cint = cd_all is not None
+    cd_scan = cd_all[1:] if cd_all is not None else jnp.zeros((T - 1, n_l))
 
     if centered:
-        if has_cint:
 
-            def transition_cp(eta_prev, inputs):
-                Ad, Qd_chol, cd, obs_t = inputs
-                mean = Ad @ eta_prev + cd
-                eta_t = numpyro.sample("eta", dist.MultivariateNormal(mean, scale_tril=Qd_chol))
-                pred_t = lambda_mat @ eta_t + manifest_means
-                numpyro.sample(
-                    "obs",
-                    dist.MultivariateNormal(loc=pred_t, scale_tril=manifest_chol),
-                    obs=obs_t,
-                )
-                return eta_t, None
-
-            scan(
-                transition_cp,
-                eta_0,
-                (Ad_all[1:], Qd_chol_scan, cd_all[1:], observations[1:]),
-                length=T - 1,
+        def transition(eta_prev, inputs):
+            Ad, Qd_chol, cd, obs_t = inputs
+            mean = Ad @ eta_prev + cd
+            eta_t = numpyro.sample("eta", dist.MultivariateNormal(mean, scale_tril=Qd_chol))
+            pred_t = lambda_mat @ eta_t + manifest_means
+            numpyro.sample(
+                "obs",
+                dist.MultivariateNormal(loc=pred_t, scale_tril=manifest_chol),
+                obs=obs_t,
             )
-        else:
+            return eta_t, None
 
-            def transition_cp_no_cint(eta_prev, inputs):
-                Ad, Qd_chol, obs_t = inputs
-                mean = Ad @ eta_prev
-                eta_t = numpyro.sample("eta", dist.MultivariateNormal(mean, scale_tril=Qd_chol))
-                pred_t = lambda_mat @ eta_t + manifest_means
-                numpyro.sample(
-                    "obs",
-                    dist.MultivariateNormal(loc=pred_t, scale_tril=manifest_chol),
-                    obs=obs_t,
-                )
-                return eta_t, None
-
-            scan(
-                transition_cp_no_cint,
-                eta_0,
-                (Ad_all[1:], Qd_chol_scan, observations[1:]),
-                length=T - 1,
-            )
+        scan(
+            transition,
+            eta_0,
+            (Ad_all[1:], Qd_chol_scan, cd_scan, observations[1:]),
+            length=T - 1,
+        )
     else:
-        # Non-centered: sample standardized innovations, compute states deterministically
-        if has_cint:
 
-            def transition_ncp(eta_prev, inputs):
-                Ad, Qd_chol, cd, obs_t = inputs
-                eps = numpyro.sample("eps", dist.Normal(0, 1).expand([n_l]).to_event(1))
-                eta_t = Ad @ eta_prev + cd + Qd_chol @ eps
-                pred_t = lambda_mat @ eta_t + manifest_means
-                numpyro.sample(
-                    "obs",
-                    dist.MultivariateNormal(loc=pred_t, scale_tril=manifest_chol),
-                    obs=obs_t,
-                )
-                return eta_t, None
-
-            scan(
-                transition_ncp,
-                eta_0,
-                (Ad_all[1:], Qd_chol_scan, cd_all[1:], observations[1:]),
-                length=T - 1,
+        def transition(eta_prev, inputs):
+            Ad, Qd_chol, cd, obs_t = inputs
+            eps = numpyro.sample("eps", dist.Normal(0, 1).expand([n_l]).to_event(1))
+            eta_t = Ad @ eta_prev + cd + Qd_chol @ eps
+            pred_t = lambda_mat @ eta_t + manifest_means
+            numpyro.sample(
+                "obs",
+                dist.MultivariateNormal(loc=pred_t, scale_tril=manifest_chol),
+                obs=obs_t,
             )
-        else:
+            return eta_t, None
 
-            def transition_ncp_no_cint(eta_prev, inputs):
-                Ad, Qd_chol, obs_t = inputs
-                eps = numpyro.sample("eps", dist.Normal(0, 1).expand([n_l]).to_event(1))
-                eta_t = Ad @ eta_prev + Qd_chol @ eps
-                pred_t = lambda_mat @ eta_t + manifest_means
-                numpyro.sample(
-                    "obs",
-                    dist.MultivariateNormal(loc=pred_t, scale_tril=manifest_chol),
-                    obs=obs_t,
-                )
-                return eta_t, None
-
-            scan(
-                transition_ncp_no_cint,
-                eta_0,
-                (Ad_all[1:], Qd_chol_scan, observations[1:]),
-                length=T - 1,
-            )
+        scan(
+            transition,
+            eta_0,
+            (Ad_all[1:], Qd_chol_scan, cd_scan, observations[1:]),
+            length=T - 1,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -218,80 +174,70 @@ def _kalman_smooth_states(
     init_mean: jnp.ndarray,
     init_cov: jnp.ndarray,
 ) -> jnp.ndarray:
-    """Kalman filter + RTS smoother for linear Gaussian SSM.
+    """Kalman filter + RTS smoother for linear Gaussian SSM via cuthbert.
 
     Returns smoothed state means (T, D).
     """
-    T = observations.shape[0]
-    D = init_mean.shape[0]
-    n_m = observations.shape[1]
-    jitter_d = 1e-6 * jnp.eye(D)
+    from cuthbert.filtering import filter as cuthbert_filter
+    from cuthbert.gaussian.moments import build_filter, build_smoother
+    from cuthbert.smoothing import smoother as cuthbert_smoother
+
+    T, n_m = observations.shape
+    n = Ad.shape[1]
+    jitter_n = 1e-6 * jnp.eye(n)
     jitter_m = 1e-6 * jnp.eye(n_m)
 
-    def forward_step(carry, inputs):
-        z_prev, P_prev = carry
-        Ad_t, Qd_t, cd_t, y_t = inputs
+    # Cholesky factors for cuthbert (square-root form)
+    chol_Qd = vmap(lambda Q: jnp.linalg.cholesky(Q + jitter_n))(Qd)
+    chol_R = jnp.linalg.cholesky(R + jitter_m)
+    chol_P0 = jnp.linalg.cholesky(init_cov + jitter_n)
 
-        z_pred = Ad_t @ z_prev + cd_t
-        P_pred = Ad_t @ P_prev @ Ad_t.T + Qd_t
-        P_pred = 0.5 * (P_pred + P_pred.T) + jitter_d
+    # model_inputs with leading dim T (cuthbert convention:
+    # [0] → init_prepare, [k>=1] → dynamics k-1→k + obs k)
+    model_inputs = {
+        "m0": jnp.broadcast_to(init_mean, (T, n)),
+        "chol_P0": jnp.broadcast_to(chol_P0, (T, n, n)),
+        "F": Ad,
+        "c": cd,
+        "chol_Q": chol_Qd,
+        "H": jnp.broadcast_to(H, (T, n_m, n)),
+        "d": jnp.broadcast_to(d, (T, n_m)),
+        "chol_R": jnp.broadcast_to(chol_R, (T, n_m, n_m)),
+        "y": observations,
+    }
 
-        S = H @ P_pred @ H.T + R + jitter_m
-        K = jla.solve(S, H @ P_pred, assume_a="pos").T
-        v = y_t - H @ z_pred - d
-        z_filt = z_pred + K @ v
-        P_filt = P_pred - K @ H @ P_pred
-        P_filt = 0.5 * (P_filt + P_filt.T) + jitter_d
+    # Callbacks matching KalmanLikelihood pattern
+    def get_init_params(inputs):
+        return inputs["m0"], inputs["chol_P0"]
 
-        return (z_filt, P_filt), (z_filt, P_filt)
+    def get_dynamics_params(state, inputs):
+        F_t, c_t, chol_Q_t = inputs["F"], inputs["c"], inputs["chol_Q"]
 
-    # t=0: predict from prior, then update with first observation
-    z_pred_0 = Ad[0] @ init_mean + cd[0]
-    P_pred_0 = Ad[0] @ init_cov @ Ad[0].T + Qd[0]
-    P_pred_0 = 0.5 * (P_pred_0 + P_pred_0.T) + jitter_d
+        def dynamics_fn(x):
+            return F_t @ x + c_t, chol_Q_t
 
-    S_0 = H @ P_pred_0 @ H.T + R + jitter_m
-    K_0 = jla.solve(S_0, H @ P_pred_0, assume_a="pos").T
-    v_0 = observations[0] - H @ z_pred_0 - d
-    z_filt_0 = z_pred_0 + K_0 @ v_0
-    P_filt_0 = P_pred_0 - K_0 @ H @ P_pred_0
-    P_filt_0 = 0.5 * (P_filt_0 + P_filt_0.T) + jitter_d
+        return dynamics_fn, state.mean
 
-    _, (z_filt_rest, P_filt_rest) = jax.lax.scan(
-        forward_step,
-        (z_filt_0, P_filt_0),
-        (Ad[1:], Qd[1:], cd[1:], observations[1:]),
+    def get_observation_params(state, inputs):
+        H_t, d_t, chol_R_t, y_t = inputs["H"], inputs["d"], inputs["chol_R"], inputs["y"]
+
+        def obs_fn(x):
+            return H_t @ x + d_t, chol_R_t
+
+        return obs_fn, state.mean, y_t
+
+    filter_obj = build_filter(
+        get_init_params=get_init_params,
+        get_dynamics_params=get_dynamics_params,
+        get_observation_params=get_observation_params,
+        associative=False,
     )
-    z_filt = jnp.concatenate([z_filt_0[None], z_filt_rest], axis=0)
-    P_filt = jnp.concatenate([P_filt_0[None], P_filt_rest], axis=0)
+    filter_states = cuthbert_filter(filter_obj, model_inputs)
 
-    # RTS backward smoother
-    def backward_step(carry, inputs):
-        z_s_next = carry
-        z_f, P_f, Ad_next, Qd_next, cd_next = inputs
+    smoother_obj = build_smoother(get_dynamics_params=get_dynamics_params)
+    smoothed_states = cuthbert_smoother(smoother_obj, filter_states)
 
-        P_pred_next = Ad_next @ P_f @ Ad_next.T + Qd_next
-        P_pred_next = 0.5 * (P_pred_next + P_pred_next.T) + jitter_d
-
-        G = P_f @ Ad_next.T @ jla.solve(P_pred_next, jnp.eye(D), assume_a="pos")
-        z_pred_next = Ad_next @ z_f + cd_next
-        z_s = z_f + G @ (z_s_next - z_pred_next)
-
-        return z_s, z_s
-
-    bwd_inputs = (
-        z_filt[: T - 1][::-1],
-        P_filt[: T - 1][::-1],
-        Ad[1:][::-1],
-        Qd[1:][::-1],
-        cd[1:][::-1],
-    )
-    _, z_smooth_rev = jax.lax.scan(
-        backward_step,
-        z_filt[T - 1],
-        bwd_inputs,
-    )
-    return jnp.concatenate([z_smooth_rev[::-1], z_filt[T - 1][None]], axis=0)
+    return smoothed_states.mean
 
 
 # ---------------------------------------------------------------------------
