@@ -216,6 +216,50 @@ def make_validate_measurement_model_tool(latent_model: "LatentModel") -> Tool:
     return validate_measurement_model_tool()
 
 
+def make_validate_model_spec_tool(causal_spec: dict) -> Tool:
+    """Create a validation tool for model spec, bound to a causal spec.
+
+    Args:
+        causal_spec: The full CausalSpec dict (to extract indicators for dtype checking)
+
+    Returns:
+        A tool function that validates model spec JSON
+    """
+    indicators = causal_spec.get("measurement", {}).get("indicators", [])
+
+    @tool
+    def validate_model_spec_tool():
+        """Tool for validating model specification JSON (Stage 4)."""
+
+        async def execute(model_spec_json: str) -> str:
+            """
+            Validate a model specification and return all validation errors.
+
+            Args:
+                model_spec_json: The JSON string containing the model spec to validate.
+
+            Returns:
+                "VALID" if the spec passes validation, otherwise a list of all errors found.
+            """
+            from dsem_agent.orchestrator.schemas_model import validate_model_spec_dict
+
+            try:
+                data = json.loads(model_spec_json)
+            except json.JSONDecodeError as e:
+                return f"JSON parse error: {e}"
+
+            _spec, errors = validate_model_spec_dict(data, indicators=indicators or None)
+
+            if not errors:
+                return "VALID"
+
+            return "VALIDATION ERRORS:\n" + "\n".join(f"- {e}" for e in errors)
+
+        return execute
+
+    return validate_model_spec_tool()
+
+
 def make_worker_tools(schema: dict) -> list[Tool]:
     """Create the standard toolset for worker agents.
 

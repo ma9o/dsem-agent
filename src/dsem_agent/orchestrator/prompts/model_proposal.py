@@ -51,6 +51,26 @@ In Bayesian modeling, we specify our beliefs about the generative process that c
 
 5. **Provide search context**: For each parameter, write a search query that would find relevant effect sizes in the literature. This will be used to ground priors in empirical evidence.
 
+## Parameter Roles and Constraints
+
+Each parameter's `role` must be one of these exact values, with its required `constraint`:
+
+| role | constraint | When to use |
+|------|-----------|-------------|
+| `fixed_effect` | `none` | Beta coefficient for EVERY causal edge (cause→effect), including edges from time-invariant exogenous constructs |
+| `ar_coefficient` | `unit_interval` | AR(1) persistence for each time-varying endogenous construct |
+| `residual_sd` | `positive` | Residual/innovation SD for each construct or indicator |
+| `loading` | `positive` | Factor loading for multi-indicator constructs |
+| `random_intercept_sd` | `positive` | SD of random intercepts (subject-level variation) |
+| `random_slope_sd` | `positive` | SD of random slopes |
+| `correlation` | `correlation` | Correlation between random effects |
+
+**Only these 7 roles are valid.** Do NOT invent new roles. Use full construct names (not abbreviations) when naming parameters — e.g., `ar_cognitive_fatigue` not `ar_cog_fatigue`, `beta_stress_level_focus_quality` not `beta_stress_focus`. Specifically:
+- Indicator intercepts are implicit (handled by the link function) — do NOT create `intercept` parameters
+- Distribution-specific parameters (Beta concentration, NegBinomial overdispersion, OrderedLogistic cutpoints) are handled automatically — do NOT create parameters for them
+- Use `loading` (not `factor_loading`) for factor loadings
+- Use `residual_sd` (not `innovation_sd`) for residual/innovation standard deviations
+
 ## Output Format
 
 Return a JSON object with this structure:
@@ -75,8 +95,8 @@ Return a JSON object with this structure:
   "parameters": [
     {
       "name": "beta_stress_anxiety",
-      "role": "fixed_effect|ar_coefficient|residual_sd|random_intercept_sd|...",
-      "constraint": "none|positive|unit_interval|correlation",
+      "role": "fixed_effect",
+      "constraint": "none",
       "description": "Effect of stress on anxiety (standardized)",
       "search_context": "meta-analysis stress anxiety effect size standardized coefficient"
     }
@@ -93,6 +113,12 @@ Return a JSON object with this structure:
 - Consider the sample size when proposing complex hierarchical structures
 - Provide specific, searchable queries in `search_context` that would find meta-analyses or large-scale studies
 - Remember: AR coefficients should be in [0, 1] for stationarity (use weakly informative priors that encourage but don't enforce this)
+
+## Validation Tool
+
+You have access to `validate_model_spec` tool. Use it to validate your JSON before returning the final answer. Keep validating until you get "VALID".
+
+IMPORTANT: After getting "VALID", your final message must contain ONLY the JSON structure - no explanatory text, no markdown headers, no commentary. Just the raw JSON object.
 """
 
 USER = """\
@@ -131,6 +157,47 @@ Think very hard about:
 4. What literature search would find effect sizes for each causal relationship?
 
 Output your specification as JSON.
+"""
+
+
+REVIEW = """\
+Review your proposed model specification for correctness.
+
+## Check for:
+
+1. **Likelihood coverage**: Every indicator in the measurement model MUST have a likelihood entry. Missing indicators mean missing data channels.
+2. **Distribution-dtype matching**: The distribution must match the indicator's measurement_dtype:
+   - continuous → Normal, Gamma, or Beta
+   - binary → Bernoulli
+   - count → Poisson or NegativeBinomial
+   - ordinal → OrderedLogistic
+   - categorical → Categorical or OrderedLogistic
+3. **Link function matching**: Each distribution has valid link functions:
+   - Normal → identity
+   - Gamma → log
+   - Bernoulli → logit or probit
+   - Poisson → log
+   - NegativeBinomial → log
+   - Beta → logit
+   - OrderedLogistic → cumulative_logit
+   - Categorical → softmax
+4. **AR structure**: Every time-varying endogenous construct MUST have an `ar_coefficient` parameter. Check the latent model — if a construct has role=endogenous and temporal_status=time_varying, it needs an AR parameter.
+5. **Valid parameter roles**: Every parameter `role` must be one of: `fixed_effect`, `ar_coefficient`, `residual_sd`, `random_intercept_sd`, `random_slope_sd`, `correlation`, `loading`. Any other value (e.g., "factor_loading", "innovation_sd", "indicator_intercept") will fail validation.
+6. **Constraint-role matching**: Each role has an expected constraint:
+   - fixed_effect → none
+   - ar_coefficient → unit_interval
+   - residual_sd → positive
+   - random_intercept_sd → positive
+   - random_slope_sd → positive
+   - correlation → correlation
+   - loading → positive
+7. **Edge coverage**: Every causal edge in the latent model should have a corresponding `fixed_effect` parameter whose name references both cause and effect constructs.
+
+## Output
+
+Validate your specification with the tool, then return ONLY the corrected JSON as your final message - no explanatory text, no markdown headers, no commentary. Just the raw JSON object.
+
+Think very hard.
 """
 
 

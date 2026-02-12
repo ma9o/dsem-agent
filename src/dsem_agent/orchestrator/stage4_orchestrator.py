@@ -4,6 +4,7 @@ The orchestrator proposes a complete model specification based on the CausalSpec
 enumerating all parameters needing priors with search context for literature.
 """
 
+from dsem_agent.orchestrator.prompts import model_proposal
 from dsem_agent.orchestrator.prompts.model_proposal import (
     SYSTEM as MODEL_PROPOSAL_SYSTEM,
 )
@@ -19,7 +20,11 @@ from dsem_agent.orchestrator.schemas_model import (
     ModelSpec,
     Stage4OrchestratorResult,
 )
-from dsem_agent.utils.llm import OrchestratorGenerateFn, parse_json_response
+from dsem_agent.utils.llm import (
+    OrchestratorGenerateFn,
+    make_validate_model_spec_tool,
+    parse_json_response,
+)
 
 
 async def propose_model_spec(
@@ -59,8 +64,9 @@ async def propose_model_spec(
         },
     ]
 
-    # Generate model specification
-    completion = await generate(messages, None, None)
+    # Generate model specification with validation feedback loop
+    tools = [make_validate_model_spec_tool(causal_spec)]
+    completion = await generate(messages, tools, [model_proposal.REVIEW])
 
     # Parse JSON response
     model_data = parse_json_response(completion)
