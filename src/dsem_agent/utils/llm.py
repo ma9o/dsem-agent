@@ -82,7 +82,7 @@ def make_orchestrator_generate_fn(
     async def generate(messages: list, tools: list | None, follow_ups: list[str] | None) -> str:
         chat_messages = dict_messages_to_chat(messages)
 
-        if follow_ups:
+        if follow_ups or tools:
             return await multi_turn_generate(
                 messages=chat_messages,
                 model=model,
@@ -91,7 +91,7 @@ def make_orchestrator_generate_fn(
                 config=config,
             )
         else:
-            response = await model.generate(chat_messages, tools=tools or [], config=config)
+            response = await model.generate(chat_messages, config=config)
             return response.completion
 
     return generate
