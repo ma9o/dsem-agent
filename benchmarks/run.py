@@ -21,6 +21,18 @@ if TYPE_CHECKING:
     from benchmarks.metrics import RecoveryResult
     from benchmarks.problems.four_latent import RecoveryProblem
 
+# Lazy-loaded problem registry (avoids JAX init at import time for Modal)
+_PROBLEMS: dict[str, RecoveryProblem] | None = None
+
+
+def _get_problems() -> dict[str, RecoveryProblem]:
+    global _PROBLEMS
+    if _PROBLEMS is None:
+        from benchmarks.problems import ALL_PROBLEMS
+
+        _PROBLEMS = ALL_PROBLEMS
+    return _PROBLEMS
+
 # ---------------------------------------------------------------------------
 # Method configs: {method: {local: {...}, gpu: {...}, gpu_type, timeout}}
 # ---------------------------------------------------------------------------
@@ -625,14 +637,18 @@ def run_method(method: str, problem: RecoveryProblem, local: bool) -> RecoveryRe
     )
 
 
-def run(methods: list[str], local: bool):
+def run(methods: list[str], local: bool, problem_name: str = "four_latent"):
     """Run one or more methods and print comparison."""
     from benchmarks.metrics import header
-    from benchmarks.problems.four_latent import FOUR_LATENT
+
+    problems = _get_problems()
+    if problem_name not in problems:
+        raise ValueError(f"Unknown problem '{problem_name}'. Available: {list(problems.keys())}")
+    problem = problems[problem_name]
 
     summary = {}
     for method in methods:
-        res = run_method(method, FOUR_LATENT, local)
+        res = run_method(method, problem, local)
         summary[method] = res
 
     if len(summary) > 1:
@@ -715,17 +731,17 @@ except Exception:
 if HAS_MODAL:
 
     @app.function(gpu=GPU, timeout=_MODAL_TIMEOUT)
-    def recovery_remote(methods: list[str]):
-        run(methods, local=False)
+    def recovery_remote(methods: list[str], problem: str = "four_latent"):
+        run(methods, local=False, problem_name=problem)
 
     @app.local_entrypoint()
-    def modal_main(method: str = "all", gpu: str = ""):  # noqa: ARG001 (gpu consumed at import time)
+    def modal_main(method: str = "all", gpu: str = "", problem: str = "four_latent"):  # noqa: ARG001 (gpu consumed at import time)
         if method == "all":
             methods = list(METHOD_CONFIGS.keys())
         else:
             methods = [m.strip() for m in method.split(",")]
-        print(f"GPU: {_MODAL_GPU}  timeout: {_MODAL_TIMEOUT}s")
-        recovery_remote.remote(methods)
+        print(f"GPU: {_MODAL_GPU}  timeout: {_MODAL_TIMEOUT}s  problem: {problem}")
+        recovery_remote.remote(methods, problem)
 
 
 # ---------------------------------------------------------------------------
@@ -745,6 +761,11 @@ if __name__ == "__main__":
         default="",
         help="GPU type for Modal (L4, A100, B200). Ignored for --local runs.",
     )
+    parser.add_argument(
+        "--problem",
+        default="four_latent",
+        help="Problem name (four_latent, three_latent_robust)",
+    )
     args = parser.parse_args()
 
     if args.method == "all":
@@ -756,4 +777,4 @@ if __name__ == "__main__":
         if m not in METHOD_CONFIGS:
             raise ValueError(f"Unknown method '{m}'. Available: {list(METHOD_CONFIGS.keys())}")
 
-    run(methods, local=args.local)
+    run(methods, local=args.local, problem_name=args.problem)
