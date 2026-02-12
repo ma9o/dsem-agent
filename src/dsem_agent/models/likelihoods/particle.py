@@ -170,6 +170,7 @@ class ParticleLikelihood:
         manifest_dist: str = "gaussian",
         diffusion_dist: str | list[str] = "gaussian",
         ess_threshold: float = 0.5,
+        block_rb: bool = True,
     ):
         self.n_latent = n_latent
         self.n_manifest = n_manifest
@@ -177,6 +178,8 @@ class ParticleLikelihood:
         self.rng_key = rng_key if rng_key is not None else random.PRNGKey(0)
         self.manifest_dist = manifest_dist
         self.ess_threshold = ess_threshold
+
+        self._block_rb = block_rb
 
         # Normalize diffusion_dist to per-variable list
         if isinstance(diffusion_dist, str):
@@ -193,6 +196,13 @@ class ParticleLikelihood:
                 self.diffusion_dist = self._per_var_diffusion[0]
             else:
                 self.diffusion_dist = "mixed"
+
+        # When block_rb is disabled and mixed, collapse to first non-Gaussian
+        # type to skip block RBPF dispatch. Gaussian stays Gaussian — the
+        # dispatch in compute_log_likelihood checks _block_rb to skip RBPF.
+        if not block_rb and self.diffusion_dist == "mixed":
+            s_types = [d for d in self._per_var_diffusion if d != "gaussian"]
+            self.diffusion_dist = s_types[0] if s_types else "student_t"
 
         # Pre-compute partition indices for mixed mode (static, not traced)
         if self.diffusion_dist == "mixed":
@@ -264,11 +274,11 @@ class ParticleLikelihood:
             params.update(extra_params)
 
         # Build Feynman-Kac model closures.
-        # When dynamics are Gaussian, use Rao-Blackwellized callbacks that
-        # run a Kalman filter inside each particle (strictly lower variance).
-        # Mixed: block RBPF marginalizes Gaussian subset, samples the rest.
+        # When dynamics are Gaussian and block_rb is enabled, use
+        # Rao-Blackwellized callbacks (Kalman filter inside each particle).
+        # Mixed + block_rb: block RBPF marginalizes Gaussian subset, samples rest.
         # Otherwise fall back to bootstrap PF callbacks.
-        if self.diffusion_dist == "gaussian":
+        if self.diffusion_dist == "gaussian" and self._block_rb:
             from dsem_agent.models.likelihoods.rao_blackwell import make_rb_callbacks
 
             init_sample, propagate_sample, log_potential = make_rb_callbacks(
