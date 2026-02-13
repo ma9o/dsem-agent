@@ -142,6 +142,11 @@ class SSMModelBuilder:
                 manifest_dist = noise
                 break  # Any non-Gaussian triggers particle filter
 
+        # Derive latent names from AR parameter names (e.g. rho_X → X)
+        latent_names = (
+            [p.name.removeprefix("rho_") for p in ar_params] if ar_params else None
+        )
+
         # Create default lambda matrix (identity mapping)
         lambda_mat = jnp.eye(n_manifest, n_latent)
 
@@ -160,6 +165,7 @@ class SSMModelBuilder:
             hierarchical=hierarchical,
             n_subjects=n_subjects,
             indvarying=["t0_means"],  # Allow individual variation in initial states
+            latent_names=latent_names,
             manifest_names=manifest_cols,
         )
 

@@ -62,7 +62,7 @@ def _systematic_resampling(key: jax.Array, logits: jnp.ndarray, n: int) -> jnp.n
 
 
 # =============================================================================
-# SSMAdapter — maps CTParams to PF-compatible functions
+# SSMAdapter -- maps CTParams to PF-compatible functions
 # =============================================================================
 
 

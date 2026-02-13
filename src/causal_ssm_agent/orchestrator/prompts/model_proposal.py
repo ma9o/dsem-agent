@@ -158,7 +158,6 @@ Output your specification as JSON.
 """
 
 
-
 def format_constructs(causal_spec: dict) -> str:
     """Format constructs for the prompt."""
     lines = []
