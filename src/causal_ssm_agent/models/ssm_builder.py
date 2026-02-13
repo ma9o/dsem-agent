@@ -143,9 +143,7 @@ class SSMModelBuilder:
                 break  # Any non-Gaussian triggers particle filter
 
         # Derive latent names from AR parameter names (e.g. rho_X → X)
-        latent_names = (
-            [p.name.removeprefix("rho_") for p in ar_params] if ar_params else None
-        )
+        latent_names = [p.name.removeprefix("rho_") for p in ar_params] if ar_params else None
 
         # Create default lambda matrix (identity mapping)
         lambda_mat = jnp.eye(n_manifest, n_latent)
@@ -329,11 +327,12 @@ class SSMModelBuilder:
 
         return observations, times, subject_ids
 
-    def sample_prior_predictive(self, samples: int = 500) -> Any:
+    def sample_prior_predictive(self, samples: int = 500, times: jnp.ndarray | None = None) -> Any:
         """Sample from the prior predictive distribution.
 
         Args:
             samples: Number of samples
+            times: Optional time points; defaults to arange(10)
 
         Returns:
             Prior predictive samples
@@ -343,7 +342,8 @@ class SSMModelBuilder:
         if self._model is None:
             raise ValueError("Model must be built before sampling prior predictive")
 
-        times = jnp.arange(10, dtype=jnp.float32)
+        if times is None:
+            times = jnp.arange(10, dtype=jnp.float32)
         return prior_predictive(self._model, times, num_samples=samples)
 
     def get_samples(self) -> dict[str, jnp.ndarray]:

@@ -1,11 +1,19 @@
 """Tests for Stage 4: Model Specification & Prior Elicitation."""
 
+from unittest.mock import patch
+
+import jax.numpy as jnp
 import numpy as np
 import pandas as pd
+import polars as pl
 import pytest
 
 from causal_ssm_agent.models.prior_predictive import (
+    _check_constraint_violations,
+    _check_extreme_values,
+    _check_nan_inf,
     format_validation_report,
+    validate_prior_predictive,
 )
 from causal_ssm_agent.orchestrator.schemas_model import (
     EXPECTED_CONSTRAINT_FOR_ROLE,
@@ -513,3 +521,133 @@ class TestDomainValidation:
         """Every ParameterRole member has an entry in EXPECTED_CONSTRAINT_FOR_ROLE."""
         for role in ParameterRole:
             assert role in EXPECTED_CONSTRAINT_FOR_ROLE, f"Missing constraint rule for {role}"
+
+
+# --- Prior Predictive Validation Tests ---
+
+
+def _make_polars_data() -> pl.DataFrame:
+    """Create polars long-format data for validation tests."""
+    rng = np.random.default_rng(42)
+    n = 30
+    times = list(range(n))
+    return pl.DataFrame(
+        {
+            "indicator": ["mood_score"] * n,
+            "value": (rng.standard_normal(n) * 1.5 + 5).tolist(),
+            "timestamp": times,
+        }
+    )
+
+
+class TestPriorPredictiveValidation:
+    """Test prior predictive validation end-to-end."""
+
+    def test_valid_priors_pass(self, simple_model_spec, simple_priors):
+        """Simple spec + priors + polars data -> is_valid=True."""
+        raw_data = _make_polars_data()
+        is_valid, results = validate_prior_predictive(
+            simple_model_spec, simple_priors, raw_data, n_samples=10
+        )
+        assert is_valid is True
+        assert len(results) > 0
+
+    def test_model_build_failure(self, simple_priors):
+        """Broken spec -> is_valid=False, error in results."""
+        broken_spec = {
+            "likelihoods": [
+                {
+                    "variable": "nonexistent_col",
+                    "distribution": "Normal",
+                    "link": "identity",
+                    "reasoning": "test",
+                }
+            ],
+            "parameters": [
+                {
+                    "name": "rho_x",
+                    "role": "ar_coefficient",
+                    "constraint": "unit_interval",
+                    "description": "AR coeff",
+                    "search_context": "",
+                }
+            ],
+            "model_clock": "daily",
+            "reasoning": "test",
+        }
+        # This should still build (builder is tolerant), but let's test
+        # with a truly broken spec by patching build_model to raise
+        with patch(
+            "causal_ssm_agent.models.ssm_builder.SSMModelBuilder.build_model",
+            side_effect=ValueError("deliberate test failure"),
+        ):
+            is_valid, results = validate_prior_predictive(
+                broken_spec, simple_priors, None, n_samples=10
+            )
+            assert is_valid is False
+            assert any("model_build" in r.parameter for r in results)
+            assert any("deliberate test failure" in (r.issue or "") for r in results)
+
+    def test_nan_detection(self):
+        """Mock samples with NaN -> caught."""
+        samples = {
+            "drift_diag_pop": jnp.array([1.0, float("nan"), 3.0]),
+            "diffusion_diag_pop": jnp.array([1.0, 2.0, 3.0]),
+        }
+        result = _check_nan_inf(samples)
+        assert result is not None
+        assert result.is_valid is False
+        assert "NaN" in result.issue
+        assert "drift_diag_pop" in result.issue
+
+    def test_extreme_values_detection(self):
+        """Mock samples > 1e6 -> caught."""
+        # 50% of values are extreme (above 10% threshold)
+        samples = {
+            "drift_diag_pop": jnp.array([1e7, 1e8, 0.5, 0.3]),
+        }
+        results = _check_extreme_values(samples)
+        assert len(results) == 1
+        assert results[0].is_valid is False
+        assert "Extreme" in results[0].issue
+
+    def test_constraint_violations_detection(self):
+        """Positive-constrained sites with negative values -> caught."""
+        # >1% negative
+        vals = jnp.concatenate([jnp.ones(90), -jnp.ones(10)])
+        samples = {"diffusion_diag_pop": vals}
+        results = _check_constraint_violations(samples)
+        assert len(results) == 1
+        assert results[0].is_valid is False
+        assert "negative" in results[0].issue
+
+    def test_no_data_still_validates(self, simple_model_spec, simple_priors):
+        """raw_data=None -> NaN/constraint/extreme checks run, scale skipped."""
+        is_valid, results = validate_prior_predictive(
+            simple_model_spec, simple_priors, None, n_samples=10
+        )
+        # Should still produce results (pass or fail) without crashing
+        assert isinstance(is_valid, bool)
+        assert isinstance(results, list)
+
+    def test_format_report_integrates(self, simple_model_spec, simple_priors):
+        """validate + format_validation_report -> well-formed string."""
+        is_valid, results = validate_prior_predictive(
+            simple_model_spec, simple_priors, None, n_samples=10
+        )
+        report = format_validation_report(is_valid, results)
+        assert isinstance(report, str)
+        assert "Prior predictive validation" in report
+        if is_valid:
+            assert "PASSED" in report
+
+    def test_validate_priors_task_delegates(self, simple_model_spec, simple_priors):
+        """Prefect task.fn() -> returns dict with expected keys."""
+        from causal_ssm_agent.flows.stages.stage4_model import validate_priors_task
+
+        raw_data = _make_polars_data()
+        result = validate_priors_task.fn(simple_model_spec, simple_priors, raw_data)
+        assert isinstance(result, dict)
+        assert "is_valid" in result
+        assert "results" in result
+        assert "issues" in result

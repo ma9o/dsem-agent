@@ -156,9 +156,9 @@ def research_prior_task(
 
 @task(retries=1, task_run_name="validate-priors")
 def validate_priors_task(
-    model_spec: dict,  # noqa: ARG001
-    priors: dict[str, dict],  # noqa: ARG001
-    raw_data: pl.DataFrame,  # noqa: ARG001
+    model_spec: dict,
+    priors: dict[str, dict],
+    raw_data: pl.DataFrame,
 ) -> dict:
     """Validate priors via prior predictive sampling.
 
@@ -170,13 +170,21 @@ def validate_priors_task(
     Returns:
         Validation result dict with is_valid and issues
     """
-    # TODO: Implement prior predictive validation for SSMModel
-    # For now, return valid to allow pipeline to proceed
-    return {
-        "is_valid": True,
-        "results": [],
-        "issues": [],
-    }
+    try:
+        from causal_ssm_agent.models.prior_predictive import validate_prior_predictive
+
+        is_valid, results = validate_prior_predictive(model_spec, priors, raw_data)
+        return {
+            "is_valid": is_valid,
+            "results": [r.model_dump() for r in results],
+            "issues": [r.issue for r in results if not r.is_valid and r.issue],
+        }
+    except Exception as e:
+        return {
+            "is_valid": False,
+            "results": [],
+            "issues": [f"Prior validation error: {e}"],
+        }
 
 
 @task(task_run_name="build-ssm-model")
