@@ -253,17 +253,17 @@ def _(mo):
 
 @app.cell
 def _(causal_spec, mo):
-    from dsem_agent.utils.effects import get_outcome_from_latent_model as _get_outcome
-    from dsem_agent.utils.identifiability import (
+    from causal_ssm_agent.utils.effects import get_outcome_from_latent_model as _get_outcome
+    from causal_ssm_agent.utils.identifiability import (
         analyze_unobserved_constructs as _analyze,
     )
-    from dsem_agent.utils.identifiability import (
+    from causal_ssm_agent.utils.identifiability import (
         check_identifiability as _check_id,
     )
-    from dsem_agent.utils.identifiability import (
+    from causal_ssm_agent.utils.identifiability import (
         format_identifiability_report as _fmt_id,
     )
-    from dsem_agent.utils.identifiability import (
+    from causal_ssm_agent.utils.identifiability import (
         format_marginalization_report as _fmt_marg,
     )
 

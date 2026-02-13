@@ -153,7 +153,7 @@ def run_interventions(
         List of intervention results, sorted by |effect_size| descending
     """
     import jax.numpy as jnp
-    from dsem_agent.models.ssm.counterfactual import treatment_effect
+    from causal_ssm_agent.models.ssm.counterfactual import treatment_effect
     from jax import vmap
 
     # Get identifiability status
