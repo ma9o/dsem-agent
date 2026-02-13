@@ -213,10 +213,26 @@ def _linearized_obs_params(
     if manifest_dist == "poisson":
         rate = jnp.exp(eta_pred)
         return jnp.diag(rate + 1e-8), (y - rate) * mask_float
+    elif manifest_dist == "negative_binomial":
+        mu = jnp.exp(eta_pred)
+        r = params.get("obs_r", 5.0)
+        # Var = mu + mu^2/r
+        var = mu + mu**2 / (r + 1e-8)
+        return jnp.diag(var + 1e-8), (y - mu) * mask_float
     elif manifest_dist == "gamma":
         mean_pred = jnp.exp(eta_pred)
         shape = params.get("obs_shape", 1.0)
         return jnp.diag(mean_pred**2 / (shape + 1e-8) + 1e-8), (y - mean_pred) * mask_float
+    elif manifest_dist == "bernoulli":
+        p = jax.nn.sigmoid(eta_pred)
+        var = p * (1.0 - p)
+        return jnp.diag(var + 1e-8), (y - p) * mask_float
+    elif manifest_dist == "beta":
+        p = jax.nn.sigmoid(eta_pred)
+        phi = params.get("obs_concentration", 10.0)
+        # Var of Beta(mean*phi, (1-mean)*phi) = mean*(1-mean)/(phi+1)
+        var = p * (1.0 - p) / (phi + 1.0)
+        return jnp.diag(var + 1e-8), (y - p) * mask_float
     else:
         # Gaussian, Student-t, or fallback
         manifest_cov = params.get("manifest_cov", jnp.eye(n_manifest) * 0.1)
