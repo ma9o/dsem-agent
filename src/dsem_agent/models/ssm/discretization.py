@@ -140,7 +140,7 @@ def discretize_system(
     cint: jnp.ndarray | None,
     dt: float,
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray | None]:
-    """Discretize the CT-SEM system for a given time interval.
+    """Discretize the continuous-time SSM system for a given time interval.
 
     Computes:
     - discrete_drift = exp(A*dt)

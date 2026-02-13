@@ -1,6 +1,6 @@
-"""SSM Model Builder for DSEM pipeline integration.
+"""SSM Model Builder for pipeline integration.
 
-Provides a model builder interface compatible with the DSEM pipeline
+Provides a model builder interface compatible with the pipeline
 while using the NumPyro SSM implementation underneath.
 """
 
@@ -45,7 +45,7 @@ _PRIOR_RULES: list[tuple[list[str], str, dict]] = [
 class SSMModelBuilder:
     """Model builder for SSM using NumPyro.
 
-    This class provides an interface compatible with the DSEM pipeline,
+    This class provides an interface compatible with the pipeline,
     translating from the ModelSpec to SSMSpec internally.
     """
 

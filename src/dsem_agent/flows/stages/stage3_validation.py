@@ -6,7 +6,7 @@ Validation checks (semantic only - Polars handles structural validation):
 
 Aggregation: Workers extract at the finest resolution visible in their chunk.
 aggregate_measurements() buckets timestamps and applies each indicator's
-aggregation function to reach measurement_granularity. CT-SEM discretization
+aggregation function to reach measurement_granularity. SSM discretization
 then handles measurement_granularity -> continuous time.
 
 See docs/reference/pipeline.md for full specification.
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 
 # Minimum observations for temporal modeling
-MIN_OBSERVATIONS = 10  # Reasonable minimum for CT-SEM
+MIN_OBSERVATIONS = 10  # Reasonable minimum for SSM
 
 
 @task(cache_policy=INPUTS)
@@ -153,8 +153,8 @@ def combine_worker_results(
 ) -> pl.DataFrame:
     """Combine raw worker results into a single DataFrame.
 
-    This produces the raw timestamped data that CT-SEM will use directly.
-    No aggregation is performed - the CT-SEM model handles irregular
+    This produces the raw timestamped data that the SSM will use directly.
+    No aggregation is performed - the SSM handles irregular
     time intervals via continuous-time discretization.
 
     Args:

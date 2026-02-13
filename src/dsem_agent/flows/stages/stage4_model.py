@@ -1,9 +1,9 @@
 """Stage 4: Model Specification & Prior Elicitation.
 
-Orchestrator-Worker architecture with CT-SEM grounding:
+Orchestrator-Worker architecture with SSM grounding:
 1. Orchestrator proposes model specification
 2. Workers research priors in parallel (one per parameter via Exa + LLM)
-3. CT-SEM model is built as grounding step (validates priors compile)
+3. SSM model is built as grounding step (validates priors compile)
 4. Prior predictive checks validate reasonableness
 
 See docs/modeling/functional_spec.md for design rationale.
@@ -170,7 +170,7 @@ def validate_priors_task(
     Returns:
         Validation result dict with is_valid and issues
     """
-    # TODO: Implement prior predictive validation for CT-SEM
+    # TODO: Implement prior predictive validation for SSM
     # For now, return valid to allow pipeline to proceed
     return {
         "is_valid": True,
@@ -254,7 +254,7 @@ def stage4_orchestrated_flow(
     1. Orchestrator proposes model specification
     2. Workers research priors in parallel (one per parameter)
     3. Validate via prior predictive checks
-    4. Build CT-SEM model
+    4. Build SSM model
 
     Args:
         causal_spec: Full CausalSpec dict
@@ -299,7 +299,7 @@ def stage4_orchestrated_flow(
     validation = validate_priors_task(model_spec, priors, raw_data)
     validation_result = validation.result() if hasattr(validation, "result") else validation
 
-    # 4. Build CT-SEM model
+    # 4. Build SSM model
     model_info = build_model_task(model_spec, priors, raw_data)
     model_result = model_info.result() if hasattr(model_info, "result") else model_info
 

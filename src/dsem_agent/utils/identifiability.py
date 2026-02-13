@@ -513,7 +513,7 @@ def analyze_unobserved_constructs(
     measurement_model: dict,
     identifiability_result: dict,
 ) -> dict[str, Any]:
-    """Analyze which unobserved constructs can be marginalized in DSEM specification.
+    """Analyze which unobserved constructs can be marginalized in the causal specification.
 
     When y0 identifies an effect despite unobserved confounding, it means the
     identification strategy (front-door, IV, etc.) handles that confounding without
@@ -534,7 +534,7 @@ def analyze_unobserved_constructs(
 
     Returns:
         Dict with:
-            - can_marginalize: Set of unobserved constructs safe to ignore in DSEM spec
+            - can_marginalize: Set of unobserved constructs safe to ignore in the causal spec
             - marginalize_reason: Dict explaining why each can be marginalized
             - blocking_details: Map of blocking confounder -> treatments they obstruct
     """
@@ -647,12 +647,12 @@ def format_marginalization_report(analysis: dict) -> str:
     needs_modeling = set(blocking_details.keys())
 
     lines.append("=" * 60)
-    lines.append("UNOBSERVED CONSTRUCT ANALYSIS FOR DSEM SPECIFICATION")
+    lines.append("UNOBSERVED CONSTRUCT ANALYSIS FOR CAUSAL SPECIFICATION")
     lines.append("=" * 60)
 
     if can_marginalize:
         lines.append(f"\n✓ CAN MARGINALIZE ({len(can_marginalize)} constructs):")
-        lines.append("  These can be omitted from DSEM spec - effects absorbed into error terms")
+        lines.append("  These can be omitted from the causal spec - effects absorbed into error terms")
         for u in sorted(can_marginalize):
             reason = analysis["marginalize_reason"].get(u, "")
             lines.append(f"  - {u}: {reason}")

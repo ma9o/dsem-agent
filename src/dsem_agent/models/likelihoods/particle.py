@@ -62,14 +62,14 @@ def _systematic_resampling(key: jax.Array, logits: jnp.ndarray, n: int) -> jnp.n
 
 
 # =============================================================================
-# SSMAdapter — maps CT-SEM parameters to PF-compatible functions
+# SSMAdapter — maps SSM parameters to PF-compatible functions
 # =============================================================================
 
 
 class SSMAdapter:
-    """Adapts CT-SEM parameters into particle filter-compatible functions.
+    """Adapts SSM parameters into particle filter-compatible functions.
 
-    Maps the CT-SEM structure (drift, diffusion, measurement) into
+    Maps the SSM structure (drift, diffusion, measurement) into
     initial_sample, transition_sample, and observation_log_prob.
 
     Supports non-Gaussian observation and process noise families:

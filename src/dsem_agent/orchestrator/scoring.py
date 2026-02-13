@@ -1,4 +1,4 @@
-"""Scoring function for DSEM latent model proposals.
+"""Scoring function for latent model proposals.
 
 Scoring strategy:
 - Award points for each INSTANCE of a hard rule being respected

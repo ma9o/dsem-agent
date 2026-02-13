@@ -55,7 +55,7 @@ Cross-timescale edges are always lagged. The system computes lag in hours automa
 Contemporaneous edges must form a DAG within each time slice (A4). Feedback loops require lagged edges—model them across time, not within.
 
 ### Constraints
-- DSEMs must be acyclic WITHIN time slice (contemporaneous edges form a DAG)
+- The model must be acyclic WITHIN time slice (contemporaneous edges form a DAG)
 - Cycles ACROSS time are fine - that's the point of dynamic models (use lagged=true)
 - Exogenous constructs cannot be effects
 - All endogenous time-varying constructs automatically get AR(1) - do NOT add self-loops

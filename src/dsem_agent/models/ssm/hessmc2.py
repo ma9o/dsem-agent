@@ -28,7 +28,7 @@ p_log_q0_x`` with no tempering parameter anywhere. Do NOT add tempering.
 ``np.linalg.pinv(neg_hess)`` for inversion and full MVN sampling (proposals.py
 lines 65-68). We match this: SO proposals use the full DxD negative Hessian as
 the mass matrix, with Cholesky decomposition for sampling and solving. For
-typical DSEM dimensions (D=5-30) the O(D³) cost is negligible compared to the
+typical SSM dimensions (D=5-30) the O(D³) cost is negligible compared to the
 PF likelihood evaluation. Do NOT downgrade to diagonal Hessian.
 """
 

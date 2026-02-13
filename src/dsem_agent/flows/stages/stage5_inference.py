@@ -1,6 +1,6 @@
 """Stage 5: Bayesian inference and intervention analysis.
 
-Fits the CT-SEM model and runs counterfactual interventions to
+Fits the SSM model and runs counterfactual interventions to
 estimate treatment effects, ranked by effect size.
 """
 
@@ -12,7 +12,7 @@ from prefect import task
 
 @task
 def fit_model(stage4_result: dict, raw_data: pl.DataFrame) -> Any:
-    """Fit the CT-SEM model to data.
+    """Fit the SSM model to data.
 
     Args:
         stage4_result: Result from stage4_orchestrated_flow containing

@@ -273,7 +273,7 @@ def make_worker_tools(schema: dict) -> list[Tool]:
     Used by both production workers and evals.
 
     Args:
-        schema: The DSEM schema dict to validate extractions against
+        schema: The causal schema dict to validate extractions against
 
     Returns:
         List of tools: [validate_extractions, parse_date, calculate]
@@ -289,7 +289,7 @@ def make_validate_worker_output_tool(schema: dict) -> Tool:
     """Create a validation tool for worker output, bound to a specific schema.
 
     Args:
-        schema: The DSEM schema dict to validate extractions against
+        schema: The causal schema dict to validate extractions against
 
     Returns:
         A tool function that validates worker output JSON

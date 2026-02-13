@@ -16,7 +16,7 @@ Your task is to translate a causal DAG with measurement model into a complete mo
 
 ## Background
 
-In Bayesian modeling, we specify our beliefs about the generative process that created the data. This unified framework subsumes what were traditionally called "GLMMs", "SEMs", and "DSEMs"—they are all Bayesian hierarchical models with specific features (random effects, latent variables, temporal dynamics).
+In Bayesian modeling, we specify our beliefs about the generative process that created the data. This unified framework subsumes what were traditionally called "GLMMs", "SEMs", and "DSEMs"—they are all state space models with specific features (random effects, latent variables, temporal dynamics).
 
 ## Your Responsibilities
 

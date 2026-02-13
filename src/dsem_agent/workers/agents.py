@@ -24,7 +24,7 @@ async def process_chunk_async(
     causal_spec: dict,
 ) -> WorkerResult:
     """
-    Process a single data chunk against the DSEM model.
+    Process a single data chunk against the causal spec.
 
     Args:
         chunk: The data chunk to process

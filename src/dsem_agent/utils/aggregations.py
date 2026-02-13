@@ -2,12 +2,12 @@
 
 Workers extract at the finest resolution visible in their chunk.
 This module buckets timestamps and applies each indicator's aggregation
-function to reach measurement_granularity. CT-SEM discretization then
+function to reach measurement_granularity. SSM discretization then
 handles measurement_granularity -> continuous time.
 
     Workers extract at raw resolution
       -> aggregate_worker_measurements() -> measurement_granularity
-      -> CT-SEM discretization -> continuous time
+      -> SSM discretization -> continuous time
 """
 
 import numpy as np

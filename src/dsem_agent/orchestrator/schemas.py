@@ -1,4 +1,4 @@
-"""DSEM domain schemas following Anderson & Gerbing two-step approach.
+"""Causal domain schemas following Anderson & Gerbing two-step approach.
 
 Separates:
 1. LatentModel - theoretical constructs + causal edges (theory-driven)
