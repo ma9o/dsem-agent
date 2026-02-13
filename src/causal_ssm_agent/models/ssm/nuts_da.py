@@ -43,6 +43,7 @@ from numpyro.optim import ClippedAdam
 from causal_ssm_agent.models.ssm.constants import MIN_DT
 from causal_ssm_agent.models.ssm.discretization import discretize_system_batched
 from causal_ssm_agent.models.ssm.inference import InferenceResult
+from causal_ssm_agent.models.ssm.model import NoiseFamily
 
 if TYPE_CHECKING:
     from causal_ssm_agent.models.ssm.model import SSMModel
@@ -178,19 +179,25 @@ def _kalman_smooth_states(
     """Kalman filter + RTS smoother for linear Gaussian SSM via cuthbert.
 
     Returns smoothed state means (T, D).
+    Handles missing data (NaN) via variance inflation, matching KalmanLikelihood.
     """
     from cuthbert.filtering import filter as cuthbert_filter
     from cuthbert.gaussian.moments import build_filter, build_smoother
     from cuthbert.smoothing import smoother as cuthbert_smoother
+
+    from causal_ssm_agent.models.likelihoods.base import preprocess_missing_data
 
     T, n_m = observations.shape
     n = Ad.shape[1]
     jitter_n = 1e-6 * jnp.eye(n)
     jitter_m = 1e-6 * jnp.eye(n_m)
 
+    # Handle missing data: NaN → 0, inflate R for missing observations
+    clean_obs, R_adjusted, _obs_mask = preprocess_missing_data(observations, R, None)
+
     # Cholesky factors for cuthbert (square-root form)
     chol_Qd = vmap(lambda Q: jnp.linalg.cholesky(Q + jitter_n))(Qd)
-    chol_R = jnp.linalg.cholesky(R + jitter_m)
+    chol_R = jnp.linalg.cholesky(R_adjusted + jitter_m)  # (T, n_m, n_m)
     chol_P0 = jnp.linalg.cholesky(init_cov + jitter_n)
 
     # model_inputs with leading dim T (cuthbert convention:
@@ -203,8 +210,8 @@ def _kalman_smooth_states(
         "chol_Q": chol_Qd,
         "H": jnp.broadcast_to(H, (T, n_m, n)),
         "d": jnp.broadcast_to(d, (T, n_m)),
-        "chol_R": jnp.broadcast_to(chol_R, (T, n_m, n_m)),
-        "y": observations,
+        "chol_R": chol_R,
+        "y": clean_obs,
     }
 
     # Callbacks matching KalmanLikelihood pattern
@@ -589,6 +596,15 @@ def fit_nuts_da(
     Returns:
         InferenceResult with posterior samples (latent states excluded)
     """
+    if model.spec.manifest_dist != NoiseFamily.GAUSSIAN:
+        raise ValueError(
+            f"NUTS-DA only supports Gaussian observations, got {model.spec.manifest_dist}. "
+            f"Data augmentation MCMC mixes poorly with non-Gaussian likelihoods due to "
+            f"challenging posterior geometry (divergent transitions, strong state-parameter "
+            f"correlations). Use a marginalizing backend instead: 'nuts', 'svi', 'hessmc2', "
+            f"'pgas', or 'tempered_smc'."
+        )
+
     model_fn = functools.partial(_da_model, model, centered=centered)
 
     # Determine initialization strategy
