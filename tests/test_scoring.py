@@ -183,11 +183,14 @@ class TestCountRulePoints:
     def test_endogenous_time_varying_construct_points(self, construct_factory):
         """Endogenous time-varying construct with all correct fields scores points."""
         structure = LatentModel(
-            constructs=[construct_factory("mood", "daily", Role.ENDOGENOUS, is_outcome=True)],
-            edges=[],
+            constructs=[
+                construct_factory("stress", "daily", Role.EXOGENOUS),
+                construct_factory("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
+            ],
+            edges=[CausalEdge(cause="stress", effect="mood", description="Test")],
         )
         points = _count_rule_points(structure)
-        # +1 role, +1 temporal_status, +1 causal_granularity present, +1 valid causal_granularity
+        # +1 role, +1 temporal_status, +1 causal_granularity present, +1 valid causal_granularity (per construct)
         assert points >= 4
 
     def test_time_invariant_construct_points(self, construct_factory):
@@ -197,7 +200,7 @@ class TestCountRulePoints:
                 construct_factory("age", None, Role.EXOGENOUS),
                 construct_factory("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
             ],
-            edges=[],
+            edges=[CausalEdge(cause="age", effect="mood", description="Test")],
         )
         points = _count_rule_points(structure)
         # age: +1 role, +1 temporal_status, +1 no granularity = 3

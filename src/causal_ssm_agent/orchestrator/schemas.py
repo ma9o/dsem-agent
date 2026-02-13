@@ -188,6 +188,15 @@ class LatentModel(BaseModel):
                     f"{edge.cause} ({cause_gran}) -> {edge.effect} ({effect_gran})"
                 )
 
+        # Outcome must have at least one incoming edge
+        outcome_name = outcomes[0].name
+        incoming_to_outcome = [e for e in self.edges if e.effect == outcome_name]
+        if not incoming_to_outcome:
+            raise ValueError(
+                f"Outcome construct '{outcome_name}' has no incoming causal edges. "
+                "The model must include at least one cause of the outcome."
+            )
+
         # Check acyclicity within time slice (contemporaneous edges only)
         contemporaneous_edges = [(e.cause, e.effect) for e in self.edges if not e.lagged]
         if contemporaneous_edges:
@@ -586,6 +595,16 @@ def validate_latent_model(data: dict) -> tuple[LatentModel | None, list[str]]:
     elif len(outcomes) > 1:
         names = [c.name for c in outcomes]
         errors.append(f"Only one outcome allowed, got {len(outcomes)}: {names}")
+
+    # Check outcome has at least one incoming edge
+    if len(outcomes) == 1:
+        outcome_name = outcomes[0].name
+        incoming_to_outcome = [e for e in valid_edges if e.effect == outcome_name]
+        if not incoming_to_outcome:
+            errors.append(
+                f"Outcome construct '{outcome_name}' has no incoming causal edges. "
+                "The model must include at least one cause of the outcome."
+            )
 
     # Check acyclicity of contemporaneous edges
     contemporaneous_edges = [(e.cause, e.effect) for e in valid_edges if not e.lagged]

@@ -189,6 +189,17 @@ class TestLatentModel:
                 ],
             )
 
+    def test_invalid_outcome_no_incoming_edges(self, construct_factory):
+        """Outcome must have at least one incoming causal edge."""
+        with pytest.raises(ValueError, match="has no incoming causal edges"):
+            LatentModel(
+                constructs=[
+                    construct_factory("stress", "daily", Role.EXOGENOUS),
+                    construct_factory("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
+                ],
+                edges=[],
+            )
+
     def test_invalid_no_outcome(self, construct_factory):
         """Structure must have exactly one outcome."""
         with pytest.raises(ValueError, match="Exactly one construct must have is_outcome=true"):
@@ -349,9 +360,10 @@ class TestCausalSpec:
         """Indicator must reference a valid construct."""
         latent = LatentModel(
             constructs=[
+                construct_factory("stress", "daily", Role.EXOGENOUS),
                 construct_factory("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
             ],
-            edges=[],
+            edges=[CausalEdge(cause="stress", effect="mood", description="Test")],
         )
         measurement = MeasurementModel(
             indicators=[
@@ -390,9 +402,10 @@ class TestCausalSpec:
         """Indicator measurement_granularity must be finer than construct's causal_granularity."""
         latent = LatentModel(
             constructs=[
+                construct_factory("stress", "daily", Role.EXOGENOUS),
                 construct_factory("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
             ],
-            edges=[],
+            edges=[CausalEdge(cause="stress", effect="mood", description="Test")],
         )
         measurement = MeasurementModel(
             indicators=[
@@ -408,9 +421,10 @@ class TestCausalSpec:
         """CausalSpec.to_networkx includes construct→indicator loading edges."""
         latent = LatentModel(
             constructs=[
+                construct_factory("stress", "daily", Role.EXOGENOUS),
                 construct_factory("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
             ],
-            edges=[],
+            edges=[CausalEdge(cause="stress", effect="mood", description="Test")],
         )
         measurement = MeasurementModel(
             indicators=[
