@@ -89,7 +89,7 @@ def _da_model(
 
     # --- Discretize system for all time intervals ---
     time_intervals = jnp.diff(times, prepend=times[0])
-    time_intervals = time_intervals.at[0].set(MIN_DT)
+    time_intervals = jnp.maximum(time_intervals, MIN_DT)
 
     Ad_all, Qd_all, cd_all = discretize_system_batched(drift, diffusion_cov, cint, time_intervals)
 
@@ -343,7 +343,7 @@ def _kalman_warmstart(
             cint = det_values.get("cint")
 
             time_intervals = jnp.diff(times, prepend=times[0])
-            time_intervals = time_intervals.at[0].set(MIN_DT)
+            time_intervals = jnp.maximum(time_intervals, MIN_DT)
             Ad_all, Qd_all, cd_all = discretize_system_batched(
                 drift, diffusion_cov, cint, time_intervals
             )
@@ -470,7 +470,7 @@ def _try_smoother(
             manifest_means_val = jnp.zeros(spec.n_manifest)
 
         time_intervals = jnp.diff(times, prepend=times[0])
-        time_intervals = time_intervals.at[0].set(MIN_DT)
+        time_intervals = jnp.maximum(time_intervals, MIN_DT)
 
         Ad_all, Qd_all, cd_all = discretize_system_batched(
             drift, diffusion_cov, cint, time_intervals

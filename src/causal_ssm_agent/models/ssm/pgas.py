@@ -591,7 +591,7 @@ def fit_pgas(
 
     # Time intervals
     dt_array = jnp.diff(times, prepend=times[0])
-    dt_array = dt_array.at[0].set(MIN_DT)
+    dt_array = jnp.maximum(dt_array, MIN_DT)
 
     # Detect Gaussian observations for optimal proposal
     gaussian_obs = model.spec.manifest_dist.value == "gaussian"

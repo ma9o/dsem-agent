@@ -634,7 +634,7 @@ class SSMModel:
         if not hierarchical or n_subjects == 1:
             # Single subject
             time_intervals = jnp.diff(times, prepend=times[0])
-            time_intervals = time_intervals.at[0].set(MIN_DT)
+            time_intervals = jnp.maximum(time_intervals, MIN_DT)
 
             init = InitialStateParams(mean=t0_means, cov=t0_cov)
             ll = backend.compute_log_likelihood(

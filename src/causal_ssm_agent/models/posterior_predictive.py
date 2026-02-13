@@ -264,7 +264,7 @@ def simulate_posterior_predictive(
 
     # Compute dt array
     dt_array = jnp.diff(times, prepend=times[0])
-    dt_array = dt_array.at[0].set(MIN_DT)
+    dt_array = jnp.maximum(dt_array, MIN_DT)
 
     rng = jax.random.PRNGKey(rng_seed)
     draw_keys = jax.random.split(rng, n_use)
@@ -380,7 +380,7 @@ def _simulate_hierarchical(
     T = times.shape[0]
 
     dt_array = jnp.diff(times, prepend=times[0])
-    dt_array = dt_array.at[0].set(MIN_DT)
+    dt_array = jnp.maximum(dt_array, MIN_DT)
 
     is_gaussian = manifest_dist in (NoiseFamily.GAUSSIAN, "gaussian")
 
