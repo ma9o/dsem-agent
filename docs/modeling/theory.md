@@ -151,7 +151,7 @@ For a worked example demonstrating why marginalization matters for MCMC converge
 
 ## 3. Measurement Model Identification Enables Causal Identification
 
-**Principle:** Once the measurement model is identified (via CFA for multi-indicator constructs, or by assumption for single-indicator constructs), constructs can be treated as effectively observed for the purpose of causal identification via the structural model.
+**Principle:** Once the measurement model is identified (via CFA for multi-indicator constructs, or by assumption for single-indicator constructs), constructs can be treated as effectively observed for the purpose of causal identification via the latent model.
 
 ### The Workflow
 

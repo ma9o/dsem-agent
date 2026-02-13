@@ -1,6 +1,6 @@
 # Prompting Best Practices for Model Specification
 
-Guidelines for prompting LLMs to propose statistical models in the dsem-agent pipeline.
+Guidelines for prompting LLMs to propose statistical models in the causal-ssm-agent pipeline.
 
 ## Avoid naming a modeling tradition
 

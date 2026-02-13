@@ -32,7 +32,7 @@ Semantic checks that Polars schema can't enforce. Structural validation (column 
 
 **[4b] Parametric Identifiability:** Pre-fit diagnostics that check whether model parameters are constrained by the data before running expensive inference. Detects structural non-identifiability (rank-deficient Fisher information), boundary identifiability, and weak parameters. See `src/causal_ssm_agent/flows/stages/stage4b_parametric_id.py`.
 
-**[5] Inference:** Fit the model with NumPyro/JAX (SVI, NUTS, Hess-MC2, PGAS, Tempered SMC, Laplace-EM, Structured VI, or DPF), run proposed interventions, return results to user ranked by effect size.
+**[5] Inference:** Fit the model with NumPyro/JAX (SVI, NUTS, NUTS-DA, Hess-MC2, PGAS, Tempered SMC, Laplace-EM, Structured VI, or DPF), run proposed interventions, return results to user ranked by effect size.
 
 ---
 

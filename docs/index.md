@@ -7,19 +7,20 @@ This index helps coding agents navigate the documentation structure.
 ```
 docs/
 ├── index.md           # This file
-├── modeling/          # Theoretical foundations (overview, assumptions, scope)
-├── reference/         # Technical specs (schemas, pipeline)
-└── guides/            # Practical usage (quickstart, data, evals)
+├── modeling/          # Theoretical foundations (scope, assumptions, theory, estimation)
+├── reference/         # Technical specs (schemas, pipeline, mplus-parity)
+└── guides/            # Practical usage (quickstart, data, evals, prompting)
 ```
 
 ## Quick Links by Task
 
 **Understanding the modeling approach:**
-- Start with `modeling/scope.md` for construct taxonomy, ontology, and what's in/out of scope
-- Read `modeling/overview.md` for temporal granularity and cross-timescale rules
+- Start with `modeling/scope.md` for construct taxonomy, ontology, temporal granularity, cross-timescale rules, and what's in/out of scope
 - Check `modeling/assumptions.md` for specific technical assumptions (A1-A9)
 - See `modeling/theory.md` for theoretical foundations (identification locality, correlated errors, SEM/Pearl bridge, Bayesian unification)
-- See `modeling/estimation.md` for the estimation pipeline (CT-SDE, discretization, SVI/NUTS/Hess-MC2/PGAS/Tempered-SMC inference, cuthbert integration)
+- See `modeling/estimation.md` for the estimation pipeline (CT-SDE, discretization, counterfactual inference, interpretation guidance)
+- See `modeling/inference-strategies.md` for inference method selection (SVI, NUTS, NUTS-DA, Hess-MC2, PGAS, Tempered SMC, Laplace-EM, Structured VI, DPF)
+- See `modeling/functional_spec.md` for Stage 4 model specification (rule-based constraints + LLM prior elicitation)
 
 **Implementing or modifying:**
 - `reference/schema.md` for Pydantic models and validation
@@ -35,3 +36,4 @@ docs/
 - `guides/prefect.md` for Prefect v3 task/flow patterns
 - `guides/inspect.md` for AISI inspect eval framework
 - `guides/exa.md` for Exa literature search
+- `guides/prompting.md` for LLM prompting best practices

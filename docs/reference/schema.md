@@ -17,21 +17,7 @@
 
 **Terminology:** We avoid "structural" due to SEM/SCM ambiguity. Use measurement/latent for the SEM distinction and functional/topological for SCM.
 
----
-
-## Two-Stage Architecture
-
-Following Anderson & Gerbing (1988), the schema separates:
-
-1. **Latent Model (Stage 1a):** Theory-driven causal DAG over constructs
-   - No data required - pure domain knowledge
-   - Constructs represent theoretical entities
-   - Edges encode causal relationships (topological structure)
-
-2. **Measurement Model (Stage 1b):** Data-driven operationalization
-   - Requires seeing actual data
-   - Indicators map constructs to observables
-   - Specifies how to measure each construct
+The schema implements the two-stage pipeline (see [pipeline.md](pipeline.md)): latent model (Stage 1a) defines causal structure, measurement model (Stage 1b) operationalizes constructs into indicators.
 
 ---
 

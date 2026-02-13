@@ -284,6 +284,28 @@ inference.fit()
 InferenceResult (posterior samples + diagnostics)
 ```
 
+## 8. Counterfactual Inference (Do-Operator)
+
+**Module:** `src/causal_ssm_agent/models/ssm/counterfactual.py`
+
+After estimation, causal effects are computed via the do-operator on the continuous-time steady state. The pattern:
+
+1. **Baseline steady state:** Given posterior draws of drift A and continuous intercept c, compute eta\* = -A^{-1}c (the CT steady state).
+2. **Intervention:** Apply do(X = x) by replacing the treatment variable's row in A with an identity constraint and solving the modified linear system.
+3. **Treatment effect:** Compare do(treat = baseline + 1) vs baseline for the outcome variable.
+
+This is called from Stage 5 (`stage5_inference.py:run_interventions()`) which vmaps `treatment_effect()` over posterior draws to produce posterior distributions of causal effects, ranked by effect size.
+
+## 9. Interpretation Guidance
+
+Effects are estimated as relationships between constructs as measured through their indicators. Measurement error in indicators is absorbed into residual variance. Interpret:
+
+- **AR coefficients** as inertia in the construct
+- **Cross-lag coefficients** as causal relationships between constructs
+- **Random effects** as stable between-person differences in baselines
+
+Causal interpretation requires that the DAG correctly captures the true causal structure and that all relevant confounders are included.
+
 ## References
 
 - `src/causal_ssm_agent/models/ssm/model.py` -- SSMSpec, SSMPriors, SSMModel
@@ -300,4 +322,6 @@ InferenceResult (posterior samples + diagnostics)
 - `src/causal_ssm_agent/models/likelihoods/particle.py` -- ParticleLikelihood, SSMAdapter
 - `src/causal_ssm_agent/models/likelihoods/emissions.py` -- canonical emission log-probs
 - `src/causal_ssm_agent/models/likelihoods/rao_blackwell.py` -- Rao-Blackwell callbacks, RBState
+- `src/causal_ssm_agent/models/ssm/counterfactual.py` -- Do-operator (steady_state, do, treatment_effect)
+- `src/causal_ssm_agent/models/ssm/nuts_da.py` -- NUTS Data Augmentation (joint param + state sampling)
 - `src/causal_ssm_agent/models/ssm_builder.py` -- SSMModelBuilder

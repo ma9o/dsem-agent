@@ -9,6 +9,7 @@ Unlike traditional discrete-time approaches that require upfront aggregation, th
 - Avoids information loss from pre-aggregation
 - Models dynamics via stochastic differential equations
 - Supports hierarchical (multi-subject) panel data
+- Computes counterfactual effects via do-operator on CT steady states
 
 ## Key Feature: Natural Language Causal Queries
 
@@ -26,18 +27,17 @@ The orchestrator LLM translates these informal queries into formal causal struct
 - uv
 - Prefect for pipeline orchestration
 - AISI's Inspect agent framework
-- DSPy for prompt optimization
 - NetworkX for causal DAG representation
 - y0 for identifiability checks (Pearl's ID algorithm)
 - JAX/NumPyro for Bayesian SSM estimation
 - cuthbert for differentiable Kalman filtering and particle filtering
-- Multiple inference backends: SVI, NUTS, Hess-MC², PGAS, Tempered SMC, Laplace-EM, Structured VI, DPF
+- Multiple inference backends: SVI, NUTS, NUTS-DA, Hess-MC², PGAS, Tempered SMC, Laplace-EM, Structured VI, DPF
 
 ## Documentation
 
 See [`docs/index.md`](docs/index.md) for the full documentation structure.
 
-- **[Modeling](docs/modeling/)** - Theoretical foundations: scope, overview, assumptions, theory
+- **[Modeling](docs/modeling/)** - Theoretical foundations: scope, assumptions, theory, estimation
 - **[Reference](docs/reference/)** - Technical specifications: schemas, pipeline stages
 - **[Guides](docs/guides/)** - Practical usage: quickstart, data workflow, running evals
 - **[Mplus Parity](docs/reference/mplus-parity.md)** - Feature comparison with Asparouhov et al. (2017)
@@ -50,21 +50,20 @@ causal-ssm-agent/
 │   ├── raw/           # Raw input data (gitignored)
 │   ├── processed/     # Converted text chunks (gitignored)
 │   ├── queries/       # Test queries for pipeline
-│   └── eval/          # Example DAGs for evals
+│   └── eval/          # Eval questions (questions/{N}_{name}/)
 ├── docs/
-│   ├── modeling/      # Theoretical foundations (scope, overview, assumptions, theory)
+│   ├── modeling/      # Theoretical foundations (scope, assumptions, theory, estimation)
 │   ├── reference/     # Technical specs (schemas, pipeline, mplus-parity)
 │   ├── guides/        # Practical usage (quickstart, data, evals)
 │   └── papers/        # Reference papers (Asparouhov 2017, etc.)
 ├── evals/             # Inspect AI evals (eval{N}_{name}.py) + scripts/
-│   └── deprecated/    # Deprecated evals
 ├── src/causal_ssm_agent/
 │   ├── orchestrator/  # Two-stage model specification (latent + measurement)
 │   │   ├── agents.py  # Stage 1a: latent model, Stage 1b: measurement model
 │   │   ├── stage1a.py          # Stage 1a orchestration logic
 │   │   ├── stage1b.py          # Stage 1b orchestration logic
 │   │   ├── stage4_orchestrator.py   # Stage 4 orchestrator logic
-│   │   ├── scoring.py          # DSPy-compatible model scoring
+│   │   ├── scoring.py          # Model scoring
 │   │   ├── prompts/   # LLM prompts for all stages
 │   │   │   ├── latent_model.py      # Stage 1a prompts
 │   │   │   ├── measurement_model.py # Stage 1b prompts
@@ -89,6 +88,8 @@ causal-ssm-agent/
 │   │   │   ├── laplace_em.py   # IEKS + Laplace-approximated marginal likelihood
 │   │   │   ├── structured_vi.py # Backward-factored structured VI
 │   │   │   ├── dpf.py          # Differentiable PF with learned proposal
+│   │   │   ├── nuts_da.py      # NUTS Data Augmentation (joint param + state)
+│   │   │   ├── counterfactual.py # Do-operator for intervention effects
 │   │   │   ├── mcmc_utils.py   # Shared MCMC utilities (HMC step, mass matrix)
 │   │   │   ├── utils.py        # Shared site discovery and matrix assembly
 │   │   │   └── discretization.py # CT→DT conversion (incl. batched vmap)
@@ -117,5 +118,5 @@ causal-ssm-agent/
 ├── notebooks/         # PyMC showcase notebooks (tracked)
 ├── scratchpad/        # Temporary work files (gitignored contents)
 ├── tests/             # pytest tests (test_{name}.py)
-└── tools/             # CLI tools + UIs (dag_cli.py, dag_explorer.py, log readers)
+└── tools/             # CLI tools + UIs (dag_cli.py, dag_explorer.py, dag_diagnostics.py, model_inspector.py, ci.py)
 ```

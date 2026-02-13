@@ -94,6 +94,7 @@ The `fit()` dispatcher in `src/causal_ssm_agent/models/ssm/inference.py` routes 
 | Laplace-EM | `"laplace_em"` | IEKS + Laplace | Laplace approx | Fast mode-finding, linear-ish models |
 | Structured VI | `"structured_vi"` | Variational | Any | Trajectory-aware variational posterior |
 | DPF | `"dpf"` | Learned proposal PF | Learned | Amortized proposals for repeated inference |
+| NUTS-DA | `"nuts_da"` | MCMC (data augmentation) | Direct (no filter) | Exact Gaussian dynamics, moderate T, "just run NUTS" |
 
 ### SVI (default)
 
@@ -231,6 +232,31 @@ Learns a neural proposal network q\_phi(z\_t | z\_{t-1}, y\_t) by optimizing the
 
 **When to use:** When the bootstrap proposal is a poor match for the filtering distribution (high-dimensional latent states, informative observations). Amortizes proposal learning across datasets.
 
+### NUTS Data Augmentation (NUTS-DA)
+
+**Module:** `ssm/nuts_da.py` (`fit_nuts_da`)
+
+Data augmentation MCMC (Tanner & Wong 1987): augments the parameter space with all latent states eta\_{0:T} and samples the joint posterior p(theta, eta\_{0:T} | y\_{1:T}) using NUTS. This is the "everything is parameters" approach — standard in Stan/NumPyro. No particle filter or Kalman filter is used during sampling; NUTS explores the full joint space using gradient information from the Gaussian transition and observation densities.
+
+**Parameterizations:**
+- **Centered** (default): Samples eta\_t ~ N(A\_d @ eta\_{t-1} + c\_d, Q\_d) directly via `numpyro.contrib.control_flow.scan`. Works well with SVI warmstart even at high T.
+- **Non-centered**: Samples standardized innovations eps\_t ~ N(0, I) and computes eta\_t deterministically. Better without warmstart when process noise dominates; worse when observations are informative.
+
+**SVI warmstart** (enabled by default): Runs variational inference on the Kalman-likelihood model (~50D parameter space) to find good parameter estimates. A Kalman smoother then provides optimal state estimates. Combined, these initialize NUTS near the posterior mode, breaking the chicken-and-egg problem of mass matrix adaptation in high dimensions. Falls back to particle-filter SVI if Kalman SVI fails, then to pseudo-inverse state initialization.
+
+**Parameters:**
+- `num_warmup` / `num_samples`: MCMC budget (default 1000/1000)
+- `num_chains`: Parallel chains (default 4)
+- `target_accept_prob`: Default 0.80
+- `max_tree_depth`: Default 10
+- `centered`: Centered vs non-centered parameterization (default True)
+- `svi_warmstart`: Enable Kalman SVI warmstart (default True)
+- `svi_num_steps`: SVI optimization steps (default 2000)
+
+**When to use:** Moderate T (up to ~500 timesteps), exact Gaussian dynamics, and you want the simplicity of "just run NUTS" without choosing a likelihood backend or tuning SMC particles. The SVI warmstart makes this practical for SSMs where naive NUTS would fail to initialize.
+
+**Limitations:** Joint space dimension grows as O(n\_latent x T), so not suitable for very long time series. Requires Gaussian observation noise (non-Gaussian obs need PGAS or PF-based methods).
+
 ## Shared Infrastructure
 
 ### MCMC Utilities (`ssm/mcmc_utils.py`)
@@ -269,6 +295,7 @@ Shared by all SMC-based methods (Hess-MC^2, PGAS, tempered SMC, Laplace-EM, stru
 |----------|-------------|------------|-----------|
 | Linear-Gaussian, fast exploration | SVI | Kalman | Fastest, good enough for iteration |
 | Linear-Gaussian, publication quality | NUTS | Kalman | Exact posterior, convergence diagnostics |
+| Linear-Gaussian, moderate T, simple setup | NUTS-DA | Direct | Joint param+state, no filter needed |
 | Non-Gaussian obs, moderate dimension | PGAS | Direct | No PF in parameter step, block HMC |
 | Multimodal posterior | Tempered SMC | PF | Tempering explores modes |
 | Highly anisotropic posterior | Hess-MC^2 | PF | Hessian-adapted proposals |

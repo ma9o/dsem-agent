@@ -6,14 +6,7 @@ This document describes how Stage 4 translates the causal DAG (topological struc
 
 ## Terminology
 
-Per CLAUDE.md, we distinguish:
-
-| Concept | Term | Stage |
-|---------|------|-------|
-| DAG encoding parent-child relationships | **Topological structure** | Stage 1a/1b |
-| Mathematical form of causal mechanisms | **Functional specification** | Stage 4 |
-
-Stage 4 bridges these: given the DAG, it specifies the regression equations, distributions, and priors needed to fit the model in NumPyro.
+See AGENTS.md for terminology conventions. Stage 4 receives the topological structure from Stage 1a/1b (see [pipeline.md](../reference/pipeline.md)) and translates it into a functional specification: the regression equations, distributions, and priors needed to fit the model in NumPyro.
 
 ---
 

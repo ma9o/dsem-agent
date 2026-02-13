@@ -187,9 +187,9 @@ Var(Y_it | i) = σ² / (1 - ϕ²)
 
 **Why it matters:** ESM/EMA data often have irregular timing. Treating observations as equally-spaced when they're not biases AR estimates.
 
-**Current status:** Framework has `measurement_granularity` for aggregation but doesn't handle within-granularity irregular timing.
+**Current status:** The CT-SDE formulation handles irregular intervals natively — discretization computes per-interval (Ad, Qd, cd) via matrix exponential, so observations can be arbitrarily spaced without approximation. No additional implementation needed.
 
-**Priority:** Low-Medium - depends on data collection protocol
+**Priority:** Resolved — handled by CT formulation
 
 ---
 
@@ -219,7 +219,7 @@ Var(Y_it | i) = σ² / (1 - ϕ²)
 | Latent centering | Critical | Unclear | **Verify** |
 | Random variances | Yes | Unclear | **Gap** |
 | Direct/indirect effects | Explicit | Implicit | **Gap** |
-| Unequal intervals | Algorithm | Partial | **Gap** |
+| Unequal intervals | Algorithm | Native (CT-SDE) | **Resolved** |
 | Random slopes | Yes | Unclear | **Verify** |
 | Categorical outcomes | Yes | Partial | **Verify** |
 
@@ -237,8 +237,7 @@ Var(Y_it | i) = σ² / (1 - ϕ²)
 5. **Clarify direct vs. indirect effects** in edge semantics
 
 ### Low Priority
-6. **Unequal interval handling** - only if data collection protocols require it
-7. **Document model comparison approach** - recommend LOO-CV or WAIC via ArviZ
+6. **Document model comparison approach** - recommend LOO-CV or WAIC via ArviZ
 
 ---
 
