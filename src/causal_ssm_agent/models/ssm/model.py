@@ -14,13 +14,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import jax
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
 from jax import lax, vmap
+
+if TYPE_CHECKING:
+    import numpy as np
 
 from causal_ssm_agent.models.likelihoods.base import CTParams, InitialStateParams, MeasurementParams
 from causal_ssm_agent.models.ssm.constants import MIN_DT
@@ -92,6 +95,12 @@ class SSMSpec:
     latent_names: list[str] | None = None
     manifest_names: list[str] | None = None
 
+    # DAG-constrained masks (None = fully free, backward compat)
+    # drift_mask: (n_latent, n_latent) bool — True where drift entry is free
+    drift_mask: np.ndarray | None = None
+    # lambda_mask: (n_manifest, n_latent) bool — True where loading is free to sample
+    lambda_mask: np.ndarray | None = None
+
 
 @dataclass
 class SSMPriors:
@@ -134,15 +143,35 @@ def _make_prior_dist(prior: dict) -> dist.Distribution:
 
     If `lower`/`upper` bounds are present, uses TruncatedNormal to respect
     hard parameter bounds. Otherwise uses Normal (or HalfNormal if only sigma).
+
+    Supports array-valued mu/sigma for per-element priors.
     """
     if "lower" in prior and "upper" in prior:
         return dist.TruncatedNormal(
-            loc=prior["mu"], scale=prior["sigma"],
-            low=prior["lower"], high=prior["upper"],
+            loc=jnp.asarray(prior["mu"]),
+            scale=jnp.asarray(prior["sigma"]),
+            low=jnp.asarray(prior["lower"]),
+            high=jnp.asarray(prior["upper"]),
         )
     if "mu" in prior:
-        return dist.Normal(prior["mu"], prior["sigma"])
-    return dist.HalfNormal(prior["sigma"])
+        return dist.Normal(jnp.asarray(prior["mu"]), jnp.asarray(prior["sigma"]))
+    return dist.HalfNormal(jnp.asarray(prior["sigma"]))
+
+
+def _make_prior_batch(prior: dict, n: int) -> dist.Distribution:
+    """Build a batched prior distribution with shape (n,).
+
+    If prior already has array-valued params with length n, use directly.
+    If scalar, expand to batch shape [n].
+    """
+    d = _make_prior_dist(prior)
+    if d.batch_shape == (n,):
+        return d
+    if d.batch_shape == ():
+        return d.expand([n])
+    raise ValueError(
+        f"Prior batch shape {d.batch_shape} does not match expected ({n},)"
+    )
 
 
 class SSMModel:
