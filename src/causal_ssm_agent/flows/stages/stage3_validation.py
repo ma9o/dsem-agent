@@ -322,7 +322,20 @@ def _check_construct_correlations(
                     .drop_nulls()
                 )
 
-                aligned = data_a.join(data_b, on="ts", how="inner")
+                # Bucket to daily resolution so indicators with different
+                # sub-day timestamps can still align for correlation checks.
+                data_a = (
+                    data_a.with_columns(pl.col("ts").dt.truncate("1d").alias("day"))
+                    .group_by("day")
+                    .agg(pl.col("value_a").mean())
+                )
+                data_b = (
+                    data_b.with_columns(pl.col("ts").dt.truncate("1d").alias("day"))
+                    .group_by("day")
+                    .agg(pl.col("value_b").mean())
+                )
+
+                aligned = data_a.join(data_b, on="day", how="inner")
 
                 if len(aligned) < MIN_ALIGNED_FOR_CFA:
                     continue
@@ -337,7 +350,7 @@ def _check_construct_correlations(
                             "severity": "warning",
                             "message": (
                                 f"Indicators {name_a} and {name_b} have negative "
-                                f"correlation (r={r:.3f}), violating reflective "
+                                f"daily correlation (r={r:.3f}), violating reflective "
                                 f"measurement assumption"
                             ),
                         }
