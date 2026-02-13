@@ -30,7 +30,7 @@ from causal_ssm_agent.models.likelihoods.base import (
     MeasurementParams,
 )
 from causal_ssm_agent.models.likelihoods.particle import ParticleLikelihood, SSMAdapter
-from causal_ssm_agent.models.ssm import InferenceResult, NoiseFamily, SSMModel, SSMSpec, fit
+from causal_ssm_agent.models.ssm import DistributionFamily, InferenceResult, SSMModel, SSMSpec, fit
 
 # =============================================================================
 # ParticleLikelihood: Core Functionality
@@ -459,7 +459,7 @@ class TestParameterRecoveryPoisson:
             n_manifest=1,
             lambda_mat=jnp.eye(1),
             diffusion="diag",
-            manifest_dist=NoiseFamily.POISSON,
+            manifest_dist=DistributionFamily.POISSON,
             manifest_means=jnp.array([log_baseline]),
         )
         model = SSMModel(spec, n_particles=300)
@@ -521,7 +521,7 @@ class TestParameterRecoveryStudentT:
             n_manifest=1,
             lambda_mat=jnp.eye(1),
             diffusion="diag",
-            manifest_dist=NoiseFamily.STUDENT_T,
+            manifest_dist=DistributionFamily.STUDENT_T,
         )
         model = SSMModel(spec, n_particles=300)
 
@@ -775,7 +775,7 @@ class TestFitReturnsInferenceResult:
             n_manifest=2,
             lambda_mat=jnp.eye(2),
             diffusion="diag",
-            manifest_dist=NoiseFamily.GAUSSIAN,
+            manifest_dist=DistributionFamily.GAUSSIAN,
         )
         model = SSMModel(spec, n_particles=50)
 
@@ -808,7 +808,7 @@ class TestFitReturnsInferenceResult:
             n_manifest=2,
             lambda_mat=jnp.eye(2),
             diffusion="diag",
-            manifest_dist=NoiseFamily.GAUSSIAN,
+            manifest_dist=DistributionFamily.GAUSSIAN,
         )
         model = SSMModel(spec, n_particles=50)
 
@@ -842,7 +842,7 @@ class TestFitReturnsInferenceResult:
             n_manifest=1,
             lambda_mat=jnp.eye(1),
             diffusion="diag",
-            manifest_dist=NoiseFamily.POISSON,
+            manifest_dist=DistributionFamily.POISSON,
         )
         model = SSMModel(spec, n_particles=50)
 
@@ -1040,7 +1040,7 @@ class TestSVIParameterRecovery:
 # =============================================================================
 
 
-class TestBuilderNoiseFamilyWiring:
+class TestBuilderDistributionFamilyWiring:
     """Test that SSMModelBuilder wires noise families from ModelSpec."""
 
     def test_convert_spec_sets_poisson_noise_family(self):
@@ -1074,14 +1074,13 @@ class TestBuilderNoiseFamilyWiring:
                     search_context="autoregressive",
                 ),
             ],
-
             reasoning="test",
         )
 
         builder = SSMModelBuilder(model_spec=model_spec)
         ssm_spec = builder._convert_spec_to_ssm(model_spec)
 
-        assert ssm_spec.manifest_dist == NoiseFamily.POISSON
+        assert ssm_spec.manifest_dist == DistributionFamily.POISSON
 
     def test_convert_spec_sets_gaussian_for_normal(self):
         """ModelSpec with Normal likelihood -> SSMSpec has GAUSSIAN manifest_dist."""
@@ -1100,7 +1099,7 @@ class TestBuilderNoiseFamilyWiring:
             likelihoods=[
                 LikelihoodSpec(
                     variable="continuous_var",
-                    distribution=DistributionFamily.NORMAL,
+                    distribution=DistributionFamily.GAUSSIAN,
                     link=LinkFunction.IDENTITY,
                     reasoning="Continuous data",
                 ),
@@ -1114,14 +1113,13 @@ class TestBuilderNoiseFamilyWiring:
                     search_context="autoregressive",
                 ),
             ],
-
             reasoning="test",
         )
 
         builder = SSMModelBuilder(model_spec=model_spec)
         ssm_spec = builder._convert_spec_to_ssm(model_spec)
 
-        assert ssm_spec.manifest_dist == NoiseFamily.GAUSSIAN
+        assert ssm_spec.manifest_dist == DistributionFamily.GAUSSIAN
 
 
 # =============================================================================
@@ -2025,14 +2023,14 @@ class TestPGASOptimalProposal:
     @pytest.mark.timeout(60)
     def test_pgas_fallback_for_poisson(self):
         """PGAS should fall back to gradient proposal for non-Gaussian obs."""
-        from causal_ssm_agent.models.ssm import NoiseFamily, SSMModel, SSMSpec, fit
+        from causal_ssm_agent.models.ssm import DistributionFamily, SSMModel, SSMSpec, fit
 
         spec = SSMSpec(
             n_latent=1,
             n_manifest=1,
             lambda_mat=jnp.eye(1),
             diffusion="diag",
-            manifest_dist=NoiseFamily.POISSON,
+            manifest_dist=DistributionFamily.POISSON,
             manifest_means=jnp.array([jnp.log(5.0)]),
         )
         model = SSMModel(spec, n_particles=50)

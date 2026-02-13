@@ -17,7 +17,8 @@ import jax.numpy as jnp
 import jax.random as random
 import pytest
 
-from causal_ssm_agent.models.ssm.model import NoiseFamily, SSMModel, SSMPriors, SSMSpec
+from causal_ssm_agent.models.ssm.model import SSMModel, SSMPriors, SSMSpec
+from causal_ssm_agent.orchestrator.schemas_model import DistributionFamily
 
 
 def _make_identified_model(n_latent=2, n_manifest=2, likelihood="kalman"):
@@ -201,7 +202,7 @@ class TestTRule:
             manifest_var="diag",
             t0_means="free",
             t0_var="diag",
-            manifest_dist=NoiseFamily.STUDENT_T,
+            manifest_dist=DistributionFamily.STUDENT_T,
         )
         counts = count_free_params(spec)
         assert counts.get("obs_df") == 1

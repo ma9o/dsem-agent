@@ -710,14 +710,14 @@ class TestParameterRecovery:
     @pytest.mark.slow
     def test_drift_recovery_poisson(self):
         """1D AR(1) + Poisson: recover drift parameter via RBPF + NUTS."""
-        from causal_ssm_agent.models.ssm import NoiseFamily, SSMModel, SSMSpec, fit
+        from causal_ssm_agent.models.ssm import DistributionFamily, SSMModel, SSMSpec, fit
 
         spec = SSMSpec(
             n_latent=1,
             n_manifest=1,
             lambda_mat=jnp.eye(1),
-            manifest_dist=NoiseFamily.POISSON,
-            diffusion_dist=NoiseFamily.GAUSSIAN,
+            manifest_dist=DistributionFamily.POISSON,
+            diffusion_dist=DistributionFamily.GAUSSIAN,
         )
         model = SSMModel(spec, n_particles=200, pf_seed=42)
 
@@ -744,14 +744,14 @@ class TestParameterRecovery:
     @pytest.mark.slow
     def test_drift_recovery_student_t(self):
         """1D AR(1) + Student-t: recover drift via RBPF + NUTS."""
-        from causal_ssm_agent.models.ssm import NoiseFamily, SSMModel, SSMSpec, fit
+        from causal_ssm_agent.models.ssm import DistributionFamily, SSMModel, SSMSpec, fit
 
         spec = SSMSpec(
             n_latent=1,
             n_manifest=1,
             lambda_mat=jnp.eye(1),
-            manifest_dist=NoiseFamily.STUDENT_T,
-            diffusion_dist=NoiseFamily.GAUSSIAN,
+            manifest_dist=DistributionFamily.STUDENT_T,
+            diffusion_dist=DistributionFamily.GAUSSIAN,
         )
         model = SSMModel(spec, n_particles=200, pf_seed=42)
 
@@ -776,14 +776,14 @@ class TestParameterRecovery:
     @pytest.mark.slow
     def test_drift_recovery_gamma(self):
         """1D AR(1) + Gamma: recover drift via RBPF + NUTS."""
-        from causal_ssm_agent.models.ssm import NoiseFamily, SSMModel, SSMSpec, fit
+        from causal_ssm_agent.models.ssm import DistributionFamily, SSMModel, SSMSpec, fit
 
         spec = SSMSpec(
             n_latent=1,
             n_manifest=1,
             lambda_mat=jnp.eye(1),
-            manifest_dist=NoiseFamily.GAMMA,
-            diffusion_dist=NoiseFamily.GAUSSIAN,
+            manifest_dist=DistributionFamily.GAMMA,
+            diffusion_dist=DistributionFamily.GAUSSIAN,
         )
         model = SSMModel(spec, n_particles=200, pf_seed=42)
 

@@ -51,7 +51,7 @@ def simple_model_spec() -> dict:
         "likelihoods": [
             {
                 "variable": "mood_score",
-                "distribution": "Normal",
+                "distribution": "gaussian",
                 "link": "identity",
                 "reasoning": "Continuous Likert-type scale",
             }
@@ -79,7 +79,6 @@ def simple_model_spec() -> dict:
                 "search_context": "mood variability within-person",
             },
         ],
-
         "reasoning": "Simple AR(1) model for mood",
     }
 
@@ -150,11 +149,11 @@ class TestSchemas:
         """LikelihoodSpec validates correctly."""
         spec = LikelihoodSpec(
             variable="mood_score",
-            distribution=DistributionFamily.NORMAL,
+            distribution=DistributionFamily.GAUSSIAN,
             link=LinkFunction.IDENTITY,
             reasoning="Continuous outcome",
         )
-        assert spec.distribution == DistributionFamily.NORMAL
+        assert spec.distribution == DistributionFamily.GAUSSIAN
 
     def test_model_spec_validation(self, simple_model_spec):
         """ModelSpec validates from dict."""
@@ -465,7 +464,6 @@ class TestDomainValidation:
                 )
             ],
             parameters=[],
-
             reasoning="test",
         )
         issues = validate_model_spec(spec)
@@ -486,7 +484,6 @@ class TestDomainValidation:
                     search_context="test",
                 )
             ],
-
             reasoning="test",
         )
         issues = validate_model_spec(spec)
@@ -500,13 +497,12 @@ class TestDomainValidation:
             likelihoods=[
                 LikelihoodSpec(
                     variable="flag",
-                    distribution=DistributionFamily.NORMAL,
+                    distribution=DistributionFamily.GAUSSIAN,
                     link=LinkFunction.IDENTITY,
                     reasoning="test",
                 )
             ],
             parameters=[],
-
             reasoning="test",
         )
         indicators = [{"name": "flag", "measurement_dtype": "binary"}]
@@ -559,7 +555,7 @@ class TestPriorPredictiveValidation:
             "likelihoods": [
                 {
                     "variable": "nonexistent_col",
-                    "distribution": "Normal",
+                    "distribution": "gaussian",
                     "link": "identity",
                     "reasoning": "test",
                 }

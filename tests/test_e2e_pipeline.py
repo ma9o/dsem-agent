@@ -279,7 +279,7 @@ def model_spec():
         "likelihoods": [
             {
                 "variable": name,
-                "distribution": "Normal",
+                "distribution": "gaussian",
                 "link": "identity",
                 "reasoning": "Continuous Gaussian indicator",
             }

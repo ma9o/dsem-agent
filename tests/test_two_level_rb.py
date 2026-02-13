@@ -30,7 +30,8 @@ from causal_ssm_agent.models.likelihoods.graph_analysis import (
     get_per_channel_manifest,
     get_per_variable_diffusion,
 )
-from causal_ssm_agent.models.ssm.model import NoiseFamily, SSMSpec
+from causal_ssm_agent.models.ssm.model import SSMSpec
+from causal_ssm_agent.orchestrator.schemas_model import DistributionFamily
 
 # =============================================================================
 # Helpers
@@ -68,7 +69,7 @@ def _make_separable_spec(
     lambda_mat = jnp.array(lam, dtype=jnp.float32)
 
     # Per-variable diffusion dists
-    diffusion_dists = [NoiseFamily.GAUSSIAN] * n_g + [NoiseFamily.STUDENT_T] * n_s
+    diffusion_dists = [DistributionFamily.GAUSSIAN] * n_g + [DistributionFamily.STUDENT_T] * n_s
 
     return SSMSpec(
         n_latent=n,
@@ -80,8 +81,8 @@ def _make_separable_spec(
         manifest_means=jnp.zeros(m),
         t0_means=jnp.zeros(n),
         t0_var=jnp.eye(n),
-        diffusion_dist=NoiseFamily.GAUSSIAN,
-        manifest_dist=NoiseFamily.GAUSSIAN,
+        diffusion_dist=DistributionFamily.GAUSSIAN,
+        manifest_dist=DistributionFamily.GAUSSIAN,
         diffusion_dists=diffusion_dists,
     )
 
@@ -214,7 +215,7 @@ class TestGraphAnalysis:
 
     def test_per_var_diffusion_scalar(self):
         """Single diffusion_dist broadcasts to all vars."""
-        spec = SSMSpec(n_latent=3, n_manifest=3, diffusion_dist=NoiseFamily.STUDENT_T)
+        spec = SSMSpec(n_latent=3, n_manifest=3, diffusion_dist=DistributionFamily.STUDENT_T)
         result = get_per_variable_diffusion(spec)
         assert result == ["student_t", "student_t", "student_t"]
 
@@ -223,14 +224,18 @@ class TestGraphAnalysis:
         spec = SSMSpec(
             n_latent=3,
             n_manifest=3,
-            diffusion_dists=[NoiseFamily.GAUSSIAN, NoiseFamily.STUDENT_T, NoiseFamily.GAUSSIAN],
+            diffusion_dists=[
+                DistributionFamily.GAUSSIAN,
+                DistributionFamily.STUDENT_T,
+                DistributionFamily.GAUSSIAN,
+            ],
         )
         result = get_per_variable_diffusion(spec)
         assert result == ["gaussian", "student_t", "gaussian"]
 
     def test_per_channel_manifest_scalar(self):
         """Single manifest_dist broadcasts to all channels."""
-        spec = SSMSpec(n_latent=2, n_manifest=3, manifest_dist=NoiseFamily.POISSON)
+        spec = SSMSpec(n_latent=2, n_manifest=3, manifest_dist=DistributionFamily.POISSON)
         result = get_per_channel_manifest(spec)
         assert result == ["poisson", "poisson", "poisson"]
 
@@ -250,8 +255,8 @@ class TestAnalyzeFirstPassRB:
             n_manifest=3,
             drift=jnp.diag(jnp.array([-0.5, -0.3, -0.8])),
             lambda_mat=jnp.eye(3),
-            diffusion_dist=NoiseFamily.GAUSSIAN,
-            manifest_dist=NoiseFamily.GAUSSIAN,
+            diffusion_dist=DistributionFamily.GAUSSIAN,
+            manifest_dist=DistributionFamily.GAUSSIAN,
         )
         p = analyze_first_pass_rb(spec)
         np.testing.assert_array_equal(p.kalman_idx, [0, 1, 2])
@@ -268,7 +273,7 @@ class TestAnalyzeFirstPassRB:
             n_manifest=2,
             drift=jnp.diag(jnp.array([-0.5, -0.3])),
             lambda_mat=jnp.eye(2),
-            diffusion_dist=NoiseFamily.STUDENT_T,
+            diffusion_dist=DistributionFamily.STUDENT_T,
         )
         p = analyze_first_pass_rb(spec)
         assert len(p.kalman_idx) == 0
@@ -295,7 +300,11 @@ class TestAnalyzeFirstPassRB:
             n_manifest=n,
             drift=drift,
             lambda_mat=jnp.eye(n),
-            diffusion_dists=[NoiseFamily.GAUSSIAN, NoiseFamily.GAUSSIAN, NoiseFamily.STUDENT_T],
+            diffusion_dists=[
+                DistributionFamily.GAUSSIAN,
+                DistributionFamily.GAUSSIAN,
+                DistributionFamily.STUDENT_T,
+            ],
         )
         p = analyze_first_pass_rb(spec)
         # Gaussian vars are coupled to Student-t var -> all in particle
@@ -318,7 +327,11 @@ class TestAnalyzeFirstPassRB:
             n_manifest=3,
             drift=drift,
             lambda_mat=lam,
-            diffusion_dists=[NoiseFamily.GAUSSIAN, NoiseFamily.GAUSSIAN, NoiseFamily.STUDENT_T],
+            diffusion_dists=[
+                DistributionFamily.GAUSSIAN,
+                DistributionFamily.GAUSSIAN,
+                DistributionFamily.STUDENT_T,
+            ],
         )
         p = analyze_first_pass_rb(spec)
         np.testing.assert_array_equal(p.kalman_idx, [0, 1])
@@ -333,7 +346,7 @@ class TestAnalyzeFirstPassRB:
             n_manifest=2,
             drift=jnp.diag(jnp.array([-0.5, -0.3])),
             lambda_mat=lam,
-            diffusion_dists=[NoiseFamily.GAUSSIAN, NoiseFamily.STUDENT_T],
+            diffusion_dists=[DistributionFamily.GAUSSIAN, DistributionFamily.STUDENT_T],
         )
         p = analyze_first_pass_rb(spec)
         # Var 0 is Gaussian and decoupled in drift, but all obs depend on both vars
@@ -356,7 +369,7 @@ class TestAnalyzeFirstPassRB:
             n_manifest=2,
             drift="free",
             lambda_mat=jnp.eye(2),
-            diffusion_dists=[NoiseFamily.GAUSSIAN, NoiseFamily.STUDENT_T],
+            diffusion_dists=[DistributionFamily.GAUSSIAN, DistributionFamily.STUDENT_T],
         )
         p = analyze_first_pass_rb(spec)
         assert len(p.kalman_idx) == 0
@@ -368,7 +381,7 @@ class TestAnalyzeFirstPassRB:
             n_manifest=2,
             drift=jnp.diag(jnp.array([-0.5, -0.3])),
             lambda_mat="free",
-            diffusion_dists=[NoiseFamily.GAUSSIAN, NoiseFamily.STUDENT_T],
+            diffusion_dists=[DistributionFamily.GAUSSIAN, DistributionFamily.STUDENT_T],
         )
         p = analyze_first_pass_rb(spec)
         # Var 0 is decoupled in drift, but lambda="free" means all obs depend on all vars
@@ -383,7 +396,7 @@ class TestAnalyzeFirstPassRB:
             n_manifest=2,
             drift=drift,
             lambda_mat=jnp.eye(2),
-            diffusion_dists=[NoiseFamily.GAUSSIAN, NoiseFamily.STUDENT_T],
+            diffusion_dists=[DistributionFamily.GAUSSIAN, DistributionFamily.STUDENT_T],
         )
         p = analyze_first_pass_rb(spec)
         assert len(p.kalman_idx) == 0
@@ -396,7 +409,7 @@ class TestAnalyzeFirstPassRB:
             n_manifest=2,
             drift=drift,
             lambda_mat=jnp.eye(2),
-            diffusion_dists=[NoiseFamily.GAUSSIAN, NoiseFamily.STUDENT_T],
+            diffusion_dists=[DistributionFamily.GAUSSIAN, DistributionFamily.STUDENT_T],
         )
         p = analyze_first_pass_rb(spec)
         assert len(p.kalman_idx) == 0
@@ -432,8 +445,8 @@ class TestDegenerateEquivalence:
             manifest_means=jnp.zeros(2),
             t0_means=jnp.zeros(2),
             t0_var=jnp.eye(2),
-            diffusion_dist=NoiseFamily.GAUSSIAN,
-            manifest_dist=NoiseFamily.GAUSSIAN,
+            diffusion_dist=DistributionFamily.GAUSSIAN,
+            manifest_dist=DistributionFamily.GAUSSIAN,
         )
         ll_composed = _run_composed(spec, ct, meas, init, obs, dt)
 
@@ -476,8 +489,8 @@ class TestDegenerateEquivalence:
             manifest_means=jnp.zeros(2),
             t0_means=jnp.zeros(2),
             t0_var=jnp.eye(2),
-            diffusion_dist=NoiseFamily.STUDENT_T,
-            manifest_dist=NoiseFamily.GAUSSIAN,
+            diffusion_dist=DistributionFamily.STUDENT_T,
+            manifest_dist=DistributionFamily.GAUSSIAN,
         )
         ll_composed = _run_composed(
             spec,
@@ -508,7 +521,7 @@ class TestDegenerateEquivalence:
             n_manifest=2,
             drift=jnp.diag(jnp.array([-0.5, -0.3])),
             lambda_mat=jnp.eye(2),
-            diffusion_dist=NoiseFamily.GAUSSIAN,
+            diffusion_dist=DistributionFamily.GAUSSIAN,
         )
         model_g = SSMModel(spec=spec_g)
         backend_g = model_g.make_likelihood_backend()
@@ -520,7 +533,7 @@ class TestDegenerateEquivalence:
             n_manifest=2,
             drift=jnp.diag(jnp.array([-0.5, -0.3])),
             lambda_mat=jnp.eye(2),
-            diffusion_dist=NoiseFamily.STUDENT_T,
+            diffusion_dist=DistributionFamily.STUDENT_T,
         )
         model_s = SSMModel(spec=spec_s)
         backend_s = model_s.make_likelihood_backend()

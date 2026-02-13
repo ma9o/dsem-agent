@@ -13,6 +13,7 @@ import jax.numpy as jnp
 import jax.random as random
 import numpy as np
 import numpyro.handlers as handlers
+import polars as pl
 import pytest
 
 from causal_ssm_agent.models.ssm.model import (
@@ -406,7 +407,6 @@ class TestBuilderMasks:
 
     def test_builder_end_to_end(self):
         """Full builder pipeline with causal_spec produces masked spec."""
-        import polars as pl
 
         from causal_ssm_agent.models.ssm_builder import SSMModelBuilder
         from causal_ssm_agent.orchestrator.schemas_model import (
@@ -422,7 +422,7 @@ class TestBuilderMasks:
         def _lik(var: str) -> LikelihoodSpec:
             return LikelihoodSpec(
                 variable=var,
-                distribution=DistributionFamily.NORMAL,
+                distribution=DistributionFamily.GAUSSIAN,
                 link=LinkFunction.IDENTITY,
                 reasoning="test",
             )
@@ -467,7 +467,6 @@ class TestBuilderMasks:
                 ),
             ],
             random_effects=[],
-
             reasoning="Test model",
         )
 

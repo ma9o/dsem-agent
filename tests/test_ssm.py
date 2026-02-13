@@ -290,30 +290,32 @@ class TestSSMModelBuilder:
         assert "drift" in samples
 
 
-class TestNoiseFamily:
-    """Test NoiseFamily enum."""
+class TestDistributionFamily:
+    """Test DistributionFamily enum works with SSMSpec."""
 
-    def test_noise_family_values(self):
-        """NoiseFamily should have expected values."""
-        from causal_ssm_agent.models.ssm.model import NoiseFamily
+    def test_distribution_family_values(self):
+        """DistributionFamily should have expected lowercase values."""
+        from causal_ssm_agent.orchestrator.schemas_model import DistributionFamily
 
-        assert NoiseFamily.GAUSSIAN == "gaussian"
-        assert NoiseFamily.STUDENT_T == "student_t"
-        assert NoiseFamily.POISSON == "poisson"
-        assert NoiseFamily.GAMMA == "gamma"
+        assert DistributionFamily.GAUSSIAN == "gaussian"
+        assert DistributionFamily.STUDENT_T == "student_t"
+        assert DistributionFamily.POISSON == "poisson"
+        assert DistributionFamily.GAMMA == "gamma"
+        assert DistributionFamily.BERNOULLI == "bernoulli"
 
-    def test_noise_family_in_spec(self):
-        """SSMSpec should accept NoiseFamily enum values."""
-        from causal_ssm_agent.models.ssm import NoiseFamily, SSMSpec
+    def test_distribution_family_in_spec(self):
+        """SSMSpec should accept DistributionFamily enum values."""
+        from causal_ssm_agent.models.ssm import SSMSpec
+        from causal_ssm_agent.orchestrator.schemas_model import DistributionFamily
 
         spec = SSMSpec(
             n_latent=2,
             n_manifest=2,
-            diffusion_dist=NoiseFamily.GAUSSIAN,
-            manifest_dist=NoiseFamily.POISSON,
+            diffusion_dist=DistributionFamily.GAUSSIAN,
+            manifest_dist=DistributionFamily.POISSON,
         )
-        assert spec.diffusion_dist == NoiseFamily.GAUSSIAN
-        assert spec.manifest_dist == NoiseFamily.POISSON
+        assert spec.diffusion_dist == DistributionFamily.GAUSSIAN
+        assert spec.manifest_dist == DistributionFamily.POISSON
 
 
 if __name__ == "__main__":
