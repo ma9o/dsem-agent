@@ -153,8 +153,9 @@ def run_interventions(
         List of intervention results, sorted by |effect_size| descending
     """
     import jax.numpy as jnp
-    from causal_ssm_agent.models.ssm.counterfactual import treatment_effect
     from jax import vmap
+
+    from causal_ssm_agent.models.ssm.counterfactual import treatment_effect
 
     # Get identifiability status
     id_status = causal_spec.get("identifiability") if causal_spec else None

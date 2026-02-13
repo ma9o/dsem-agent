@@ -20,7 +20,7 @@ uv run python evals/scripts/run_parallel_evals.py -n 10 --seed 123
 ## Run individual models
 
 ```bash
-uv run inspect eval evals/eval1_orchestrator_structure.py \
+uv run inspect eval evals/eval1a_latent_model.py \
     --model openrouter/anthropic/claude-opus-4.5
 
 # View detailed results
