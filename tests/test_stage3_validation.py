@@ -43,12 +43,12 @@ def simple_causal_spec():
             "indicators": [
                 {
                     "name": "stress_score",
-                    "construct": "stress",
+                    "construct_name": "stress",
                     "how_to_measure": "Extract stress level",
                 },
                 {
                     "name": "sleep_hours",
-                    "construct": "sleep",
+                    "construct_name": "sleep",
                     "how_to_measure": "Extract sleep duration",
                 },
             ],

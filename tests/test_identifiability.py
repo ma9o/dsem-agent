@@ -24,9 +24,9 @@ def test_get_observed_constructs():
     """Test extraction of observed constructs from measurement model."""
     measurement_model = {
         "indicators": [
-            {"name": "ind1", "construct": "A", "how_to_measure": "test"},
-            {"name": "ind2", "construct": "B", "how_to_measure": "test"},
-            {"name": "ind3", "construct": "A", "how_to_measure": "test"},  # Duplicate
+            {"name": "ind1", "construct_name": "A", "how_to_measure": "test"},
+            {"name": "ind2", "construct_name": "B", "how_to_measure": "test"},
+            {"name": "ind3", "construct_name": "A", "how_to_measure": "test"},  # Duplicate
             {"name": "ind4", "construct_name": "C", "how_to_measure": "test"},
         ]
     }
@@ -51,36 +51,6 @@ def test_identifiability_simple_chain():
 
     measurement_model = {
         "indicators": [
-            {"name": "a_ind", "construct": "A", "how_to_measure": "test"},
-            {"name": "b_ind", "construct": "B", "how_to_measure": "test"},
-            {"name": "c_ind", "construct": "C", "how_to_measure": "test"},
-        ]
-    }
-
-    result = check_identifiability(latent_model, measurement_model)
-
-    # All effects should be identifiable (no unobserved confounders)
-    assert len(result["non_identifiable_treatments"]) == 0
-    assert "A" in result["identifiable_treatments"]
-    assert "B" in result["identifiable_treatments"]
-
-
-def test_identifiability_with_construct_name_measurements():
-    """Identifiability should work when indicators reference construct_name."""
-    latent_model = {
-        "constructs": [
-            {"name": "A", "role": "exogenous"},
-            {"name": "B", "role": "endogenous"},
-            {"name": "C", "role": "endogenous", "is_outcome": True},
-        ],
-        "edges": [
-            {"cause": "A", "effect": "B", "description": "A causes B"},
-            {"cause": "B", "effect": "C", "description": "B causes C"},
-        ],
-    }
-
-    measurement_model = {
-        "indicators": [
             {"name": "a_ind", "construct_name": "A", "how_to_measure": "test"},
             {"name": "b_ind", "construct_name": "B", "how_to_measure": "test"},
             {"name": "c_ind", "construct_name": "C", "how_to_measure": "test"},
@@ -89,6 +59,8 @@ def test_identifiability_with_construct_name_measurements():
 
     result = check_identifiability(latent_model, measurement_model)
 
+    # All effects should be identifiable (no unobserved confounders)
+    assert len(result["non_identifiable_treatments"]) == 0
     assert "A" in result["identifiable_treatments"]
     assert "B" in result["identifiable_treatments"]
 
@@ -113,7 +85,7 @@ def test_identifiability_unobserved_treatment():
     # Only Y is observed
     measurement_model = {
         "indicators": [
-            {"name": "y_ind", "construct": "Y", "how_to_measure": "test"},
+            {"name": "y_ind", "construct_name": "Y", "how_to_measure": "test"},
         ]
     }
 
@@ -154,8 +126,8 @@ def test_lagged_confounding_blocks_identification():
     # Only X and Y observed, U is unobserved
     measurement_model = {
         "indicators": [
-            {"name": "x_ind", "construct": "X"},
-            {"name": "y_ind", "construct": "Y"},
+            {"name": "x_ind", "construct_name": "X"},
+            {"name": "y_ind", "construct_name": "Y"},
         ]
     }
 
@@ -266,8 +238,8 @@ def test_analyze_unobserved_all_observed():
 
     measurement_model = {
         "indicators": [
-            {"name": "a_ind", "construct": "A", "how_to_measure": "test"},
-            {"name": "b_ind", "construct": "B", "how_to_measure": "test"},
+            {"name": "a_ind", "construct_name": "A", "how_to_measure": "test"},
+            {"name": "b_ind", "construct_name": "B", "how_to_measure": "test"},
         ]
     }
 

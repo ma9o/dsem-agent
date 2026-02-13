@@ -13,7 +13,6 @@
 - **Worker schemas:** `src/causal_ssm_agent/workers/schemas.py`
   - `WorkerOutput` - Extraction results from a single chunk
   - `Extraction` - Single indicator value extracted from data
-  - `ProposedIndicator` - Worker-proposed new indicator
 
 **Terminology:** We avoid "structural" due to SEM/SCM ambiguity. Use measurement/latent for the SEM distinction and functional/topological for SCM.
 

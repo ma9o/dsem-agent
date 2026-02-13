@@ -67,14 +67,14 @@ def indicator_factory():
 
     def _make(
         name: str,
-        construct: str,
+        construct_name: str,
         granularity: str = "daily",
         dtype: str = "continuous",
         aggregation: str = "mean",
     ) -> Indicator:
         return Indicator(
             name=name,
-            construct=construct,
+            construct_name=construct_name,
             how_to_measure=f"Extract {name}",
             measurement_granularity=granularity,
             measurement_dtype=dtype,
@@ -173,7 +173,7 @@ def stage1b_measurement_all_observed():
         "indicators": [
             {
                 "name": "treatment_dose",
-                "construct": "Treatment",
+                "construct_name": "Treatment",
                 "how_to_measure": "Extract the treatment dosage from the data",
                 "measurement_granularity": "daily",
                 "measurement_dtype": "continuous",
@@ -181,7 +181,7 @@ def stage1b_measurement_all_observed():
             },
             {
                 "name": "outcome_score",
-                "construct": "Outcome",
+                "construct_name": "Outcome",
                 "how_to_measure": "Extract the outcome score from the data",
                 "measurement_granularity": "daily",
                 "measurement_dtype": "continuous",
@@ -198,7 +198,7 @@ def stage1b_measurement_missing_confounder():
         "indicators": [
             {
                 "name": "treatment_dose",
-                "construct": "Treatment",
+                "construct_name": "Treatment",
                 "how_to_measure": "Extract the treatment dosage from the data",
                 "measurement_granularity": "daily",
                 "measurement_dtype": "continuous",
@@ -206,7 +206,7 @@ def stage1b_measurement_missing_confounder():
             },
             {
                 "name": "outcome_score",
-                "construct": "Outcome",
+                "construct_name": "Outcome",
                 "how_to_measure": "Extract the outcome score from the data",
                 "measurement_granularity": "daily",
                 "measurement_dtype": "continuous",
@@ -223,7 +223,7 @@ def stage1b_measurement_with_confounder():
         "indicators": [
             {
                 "name": "treatment_dose",
-                "construct": "Treatment",
+                "construct_name": "Treatment",
                 "how_to_measure": "Extract the treatment dosage from the data",
                 "measurement_granularity": "daily",
                 "measurement_dtype": "continuous",
@@ -231,7 +231,7 @@ def stage1b_measurement_with_confounder():
             },
             {
                 "name": "outcome_score",
-                "construct": "Outcome",
+                "construct_name": "Outcome",
                 "how_to_measure": "Extract the outcome score from the data",
                 "measurement_granularity": "daily",
                 "measurement_dtype": "continuous",
@@ -239,7 +239,7 @@ def stage1b_measurement_with_confounder():
             },
             {
                 "name": "confounder_proxy",
-                "construct": "Confounder",
+                "construct_name": "Confounder",
                 "how_to_measure": "Proxy measurement for the confounder",
                 "measurement_granularity": "daily",
                 "measurement_dtype": "continuous",

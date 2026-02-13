@@ -120,7 +120,7 @@ def _(causal_spec, mo):
         _indicators = _spec.get("measurement", {}).get("indicators", [])
 
         _measured = {
-            _ind.get("construct") or _ind.get("construct_name") for _ind in _indicators
+            _ind.get("construct_name") for _ind in _indicators
         }
 
         _edge_set = {(_e["cause"], _e["effect"]) for _e in _edges}
@@ -228,7 +228,7 @@ def _(causal_spec, mo):
 def _(causal_spec, mo):
     _constructs = causal_spec.get("latent", {}).get("constructs", [])
     _indicators = causal_spec.get("measurement", {}).get("indicators", [])
-    _measured = {_ind.get("construct") or _ind.get("construct_name") for _ind in _indicators}
+    _measured = {_ind.get("construct_name") for _ind in _indicators}
     _edges = causal_spec.get("latent", {}).get("edges", [])
 
     _rows = []

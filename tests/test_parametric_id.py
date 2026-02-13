@@ -91,7 +91,7 @@ class TestTRule:
         )
         result = check_t_rule(spec, T=50)
         assert result.satisfies
-        # p=2, T=50: moments = 2 + 3 + 49*4 = 201, plenty for ~12 params
+        # p=2, T=50: moments = 2 + 3 + 49*2 = 103, plenty for ~12 params
         assert result.n_moments > result.n_free_params
 
     def test_overparameterized_model_fails_without_T(self):
@@ -132,7 +132,7 @@ class TestTRule:
             t0_var="diag",
         )
         result = check_t_rule(spec, T=50)
-        # With T=50: moments = 2 + 3 + 49*4 = 201, should be enough
+        # With T=50: moments = 2 + 3 + 49*2 = 103, should be enough
         assert result.satisfies
 
     def test_truly_overparameterized_fails_even_with_T(self):
@@ -154,7 +154,7 @@ class TestTRule:
             n_subjects=50,
             indvarying=["drift_diag", "drift_offdiag", "t0_means", "cint", "diffusion"],
         )
-        # T=3 with 2 manifests: moments = 2 + 3 + 2*4 = 13
+        # T=3 with 2 manifests: moments = 2 + 3 + 2*2 = 7
         result = check_t_rule(spec, T=3)
         # Hundreds of hierarchical params >> 13 moments
         assert not result.satisfies

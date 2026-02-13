@@ -107,7 +107,7 @@ def _build_graph_summary(
 def _summarize_measurement(indicators: list[dict[str, Any]]) -> dict[str, Any]:
     summary: dict[str, list[dict[str, Any]]] = {}
     for indicator in indicators:
-        construct = indicator.get("construct") or indicator.get("construct_name", "unknown")
+        construct = indicator.get("construct_name", "unknown")
         summary.setdefault(construct, []).append(
             {
                 "name": indicator.get("name"),

@@ -158,7 +158,7 @@ def measurement_model():
         "indicators": [
             {
                 "name": "stress_primary",
-                "construct": "Stress",
+                "construct_name": "Stress",
                 "how_to_measure": "Self-reported stress scale",
                 "measurement_granularity": "daily",
                 "measurement_dtype": "continuous",
@@ -166,7 +166,7 @@ def measurement_model():
             },
             {
                 "name": "fatigue_primary",
-                "construct": "Fatigue",
+                "construct_name": "Fatigue",
                 "how_to_measure": "Self-reported fatigue scale",
                 "measurement_granularity": "daily",
                 "measurement_dtype": "continuous",
@@ -174,7 +174,7 @@ def measurement_model():
             },
             {
                 "name": "focus_primary",
-                "construct": "Focus",
+                "construct_name": "Focus",
                 "how_to_measure": "Self-reported focus scale",
                 "measurement_granularity": "daily",
                 "measurement_dtype": "continuous",
@@ -182,7 +182,7 @@ def measurement_model():
             },
             {
                 "name": "perf_primary",
-                "construct": "Perf",
+                "construct_name": "Perf",
                 "how_to_measure": "Task completion rate",
                 "measurement_granularity": "daily",
                 "measurement_dtype": "continuous",
@@ -190,7 +190,7 @@ def measurement_model():
             },
             {
                 "name": "burnout_index",
-                "construct": "Stress",
+                "construct_name": "Stress",
                 "how_to_measure": "Composite burnout measure",
                 "measurement_granularity": "daily",
                 "measurement_dtype": "continuous",
@@ -198,7 +198,7 @@ def measurement_model():
             },
             {
                 "name": "cognitive_score",
-                "construct": "Perf",
+                "construct_name": "Perf",
                 "how_to_measure": "Cognitive test score",
                 "measurement_granularity": "daily",
                 "measurement_dtype": "continuous",

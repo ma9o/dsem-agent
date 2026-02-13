@@ -60,7 +60,7 @@ class TestMergeProxies:
 
         # New indicator should reference the confounder
         new_indicator = result["indicators"][-1]
-        assert new_indicator["construct"] == "Confounder"
+        assert new_indicator["construct_name"] == "Confounder"
         assert "confounder_proxy" in new_indicator["name"]
 
     def test_merge_handles_full_indicator_objects(self, stage1b_measurement_missing_confounder):
@@ -95,7 +95,7 @@ class TestMergeProxies:
         # New indicator should have all fields from the full object
         new_indicator = result["indicators"][-1]
         assert new_indicator["name"] == "confounder_proxy"
-        assert new_indicator["construct"] == "Confounder"
+        assert new_indicator["construct_name"] == "Confounder"
         assert new_indicator["measurement_granularity"] == "daily"
         assert new_indicator["measurement_dtype"] == "continuous"
         assert new_indicator["aggregation"] == "mean"
@@ -280,8 +280,7 @@ class TestStage1bFlow:
 
         # The measurement model should now include the proxy indicator
         indicator_constructs = {
-            ind.get("construct") or ind.get("construct_name")
-            for ind in result.measurement_model["indicators"]
+            ind.get("construct_name") for ind in result.measurement_model["indicators"]
         }
         assert "Confounder" in indicator_constructs
 

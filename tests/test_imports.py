@@ -72,7 +72,7 @@ def test_schema_to_networkx():
         indicators=[
             Indicator(
                 name="x_indicator",
-                construct="X",
+                construct_name="X",
                 how_to_measure="Extract X from data",
                 measurement_granularity="finest",
                 measurement_dtype="continuous",
@@ -80,7 +80,7 @@ def test_schema_to_networkx():
             ),
             Indicator(
                 name="y_indicator",
-                construct="Y",
+                construct_name="Y",
                 how_to_measure="Extract Y from data",
                 measurement_granularity="finest",
                 measurement_dtype="continuous",

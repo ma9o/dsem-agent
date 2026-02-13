@@ -237,7 +237,7 @@ class TestIndicator:
         """Valid indicator passes validation."""
         ind = Indicator(
             name="mood_rating",
-            construct="mood",
+            construct_name="mood",
             how_to_measure="Extract mood ratings (1-10 scale)",
             measurement_granularity="daily",
             measurement_dtype="continuous",
@@ -251,7 +251,7 @@ class TestIndicator:
         with pytest.raises(ValueError, match="Unknown aggregation"):
             Indicator(
                 name="mood_rating",
-                construct="mood",
+                construct_name="mood",
                 how_to_measure="Extract mood",
                 measurement_granularity="daily",
                 measurement_dtype="continuous",
@@ -263,7 +263,7 @@ class TestIndicator:
         with pytest.raises(ValueError, match="Invalid measurement_granularity"):
             Indicator(
                 name="mood_rating",
-                construct="mood",
+                construct_name="mood",
                 how_to_measure="Extract mood",
                 measurement_granularity="invalid_value",
                 measurement_dtype="continuous",
@@ -275,7 +275,7 @@ class TestIndicator:
         with pytest.raises(ValueError, match="Invalid measurement_dtype"):
             Indicator(
                 name="mood_rating",
-                construct="mood",
+                construct_name="mood",
                 how_to_measure="Extract mood",
                 measurement_granularity="daily",
                 measurement_dtype="invalid_type",
@@ -292,7 +292,7 @@ class TestMeasurementModel:
             indicators=[
                 Indicator(
                     name="mood_rating",
-                    construct="mood",
+                    construct_name="mood",
                     how_to_measure="Extract mood ratings",
                     measurement_granularity="daily",
                     measurement_dtype="continuous",
@@ -300,7 +300,7 @@ class TestMeasurementModel:
                 ),
                 Indicator(
                     name="mood_text",
-                    construct="mood",
+                    construct_name="mood",
                     how_to_measure="Extract mood from text",
                     measurement_granularity="daily",
                     measurement_dtype="ordinal",
@@ -308,7 +308,7 @@ class TestMeasurementModel:
                 ),
                 Indicator(
                     name="stress_level",
-                    construct="stress",
+                    construct_name="stress",
                     how_to_measure="Extract stress ratings",
                     measurement_granularity="daily",
                     measurement_dtype="continuous",

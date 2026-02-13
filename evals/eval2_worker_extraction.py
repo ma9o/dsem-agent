@@ -28,7 +28,7 @@ from inspect_ai.solver import Generate, TaskState, solver, system_message
 
 from causal_ssm_agent.utils.llm import make_worker_generate_fn
 from causal_ssm_agent.workers.core import WorkerResult, run_worker_extraction
-from causal_ssm_agent.workers.prompts.extraction import SYSTEM_WITHOUT_PROPOSALS
+from causal_ssm_agent.workers.prompts.extraction import SYSTEM
 from causal_ssm_agent.workers.schemas import _get_indicator_info
 from evals.common import (
     get_questions_with_causal_spec,
@@ -179,14 +179,12 @@ def _score_worker_result(
         }
 
     # Build explanation
-    n_proposed = len(output.proposed_indicators) if output.proposed_indicators else 0
     unique_inds = df["indicator"].n_unique() if n_rows > 0 else 0
     total_score = VALID_SCHEMA_POINTS + n_rows
 
     explanation = (
         f"Valid schema (+{VALID_SCHEMA_POINTS}). "
-        f"Extracted {n_rows} observations across {unique_inds} indicators. "
-        f"Proposed {n_proposed} new indicator(s)."
+        f"Extracted {n_rows} observations across {unique_inds} indicators."
     )
 
     return {
@@ -196,7 +194,6 @@ def _score_worker_result(
         "n_extractions": n_rows,
         "n_dtype_errors": 0,
         "n_unique_indicators": unique_inds,
-        "n_proposed_indicators": n_proposed,
     }
 
 
@@ -242,7 +239,6 @@ def worker_extraction_scorer():
                 "n_extractions": scoring["n_extractions"],
                 "n_dtype_errors": 0,
                 "n_unique_indicators": scoring.get("n_unique_indicators", 0),
-                "n_proposed_indicators": scoring.get("n_proposed_indicators", 0),
             },
         )
 
@@ -315,7 +311,7 @@ def worker_eval(
             input_file=input_file,
         ),
         solver=[
-            system_message(SYSTEM_WITHOUT_PROPOSALS),
+            system_message(SYSTEM),
             worker_extraction_solver(question=question),
         ],
         scorer=worker_extraction_scorer(),

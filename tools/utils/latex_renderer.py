@@ -87,7 +87,7 @@ def _build_indicator_to_construct(causal_spec: dict) -> dict[str, str]:
     """Map indicator name → construct name from CausalSpec."""
     mapping: dict[str, str] = {}
     for ind in causal_spec.get("measurement", {}).get("indicators", []):
-        mapping[ind["name"]] = ind.get("construct") or ind.get("construct_name", "?")
+        mapping[ind["name"]] = ind.get("construct_name", "?")
     return mapping
 
 

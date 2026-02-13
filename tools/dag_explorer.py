@@ -146,7 +146,7 @@ def create_agraph_elements(
 
     # Compute which constructs have indicators (derived observability)
     measured_constructs = {
-        ind.get("construct") or ind.get("construct_name")
+        ind.get("construct_name")
         for ind in data.get("indicators", [])
     }
 
@@ -320,7 +320,7 @@ def render_edge_info(edge: dict):
 
 def render_indicator_info(indicator: dict):
     """Render indicator info as formatted HTML."""
-    construct = indicator.get("construct") or indicator.get("construct_name", "—")
+    construct = indicator.get("construct_name", "—")
     dtype = indicator.get("measurement_dtype", "—")
     granularity = indicator.get("measurement_granularity", "—")
     aggregation = indicator.get("aggregation", "—")
@@ -344,7 +344,7 @@ def get_indicators_for_construct(indicators: list[dict], construct_name: str) ->
     """Get all indicators that measure a given construct."""
     return [
         ind for ind in indicators
-        if (ind.get("construct") or ind.get("construct_name")) == construct_name
+        if (ind.get("construct_name")) == construct_name
     ]
 
 
@@ -543,7 +543,7 @@ with col_info:
         selected_node = st.session_state.get("selected_node")
         # Compute measured constructs from indicators
         measured_constructs = {
-            ind.get("construct") or ind.get("construct_name")
+            ind.get("construct_name")
             for ind in data.get("indicators", [])
         }
 
@@ -603,7 +603,7 @@ with col_info:
             # Group by construct
             by_construct: dict[str, list[dict]] = {}
             for ind in data["indicators"]:
-                c_name = ind.get("construct") or ind.get("construct_name", "unknown")
+                c_name = ind.get("construct_name", "unknown")
                 by_construct.setdefault(c_name, []).append(ind)
 
             for c_name, inds in sorted(by_construct.items()):

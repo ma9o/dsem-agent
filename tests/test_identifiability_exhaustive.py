@@ -67,7 +67,7 @@ def make_measurement_model(observed_constructs: list[str]) -> dict:
     """Create a measurement model with one indicator per observed construct."""
     return {
         "indicators": [
-            {"name": f"{c.lower()}_ind", "construct": c, "how_to_measure": "test"}
+            {"name": f"{c.lower()}_ind", "construct_name": c, "how_to_measure": "test"}
             for c in observed_constructs
         ]
     }

@@ -70,7 +70,7 @@ def build_synthetic_data_summary(causal_spec: dict) -> str:
         name = ind.get("name", "?")
         dtype = ind.get("measurement_dtype", "?")
         gran = ind.get("measurement_granularity", "?")
-        construct = ind.get("construct", "?")
+        construct = ind.get("construct_name", "?")
         lines.append(f"    {name}: dtype={dtype}, granularity={gran}, construct={construct}")
 
     # Construct temporal info

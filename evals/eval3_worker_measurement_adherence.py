@@ -38,7 +38,7 @@ from causal_ssm_agent.workers.core import (
     _get_outcome_description,
     run_worker_extraction,
 )
-from causal_ssm_agent.workers.prompts.extraction import SYSTEM_WITHOUT_PROPOSALS, USER
+from causal_ssm_agent.workers.prompts.extraction import SYSTEM, USER
 from evals.common import (
     discover_questions,
     get_questions_with_causal_spec,
@@ -219,7 +219,7 @@ def create_eval_dataset(
                         "chunk": chunk,
                         "chunk_index": i,
                         "causal_spec_slug": cs_question.slug,
-                        "worker_system_prompt": SYSTEM_WITHOUT_PROPOSALS,
+                        "worker_system_prompt": SYSTEM,
                         "worker_user_prompt": worker_user_prompt,
                     },
                 )

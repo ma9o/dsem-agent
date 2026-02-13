@@ -98,9 +98,7 @@ class TestForwardSimulation:
         samples = _make_samples(n_draws=n_draws, n_latent=n_latent, n_manifest=n_manifest)
         times = jnp.arange(T, dtype=float)
 
-        y_sim = simulate_posterior_predictive(
-            samples=samples, times=times, n_subsample=n_draws
-        )
+        y_sim = simulate_posterior_predictive(samples=samples, times=times, n_subsample=n_draws)
 
         assert y_sim.shape == (n_draws, T, n_manifest)
         assert jnp.all(jnp.isfinite(y_sim))
@@ -110,9 +108,7 @@ class TestForwardSimulation:
         samples = _make_samples(n_draws=50, n_latent=2, n_manifest=2)
         times = jnp.arange(15, dtype=float)
 
-        y_sim = simulate_posterior_predictive(
-            samples=samples, times=times, n_subsample=10
-        )
+        y_sim = simulate_posterior_predictive(samples=samples, times=times, n_subsample=10)
 
         assert y_sim.shape[0] == 10
 
@@ -199,9 +195,7 @@ class TestDiagnosticChecks:
         obs_idx = random.randint(key, (), 0, n_draws)
         observations = y_sim[obs_idx]  # (T, m)
 
-        warnings = _check_calibration(
-            y_sim, observations, [f"var_{j}" for j in range(n_manifest)]
-        )
+        warnings = _check_calibration(y_sim, observations, [f"var_{j}" for j in range(n_manifest)])
 
         # Well-specified: no undercoverage warnings (overcoverage OK since
         # using one of the draws as "observed" biases coverage upward)
@@ -214,7 +208,9 @@ class TestDiagnosticChecks:
         manifest_names = [f"var_{j}" for j in range(n_manifest)]
 
         # Simulate from one model
-        samples_true = _make_samples(n_draws=100, n_latent=2, n_manifest=n_manifest, drift_diag=-0.3)
+        samples_true = _make_samples(
+            n_draws=100, n_latent=2, n_manifest=n_manifest, drift_diag=-0.3
+        )
         times = jnp.arange(T, dtype=float)
         y_sim_true = simulate_posterior_predictive(
             samples=samples_true, times=times, n_subsample=100, rng_seed=0
@@ -310,12 +306,14 @@ class TestGetRelevantManifestVariables:
     def test_extra_loadings(self):
         """Extra manifest variables with nonzero loadings are included."""
         # 4 manifest, 2 latent
-        lambda_mat = jnp.array([
-            [1.0, 0.0],
-            [0.0, 1.0],
-            [0.5, 0.0],  # loads on latent 0
-            [0.0, 0.3],  # loads on latent 1
-        ])
+        lambda_mat = jnp.array(
+            [
+                [1.0, 0.0],
+                [0.0, 1.0],
+                [0.5, 0.0],  # loads on latent 0
+                [0.0, 0.3],  # loads on latent 1
+            ]
+        )
         names = ["a", "b", "c", "d"]
 
         result = get_relevant_manifest_variables(lambda_mat, 0, 1, names)
@@ -323,11 +321,13 @@ class TestGetRelevantManifestVariables:
 
     def test_threshold_filtering(self):
         """Loadings below threshold are excluded."""
-        lambda_mat = jnp.array([
-            [1.0, 0.0],
-            [0.0, 1.0],
-            [0.005, 0.0],  # below default threshold 0.01
-        ])
+        lambda_mat = jnp.array(
+            [
+                [1.0, 0.0],
+                [0.0, 1.0],
+                [0.005, 0.0],  # below default threshold 0.01
+            ]
+        )
         names = ["a", "b", "c"]
 
         result = get_relevant_manifest_variables(lambda_mat, 0, 1, names)
