@@ -411,7 +411,38 @@ class SSMModel:
         return cint
 
     def _sample_lambda(self, spec: SSMSpec) -> jnp.ndarray:
-        """Sample factor loading matrix (shared across subjects)."""
+        """Sample factor loading matrix (shared across subjects).
+
+        Three modes:
+        1. lambda_mat is array AND lambda_mask is not None: template+mask mode.
+           Start from the fixed template (with 1.0 for reference indicators),
+           sample free loadings at positions where lambda_mask is True.
+        2. lambda_mat is array, lambda_mask is None: fully fixed (return as-is).
+        3. lambda_mat is "free": legacy identity + extra rows mode.
+        """
+        if isinstance(spec.lambda_mat, jnp.ndarray) and spec.lambda_mask is not None:
+            # Template+mask mode: sample free positions from mask
+            lambda_mat = jnp.array(spec.lambda_mat)
+
+            # Build free positions list from mask (static for XLA)
+            free_positions: list[tuple[int, int]] = []
+            for i in range(spec.n_manifest):
+                for j in range(spec.n_latent):
+                    if spec.lambda_mask[i, j]:
+                        free_positions.append((i, j))
+
+            n_free = len(free_positions)
+            if n_free > 0:
+                free_loadings = numpyro.sample(
+                    "lambda_free",
+                    _make_prior_batch(self.priors.lambda_free, n_free),
+                )
+                for idx, (i, j) in enumerate(free_positions):
+                    lambda_mat = lambda_mat.at[i, j].set(free_loadings[idx])
+
+            numpyro.deterministic("lambda", lambda_mat)
+            return lambda_mat
+
         if isinstance(spec.lambda_mat, jnp.ndarray):
             return spec.lambda_mat
 
