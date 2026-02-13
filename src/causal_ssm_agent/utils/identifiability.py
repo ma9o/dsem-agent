@@ -19,13 +19,13 @@ import logging
 from typing import Any
 
 import networkx as nx
-
-logger = logging.getLogger(__name__)
 from y0.algorithm.identify import identify_outcomes
 from y0.dsl import Variable
 from y0.graph import NxMixedGraph
 
 from causal_ssm_agent.utils.effects import get_outcome_from_latent_model
+
+logger = logging.getLogger(__name__)
 
 
 def check_identifiability(
