@@ -383,8 +383,9 @@ class SSMModelBuilder:
         # Merge sampler config with kwargs
         sampler_config = {**self._sampler_config, **kwargs}
 
-        # Extract method (default to nuts_da)
-        method = sampler_config.pop("method", "nuts_da")
+        # Extract method (default to nuts_da) without mutating
+        method = sampler_config.get("method", "nuts_da")
+        fit_kwargs = {k: v for k, v in sampler_config.items() if k != "method"}
 
         result = fit(
             self._model,
@@ -392,7 +393,7 @@ class SSMModelBuilder:
             times=times,
             subject_ids=subject_ids,
             method=method,
-            **sampler_config,
+            **fit_kwargs,
         )
 
         self._result = result

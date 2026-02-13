@@ -78,32 +78,20 @@ def _stage5_on_gpu(
             "intervention_results": [],
         }
 
-    time_col = "time_bucket" if "time_bucket" in raw_data.columns else "timestamp"
-    wide_data = (
-        raw_data.with_columns(pl_inner.col("value").cast(pl_inner.Float64, strict=False))
-        .pivot(on="indicator", index=time_col, values="value")
-        .sort(time_col)
-    )
+    from causal_ssm_agent.utils.data import pivot_to_wide
 
-    if wide_data.schema[time_col] in (pl_inner.Datetime, pl_inner.Date):
-        t0 = wide_data[time_col].min()
-        wide_data = wide_data.with_columns(
-            ((pl_inner.col(time_col) - t0).dt.total_seconds() / 86400.0).alias(time_col)
-        )
+    wide_data = pivot_to_wide(raw_data)
 
-    X = wide_data.to_pandas()
-    if time_col in X.columns:
-        X = X.rename(columns={time_col: "time"})
-
-    result = builder.fit(X)
+    result = builder.fit(wide_data)
     logger.info("Fit complete: method=%s", result.method)
 
     # ---------- power-scaling sensitivity ----------
     ps_result: dict[str, Any]
     try:
         ssm_model = builder._model
-        observations = jnp.array(X.drop(columns=["time"]).values, dtype=jnp.float32)
-        times = jnp.array(X["time"].values, dtype=jnp.float32)
+        manifest_cols = [c for c in wide_data.columns if c != "time"]
+        observations = jnp.array(wide_data.select(manifest_cols).to_numpy(), dtype=jnp.float32)
+        times = jnp.array(wide_data["time"].to_numpy(), dtype=jnp.float32)
 
         ps = power_scaling_sensitivity(
             model=ssm_model,
@@ -131,7 +119,7 @@ def _stage5_on_gpu(
         )
 
         spec = builder._spec
-        manifest_names = spec.manifest_names or list(X.drop(columns=["time"]).columns)
+        manifest_names = spec.manifest_names or manifest_cols
         manifest_dist_val = (
             spec.manifest_dist.value
             if hasattr(spec.manifest_dist, "value")

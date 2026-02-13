@@ -217,15 +217,21 @@ def compute_interventions(
 
         m_names = manifest_names or []
 
-        for entry in results:
-            ti = name_to_idx.get(entry["treatment"])
-            relevant_vars = get_relevant_manifest_variables(
-                lambda_mat, ti, outcome_idx, m_names
-            )
-            entry_ppc = [
-                w for w in ppc_result["warnings"] if w.get("variable") in relevant_vars
-            ]
-            if entry_ppc:
-                entry["ppc_warnings"] = entry_ppc
+        if lambda_mat is not None:
+            for entry in results:
+                ti = name_to_idx.get(entry["treatment"])
+                relevant_vars = get_relevant_manifest_variables(
+                    lambda_mat, ti, outcome_idx, m_names
+                )
+                entry_ppc = [
+                    w for w in ppc_result["warnings"] if w.get("variable") in relevant_vars
+                ]
+                if entry_ppc:
+                    entry["ppc_warnings"] = entry_ppc
+        else:
+            # Lambda is fixed (identity) — not in posterior samples.
+            # Attach all PPC warnings to every treatment.
+            for entry in results:
+                entry["ppc_warnings"] = ppc_result["warnings"]
 
     return results
