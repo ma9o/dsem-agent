@@ -359,7 +359,6 @@ def _(mo, model_spec):
 
     | Property | Value |
     |----------|-------|
-    | Model clock | `{model_spec.get('model_clock', '?')}` |
     | Likelihoods | {len(_liks)} |
     | Parameters | {len(_params)} |
 

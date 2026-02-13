@@ -1074,7 +1074,7 @@ class TestBuilderNoiseFamilyWiring:
                     search_context="autoregressive",
                 ),
             ],
-            model_clock="daily",
+
             reasoning="test",
         )
 
@@ -1114,7 +1114,7 @@ class TestBuilderNoiseFamilyWiring:
                     search_context="autoregressive",
                 ),
             ],
-            model_clock="daily",
+
             reasoning="test",
         )
 

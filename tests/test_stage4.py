@@ -79,7 +79,7 @@ def simple_model_spec() -> dict:
                 "search_context": "mood variability within-person",
             },
         ],
-        "model_clock": "daily",
+
         "reasoning": "Simple AR(1) model for mood",
     }
 
@@ -465,7 +465,7 @@ class TestDomainValidation:
                 )
             ],
             parameters=[],
-            model_clock="daily",
+
             reasoning="test",
         )
         issues = validate_model_spec(spec)
@@ -486,7 +486,7 @@ class TestDomainValidation:
                     search_context="test",
                 )
             ],
-            model_clock="daily",
+
             reasoning="test",
         )
         issues = validate_model_spec(spec)
@@ -506,7 +506,7 @@ class TestDomainValidation:
                 )
             ],
             parameters=[],
-            model_clock="daily",
+
             reasoning="test",
         )
         indicators = [{"name": "flag", "measurement_dtype": "binary"}]
@@ -573,7 +573,6 @@ class TestPriorPredictiveValidation:
                     "search_context": "",
                 }
             ],
-            "model_clock": "daily",
             "reasoning": "test",
         }
         # This should still build (builder is tolerant), but let's test

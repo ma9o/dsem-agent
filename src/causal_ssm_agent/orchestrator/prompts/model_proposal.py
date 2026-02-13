@@ -84,7 +84,6 @@ Return a JSON object with this structure:
       "search_context": "meta-analysis stress anxiety effect size standardized coefficient"
     }
   ],
-  "model_clock": "daily|hourly|weekly",
   "reasoning": "Overall justification for the model design choices"
 }
 ```

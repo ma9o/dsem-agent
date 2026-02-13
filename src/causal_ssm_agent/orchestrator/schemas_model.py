@@ -114,9 +114,6 @@ class ModelSpec(BaseModel):
         description="Likelihood specifications for each observed indicator"
     )
     parameters: list[ParameterSpec] = Field(description="All parameters requiring priors")
-    model_clock: str = Field(
-        description="Temporal granularity at which the model operates (e.g., 'daily')"
-    )
     reasoning: str = Field(description="Overall reasoning for the model specification choices")
 
 

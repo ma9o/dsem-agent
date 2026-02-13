@@ -257,7 +257,6 @@ def causal_inference_pipeline(
     )
 
     model_spec = stage4_result.get("model_spec", {})
-    print(f"Model clock: {model_spec.get('model_clock', 'unknown')}")
     print(f"Parameters: {len(model_spec.get('parameters', []))} total")
 
     # Report validation issues
@@ -278,7 +277,6 @@ def causal_inference_pipeline(
     create_markdown_artifact(
         key="model-spec",
         markdown=f"## Model Specification\n\n"
-        f"- **Clock**: {model_spec.get('model_clock', 'unknown')}\n"
         f"- **Parameters**: {len(model_spec.get('parameters', []))}\n"
         f"- **Priors valid**: {validation.get('is_valid', 'unknown')}\n"
         f"- **Model built**: {model_info.get('model_built', 'unknown')}\n",

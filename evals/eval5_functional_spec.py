@@ -211,7 +211,6 @@ def _score_functional_spec(model_spec: dict, causal_spec: dict) -> dict:
 
     likelihoods = model_spec.get("likelihoods", [])
     parameters = model_spec.get("parameters", [])
-    model_clock = model_spec.get("model_clock", "")
 
     # Likelihood lookup: variable -> (distribution, link)
     likelihood_by_var = {}
@@ -308,25 +307,7 @@ def _score_functional_spec(model_spec: dict, causal_spec: dict) -> dict:
         else:
             ar_details.append(f"{construct_name}: MISSING (no AR coefficient found)")
 
-    # ── Dimension 4: Model clock (+5 if matches dominant granularity) ──
-    clock_max = 5
-    granularities = [ind.get("measurement_granularity", "finest") for ind in indicators]
-    gran_counts = Counter(granularities)
-
-    # Dominant granularity (excluding "finest" if there are others)
-    non_finest = {k: v for k, v in gran_counts.items() if k != "finest"}
-    if non_finest:
-        dominant = max(non_finest, key=non_finest.get)
-    else:
-        dominant = "finest"
-
-    clock_points = 5 if model_clock == dominant else 0
-    clock_detail = (
-        f"model_clock={model_clock}, dominant_granularity={dominant}"
-        f" -> {'MATCH' if clock_points else 'MISMATCH'}"
-    )
-
-    # ── Dimension 5: Parameter constraints (+1 per correct) ──
+    # ── Dimension 4: Parameter constraints (+1 per correct) ──
     constraint_points = 0
     constraint_max = len(parameters)
     constraint_details = []
@@ -385,11 +366,10 @@ def _score_functional_spec(model_spec: dict, causal_spec: dict) -> dict:
         likelihood_points
         + link_points
         + ar_points
-        + clock_points
         + constraint_points
         + bonus_points
     )
-    max_points = likelihood_max + link_max + ar_max + clock_max + constraint_max + bonus_max
+    max_points = likelihood_max + link_max + ar_max + constraint_max + bonus_max
 
     return {
         "total_points": total_points,
@@ -410,11 +390,6 @@ def _score_functional_spec(model_spec: dict, causal_spec: dict) -> dict:
                 "points": ar_points,
                 "max": ar_max,
                 "details": ar_details,
-            },
-            "model_clock": {
-                "points": clock_points,
-                "max": clock_max,
-                "detail": clock_detail,
             },
             "constraints": {
                 "points": constraint_points,

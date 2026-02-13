@@ -356,7 +356,6 @@ def model_spec():
                 for name in INDICATOR_NAMES
             ],
         ],
-        "model_clock": "daily",
         "reasoning": "FOUR_LATENT benchmark model specification",
     }
 
