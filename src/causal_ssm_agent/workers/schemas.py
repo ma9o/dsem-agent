@@ -31,24 +31,38 @@ class WorkerOutput(BaseModel):
         """Convert extractions to a Polars DataFrame.
 
         Returns:
-            DataFrame with columns: indicator, value, timestamp
-            Value column uses pl.Object to preserve mixed types.
+            DataFrame with columns: indicator, value, timestamp.
+            Numeric values are cast to Float64; non-numeric kept as Utf8.
         """
         if not self.extractions:
             return pl.DataFrame(
-                schema={"indicator": pl.Utf8, "value": pl.Object, "timestamp": pl.Utf8}
+                schema={"indicator": pl.Utf8, "value": pl.Float64, "timestamp": pl.Utf8}
             )
 
+        rows = []
+        for e in self.extractions:
+            # Convert value to float where possible, else store as string
+            v = e.value
+            if v is None:
+                float_val = None
+            elif isinstance(v, (int, float, bool)):
+                float_val = float(v)
+            elif isinstance(v, str):
+                try:
+                    float_val = float(v)
+                except (ValueError, TypeError):
+                    float_val = None
+            else:
+                float_val = None
+            rows.append({
+                "indicator": e.indicator,
+                "value": float_val,
+                "timestamp": e.timestamp,
+            })
+
         return pl.DataFrame(
-            [
-                {
-                    "indicator": e.indicator,
-                    "value": e.value,
-                    "timestamp": e.timestamp,
-                }
-                for e in self.extractions
-            ],
-            schema={"indicator": pl.Utf8, "value": pl.Object, "timestamp": pl.Utf8},
+            rows,
+            schema={"indicator": pl.Utf8, "value": pl.Float64, "timestamp": pl.Utf8},
         )
 
 
