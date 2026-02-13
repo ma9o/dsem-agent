@@ -1,6 +1,7 @@
 """Worker agents using Inspect AI with OpenRouter."""
 
 import asyncio
+import logging
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -13,6 +14,8 @@ from .core import (
     WorkerResult,
     run_worker_extraction,
 )
+
+logger = logging.getLogger(__name__)
 
 # Load environment variables from .env file (for API keys)
 load_dotenv(Path(__file__).parent.parent.parent.parent / ".env")
@@ -83,7 +86,14 @@ async def process_chunks_async(
     generate = make_worker_generate_fn(model)
     tasks = [run_worker_extraction(chunk, question, causal_spec, generate) for chunk in chunks]
 
-    return await asyncio.gather(*tasks)
+    raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+    results = []
+    for i, r in enumerate(raw_results):
+        if isinstance(r, Exception):
+            logger.warning("Chunk %d failed: %s", i, r)
+        else:
+            results.append(r)
+    return results
 
 
 def process_chunks(

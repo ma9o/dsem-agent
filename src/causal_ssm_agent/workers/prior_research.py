@@ -7,6 +7,7 @@ Each worker researches a single parameter using:
 """
 
 import asyncio
+import logging
 
 import numpy as np
 
@@ -29,6 +30,8 @@ from causal_ssm_agent.workers.schemas_prior import (
     PriorSource,
     RawPriorSample,
 )
+
+logger = logging.getLogger(__name__)
 
 
 async def search_parameter_literature(
@@ -400,6 +403,19 @@ async def _research_single_prior_single_shot(
                 snippet=src.get("snippet", ""),
                 effect_size=src.get("effect_size"),
             )
+        )
+
+    # Warn if LLM response is missing key fields before falling back to defaults
+    if "distribution" not in prior_data:
+        logger.warning(
+            "Prior elicitation for '%s': LLM response missing 'distribution', defaulting to Normal",
+            parameter.name,
+        )
+    if "params" not in prior_data:
+        logger.warning(
+            "Prior elicitation for '%s': LLM response missing 'params', "
+            "defaulting to {'mu': 0.0, 'sigma': 1.0}",
+            parameter.name,
         )
 
     # Build prior proposal

@@ -35,19 +35,22 @@ class Stage1bResult:
     @property
     def identifiability_status(self) -> dict:
         """Format for storing in CausalSpec."""
-        return {
+        status = {
             "identifiable_treatments": self.final_identifiability["identifiable_treatments"],
             "non_identifiable_treatments": self.final_identifiability[
                 "non_identifiable_treatments"
             ],
         }
+        if "graph_info" in self.final_identifiability:
+            status["graph_info"] = self.final_identifiability["graph_info"]
+        return status
 
     @property
-    def can_marginalize(self) -> set[str]:
+    def can_marginalize(self) -> list[str]:
         """Unobserved constructs that can be ignored in causal specification."""
         if self.marginalization_analysis:
-            return self.marginalization_analysis.get("can_marginalize", set())
-        return set()
+            return sorted(self.marginalization_analysis.get("can_marginalize", []))
+        return []
 
     @property
     def needs_modeling(self) -> set[str]:
@@ -121,7 +124,8 @@ def _merge_proxies(measurement: dict, proxy_response: dict | None) -> dict:
         return measurement
 
     # Copy to avoid mutation
-    result = {"indicators": list(measurement.get("indicators", []))}
+    result = dict(measurement)
+    result["indicators"] = list(measurement.get("indicators", []))
 
     for proxy in proxy_response["new_proxies"]:
         for indicator in proxy.get("indicators", []):
@@ -129,7 +133,7 @@ def _merge_proxies(measurement: dict, proxy_response: dict | None) -> dict:
                 # Model returned full indicator object - use it directly
                 # but ensure construct is set correctly
                 ind = dict(indicator)
-                ind["construct"] = proxy["construct"]
+                ind["construct_name"] = proxy["construct"]
                 # Prepend proxy justification to how_to_measure if provided
                 if proxy.get("justification") and "how_to_measure" in ind:
                     ind["how_to_measure"] = (
@@ -141,7 +145,7 @@ def _merge_proxies(measurement: dict, proxy_response: dict | None) -> dict:
                 result["indicators"].append(
                     {
                         "name": indicator,
-                        "construct": proxy["construct"],
+                        "construct_name": proxy["construct"],
                         "how_to_measure": f"Proxy for {proxy['construct']}: {proxy.get('justification', '')}",
                     }
                 )
