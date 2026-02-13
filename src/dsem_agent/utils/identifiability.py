@@ -652,7 +652,9 @@ def format_marginalization_report(analysis: dict) -> str:
 
     if can_marginalize:
         lines.append(f"\n✓ CAN MARGINALIZE ({len(can_marginalize)} constructs):")
-        lines.append("  These can be omitted from the causal spec - effects absorbed into error terms")
+        lines.append(
+            "  These can be omitted from the causal spec - effects absorbed into error terms"
+        )
         for u in sorted(can_marginalize):
             reason = analysis["marginalize_reason"].get(u, "")
             lines.append(f"  - {u}: {reason}")

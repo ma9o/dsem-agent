@@ -70,9 +70,7 @@ async def propose_model_spec(
     # Use the captured spec from the validation tool (avoids re-parsing LLM output)
     model_spec = capture.get("spec")
     if model_spec is None:
-        raise ValueError(
-            "Model spec validation never passed. Raw response:\n" + completion[:500]
-        )
+        raise ValueError("Model spec validation never passed. Raw response:\n" + completion[:500])
 
     return Stage4OrchestratorResult(
         model_spec=model_spec,
