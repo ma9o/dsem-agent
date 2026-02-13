@@ -74,7 +74,10 @@ def compute_asymptotic_diffusion(drift: jnp.ndarray, diffusion_cov: jnp.ndarray)
 
 
 def compute_discrete_diffusion(
-    drift: jnp.ndarray, diffusion_cov: jnp.ndarray, dt: float
+    drift: jnp.ndarray,
+    diffusion_cov: jnp.ndarray,
+    dt: float,
+    discrete_drift: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     """Compute discrete-time diffusion covariance for time interval dt.
 
@@ -86,6 +89,7 @@ def compute_discrete_diffusion(
         drift: n x n drift matrix A
         diffusion_cov: n x n diffusion covariance (G*G')
         dt: time interval
+        discrete_drift: Pre-computed exp(A*dt), or None to compute internally.
 
     Returns:
         Q_dt: n x n discrete diffusion covariance
@@ -93,8 +97,9 @@ def compute_discrete_diffusion(
     # Compute asymptotic diffusion
     Q_inf = compute_asymptotic_diffusion(drift, diffusion_cov)
 
-    # Compute discrete drift
-    discrete_drift = jla.expm(drift * dt)
+    # Compute discrete drift (reuse if provided)
+    if discrete_drift is None:
+        discrete_drift = jla.expm(drift * dt)
 
     # Q_dt = Q_inf - exp(A*dt) * Q_inf * exp(A*dt)'
     Q_dt = Q_inf - discrete_drift @ Q_inf @ discrete_drift.T
@@ -105,7 +110,12 @@ def compute_discrete_diffusion(
     return Q_dt
 
 
-def compute_discrete_cint(drift: jnp.ndarray, cint: jnp.ndarray, dt: float) -> jnp.ndarray:
+def compute_discrete_cint(
+    drift: jnp.ndarray,
+    cint: jnp.ndarray,
+    dt: float,
+    discrete_drift: jnp.ndarray | None = None,
+) -> jnp.ndarray:
     """Compute discrete-time intercept for time interval dt.
 
     c_dt = A^{-1} * (exp(A*dt) - I) * c
@@ -116,6 +126,7 @@ def compute_discrete_cint(drift: jnp.ndarray, cint: jnp.ndarray, dt: float) -> j
         drift: n x n drift matrix A
         cint: n x 1 continuous intercept c
         dt: time interval
+        discrete_drift: Pre-computed exp(A*dt), or None to compute internally.
 
     Returns:
         c_dt: n x 1 discrete intercept
@@ -123,8 +134,9 @@ def compute_discrete_cint(drift: jnp.ndarray, cint: jnp.ndarray, dt: float) -> j
     n = drift.shape[0]
     I_n = jnp.eye(n)
 
-    # Compute discrete drift
-    discrete_drift = jla.expm(drift * dt)
+    # Compute discrete drift (reuse if provided)
+    if discrete_drift is None:
+        discrete_drift = jla.expm(drift * dt)
 
     # c_dt = A^{-1} * (exp(A*dt) - I) * c
     # Using solve for numerical stability: A * c_dt = (exp(A*dt) - I) * c
@@ -156,16 +168,16 @@ def discretize_system(
     Returns:
         Tuple of (discrete_drift, discrete_Q, discrete_cint)
     """
-    # Discrete drift via matrix exponential
+    # Discrete drift via matrix exponential (computed once, shared)
     discrete_drift = jla.expm(drift * dt)
 
     # Discrete diffusion via Lyapunov solution
-    discrete_Q = compute_discrete_diffusion(drift, diffusion_cov, dt)
+    discrete_Q = compute_discrete_diffusion(drift, diffusion_cov, dt, discrete_drift=discrete_drift)
 
     # Discrete intercept
     discrete_cint = None
     if cint is not None:
-        discrete_cint = compute_discrete_cint(drift, cint, dt)
+        discrete_cint = compute_discrete_cint(drift, cint, dt, discrete_drift=discrete_drift)
 
     return discrete_drift, discrete_Q, discrete_cint
 
@@ -182,8 +194,8 @@ def _discretize_system_with_cint(
     making it safe for use with jax.vmap over the dt axis.
     """
     discrete_drift = jla.expm(drift * dt)
-    discrete_Q = compute_discrete_diffusion(drift, diffusion_cov, dt)
-    discrete_cint = compute_discrete_cint(drift, cint, dt)
+    discrete_Q = compute_discrete_diffusion(drift, diffusion_cov, dt, discrete_drift=discrete_drift)
+    discrete_cint = compute_discrete_cint(drift, cint, dt, discrete_drift=discrete_drift)
     return discrete_drift, discrete_Q, discrete_cint
 
 
@@ -194,7 +206,7 @@ def _discretize_system_no_cint(
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Discretize without cint (vmap-compatible)."""
     discrete_drift = jla.expm(drift * dt)
-    discrete_Q = compute_discrete_diffusion(drift, diffusion_cov, dt)
+    discrete_Q = compute_discrete_diffusion(drift, diffusion_cov, dt, discrete_drift=discrete_drift)
     return discrete_drift, discrete_Q
 
 
