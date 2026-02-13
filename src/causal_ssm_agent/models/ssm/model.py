@@ -215,6 +215,11 @@ class SSMModel:
     ) -> jnp.ndarray:
         """Sample drift matrix with stability constraints.
 
+        When spec.drift_mask is set, only off-diagonal entries where the mask
+        is True are sampled; the rest stay zero. This enforces DAG-constrained
+        sparsity. When drift_mask is None, all off-diagonal entries are free
+        (backward-compatible).
+
         Args:
             spec: Model specification
             n_subjects: Number of subjects (for hierarchical)
@@ -230,18 +235,33 @@ class SSMModel:
                 return jnp.broadcast_to(spec.drift, (n_subjects, n, n))
             return spec.drift
 
+        # Build off-diagonal positions list from mask (static, unrolled by XLA)
+        offdiag_positions: list[tuple[int, int]] = []
+        if spec.drift_mask is not None:
+            for i in range(n):
+                for j in range(n):
+                    if i != j and spec.drift_mask[i, j]:
+                        offdiag_positions.append((i, j))
+        else:
+            # No mask: all off-diagonal entries are free
+            for i in range(n):
+                for j in range(n):
+                    if i != j:
+                        offdiag_positions.append((i, j))
+
+        n_offdiag = len(offdiag_positions)
+
         # Population-level diagonal (auto-effects)
         drift_diag_pop = numpyro.sample(
             "drift_diag_pop",
-            _make_prior_dist(self.priors.drift_diag).expand([n]),
+            _make_prior_batch(self.priors.drift_diag, n),
         )
 
         # Population-level off-diagonal (cross-effects)
-        n_offdiag = n * n - n
         if n_offdiag > 0:
             drift_offdiag_pop = numpyro.sample(
                 "drift_offdiag_pop",
-                _make_prior_dist(self.priors.drift_offdiag).expand([n_offdiag]),
+                _make_prior_batch(self.priors.drift_offdiag, n_offdiag),
             )
         else:
             drift_offdiag_pop = jnp.array([])
@@ -276,15 +296,10 @@ class SSMModel:
 
             # Assemble drift matrices for each subject
             def assemble_drift(diag, offdiag):
-                # Constrain diagonal to be negative for stability
                 diag_neg = -jnp.abs(diag)
                 drift = jnp.diag(diag_neg)
-                offdiag_idx = 0
-                for i in range(n):
-                    for j in range(n):
-                        if i != j:
-                            drift = drift.at[i, j].set(offdiag[offdiag_idx])
-                            offdiag_idx += 1
+                for idx, (i, j) in enumerate(offdiag_positions):
+                    drift = drift.at[i, j].set(offdiag[idx])
                 return drift
 
             drift = vmap(assemble_drift)(drift_diag, drift_offdiag)
@@ -292,12 +307,8 @@ class SSMModel:
             # Single drift matrix
             drift_diag = -jnp.abs(drift_diag_pop)
             drift = jnp.diag(drift_diag)
-            offdiag_idx = 0
-            for i in range(n):
-                for j in range(n):
-                    if i != j:
-                        drift = drift.at[i, j].set(drift_offdiag_pop[offdiag_idx])
-                        offdiag_idx += 1
+            for idx, (i, j) in enumerate(offdiag_positions):
+                drift = drift.at[i, j].set(drift_offdiag_pop[idx])
 
         numpyro.deterministic("drift", drift)
         return drift
