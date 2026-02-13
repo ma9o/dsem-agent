@@ -58,6 +58,13 @@ def parametric_id_task(
             .sort(time_col)
         )
 
+        # Convert datetime to fractional days for JAX compatibility
+        if wide_data.schema[time_col] in (pl.Datetime, pl.Date):
+            t0 = wide_data[time_col].min()
+            wide_data = wide_data.with_columns(
+                ((pl.col(time_col) - t0).dt.total_seconds() / 86400.0).alias(time_col)
+            )
+
         X = wide_data.to_pandas()
         if time_col in X.columns:
             X = X.rename(columns={time_col: "time"})

@@ -356,8 +356,8 @@ class SSMModelBuilder:
         # Merge sampler config with kwargs
         sampler_config = {**self._sampler_config, **kwargs}
 
-        # Extract method (default to svi)
-        method = sampler_config.pop("method", "svi")
+        # Extract method (default to nuts_da)
+        method = sampler_config.pop("method", "nuts_da")
 
         result = fit(
             self._model,
@@ -397,7 +397,18 @@ class SSMModelBuilder:
         # Extract times
         time_col = "time" if "time" in X.columns else "time_bucket"
         if time_col in X.columns:
-            times = jnp.array(X[time_col].values, dtype=jnp.float32)
+            time_values = X[time_col]
+            if pd.api.types.is_datetime64_any_dtype(time_values):
+                # Convert datetime to fractional days since first observation.
+                # Raw datetime→int gives ns/us timestamps that break expm(A*dt).
+                t0 = time_values.iloc[0]
+                delta = time_values - t0
+                times = jnp.array(
+                    delta.dt.total_seconds().values / 86400.0,
+                    dtype=jnp.float32,
+                )
+            else:
+                times = jnp.array(time_values.values, dtype=jnp.float32)
         else:
             # Default: integer sequence
             times = jnp.arange(len(X), dtype=jnp.float32)
