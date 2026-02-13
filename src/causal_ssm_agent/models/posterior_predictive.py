@@ -15,7 +15,18 @@ from jax import lax, vmap
 
 from causal_ssm_agent.models.ssm.constants import MIN_DT
 from causal_ssm_agent.models.ssm.discretization import discretize_system_batched
-from causal_ssm_agent.models.ssm.model import NoiseFamily
+from causal_ssm_agent.orchestrator.schemas_model import DistributionFamily
+
+# Integer indices for jax.lax.switch dispatch (per-channel distribution)
+_DIST_IDX: dict[str, int] = {
+    DistributionFamily.GAUSSIAN: 0,
+    DistributionFamily.STUDENT_T: 1,
+    DistributionFamily.POISSON: 2,
+    DistributionFamily.GAMMA: 3,
+    DistributionFamily.BERNOULLI: 4,
+    DistributionFamily.NEGATIVE_BINOMIAL: 5,
+    DistributionFamily.BETA: 6,
+}
 
 # ---------------------------------------------------------------------------
 # Dataclasses
@@ -130,6 +141,8 @@ def _simulate_one_draw_nongaussian(
     manifest_dist: str,
     obs_df: float | None = None,
     obs_shape: float | None = None,
+    obs_r: float | None = None,
+    obs_concentration: float | None = None,
 ) -> jnp.ndarray:
     """Simulate one trajectory for non-Gaussian observation noise.
 
@@ -163,18 +176,31 @@ def _simulate_one_draw_nongaussian(
 
         loc = lambda_mat @ eta_t + manifest_means
 
-        if manifest_dist == NoiseFamily.STUDENT_T:
+        if manifest_dist == DistributionFamily.STUDENT_T:
             df = obs_df if obs_df is not None else 5.0
             y_t = npdist.StudentT(df=df, loc=loc, scale=manifest_std).sample(okey)
-        elif manifest_dist == NoiseFamily.POISSON:
+        elif manifest_dist == DistributionFamily.POISSON:
             rate = jnp.exp(loc)
             y_t = npdist.Poisson(rate=rate).sample(okey)
-        elif manifest_dist == NoiseFamily.GAMMA:
+        elif manifest_dist == DistributionFamily.GAMMA:
             shape_param = obs_shape if obs_shape is not None else 2.0
-            # mean = shape * scale => scale = exp(loc) / shape
             scale = jnp.exp(loc) / shape_param
             scale = jnp.maximum(scale, 1e-8)
             y_t = npdist.Gamma(concentration=shape_param, rate=1.0 / scale).sample(okey)
+        elif manifest_dist == DistributionFamily.BERNOULLI:
+            p = jax.nn.sigmoid(loc)
+            y_t = npdist.Bernoulli(probs=p).sample(okey)
+        elif manifest_dist == DistributionFamily.NEGATIVE_BINOMIAL:
+            mu = jnp.exp(loc)
+            r_val = obs_r if obs_r is not None else 5.0
+            probs = mu / (mu + r_val)
+            y_t = npdist.NegativeBinomialProbs(total_count=r_val, probs=probs).sample(okey)
+        elif manifest_dist == DistributionFamily.BETA:
+            mean = jax.nn.sigmoid(loc)
+            phi = obs_concentration if obs_concentration is not None else 10.0
+            alpha = mean * phi
+            beta_ = (1.0 - mean) * phi
+            y_t = npdist.Beta(concentration1=alpha, concentration0=beta_).sample(okey)
         else:
             # Fallback to Gaussian
             manifest_chol = jnp.diag(manifest_std)
@@ -187,10 +213,131 @@ def _simulate_one_draw_nongaussian(
     return y_sim  # (T, n_manifest)
 
 
+def _sample_channel(loc_j, key, dist_idx, std_j, df, shape_p, r_p, phi_p):
+    """Sample one observation from a channel's distribution using jax.lax.switch.
+
+    All 7 distributions are compiled but only the one matching dist_idx executes.
+    Uses raw JAX random functions for switch-compatibility.
+    """
+
+    def _gauss(loc, k, s, _df, _sh, _r, _ph):
+        return loc + s * jax.random.normal(k, ())
+
+    def _student_t(loc, k, s, df_v, _sh, _r, _ph):
+        # t-distribution via normal / sqrt(chi2/df); chi2(df) = 2*Gamma(df/2)
+        k1, k2 = jax.random.split(k)
+        z = jax.random.normal(k1, ())
+        chi2 = 2.0 * jax.random.gamma(k2, df_v / 2.0)
+        t_val = z * jnp.sqrt(df_v / jnp.maximum(chi2, 1e-10))
+        return loc + s * t_val
+
+    def _poisson(loc, k, _s, _df, _sh, _r, _ph):
+        rate = jnp.exp(jnp.clip(loc, -20.0, 20.0))
+        return jax.random.poisson(k, rate).astype(jnp.float32)
+
+    def _gamma(loc, k, _s, _df, shape_v, _r, _ph):
+        mean = jnp.exp(jnp.clip(loc, -20.0, 20.0))
+        scale = jnp.maximum(mean / jnp.maximum(shape_v, 1e-8), 1e-8)
+        return jax.random.gamma(k, shape_v) * scale
+
+    def _bernoulli(loc, k, _s, _df, _sh, _r, _ph):
+        p = jax.nn.sigmoid(loc)
+        return jax.random.bernoulli(k, p).astype(jnp.float32)
+
+    def _negbin(loc, k, _s, _df, _sh, r_v, _ph):
+        # Gamma-Poisson mixture: g ~ Gamma(r, 1), y ~ Poisson(g * mu / r)
+        mu = jnp.exp(jnp.clip(loc, -20.0, 20.0))
+        k1, k2 = jax.random.split(k)
+        g = jax.random.gamma(k1, r_v) * mu / jnp.maximum(r_v, 1e-8)
+        return jax.random.poisson(k2, jnp.maximum(g, 1e-10)).astype(jnp.float32)
+
+    def _beta(loc, k, _s, _df, _sh, _r, phi_v):
+        mean = jax.nn.sigmoid(loc)
+        alpha = jnp.maximum(mean * phi_v, 1e-4)
+        beta_p = jnp.maximum((1.0 - mean) * phi_v, 1e-4)
+        k1, k2 = jax.random.split(k)
+        g1 = jax.random.gamma(k1, alpha)
+        g2 = jax.random.gamma(k2, beta_p)
+        return g1 / jnp.maximum(g1 + g2, 1e-10)
+
+    branches = [_gauss, _student_t, _poisson, _gamma, _bernoulli, _negbin, _beta]
+    return jax.lax.switch(
+        dist_idx, branches, loc_j, key, std_j, df, shape_p, r_p, phi_p
+    )
+
+
+def _simulate_one_draw_mixed(
+    drift: jnp.ndarray,
+    diffusion_chol: jnp.ndarray,
+    cint: jnp.ndarray | None,
+    lambda_mat: jnp.ndarray,
+    manifest_means: jnp.ndarray,
+    manifest_cov: jnp.ndarray,
+    t0_mean: jnp.ndarray,
+    t0_chol: jnp.ndarray,
+    dt_array: jnp.ndarray,
+    rng_key: jax.Array,
+    dist_indices: jnp.ndarray,
+    obs_df: float = 5.0,
+    obs_shape: float = 2.0,
+    obs_r: float = 5.0,
+    obs_concentration: float = 10.0,
+) -> jnp.ndarray:
+    """Simulate one trajectory with per-channel distribution types.
+
+    Uses jax.lax.switch + vmap for per-channel dispatch, so each manifest
+    variable can have a different observation noise distribution.
+
+    Args:
+        dist_indices: (n_manifest,) integer array mapping each channel to
+            a distribution type index (see _DIST_IDX).
+
+    Returns:
+        y_sim: (T, n_manifest) simulated observations
+    """
+    n_latent = drift.shape[0]
+    n_manifest = lambda_mat.shape[0]
+    T = dt_array.shape[0]
+
+    diffusion_cov = diffusion_chol @ diffusion_chol.T
+    Ad, Qd, cd = discretize_system_batched(drift, diffusion_cov, cint, dt_array)
+    if cd is None:
+        cd = jnp.zeros((T, n_latent))
+
+    key_init, key_proc, key_obs = jax.random.split(rng_key, 3)
+    eta_0 = t0_mean + t0_chol @ jax.random.normal(key_init, (n_latent,))
+    proc_keys = jax.random.split(key_proc, T)
+    obs_keys = jax.random.split(key_obs, T)
+
+    manifest_std = jnp.sqrt(jnp.diag(manifest_cov))
+
+    def scan_fn(eta_prev, inputs):
+        Ad_t, Qd_t, cd_t, pkey, okey = inputs
+        Qd_t_safe = Qd_t + 1e-8 * jnp.eye(n_latent)
+        Qd_chol = jnp.linalg.cholesky(Qd_t_safe)
+        eps = jax.random.normal(pkey, (n_latent,))
+        eta_t = Ad_t @ eta_prev + cd_t + Qd_chol @ eps
+
+        loc = lambda_mat @ eta_t + manifest_means
+        channel_keys = jax.random.split(okey, n_manifest)
+        y_t = vmap(_sample_channel)(
+            loc, channel_keys, dist_indices, manifest_std,
+            jnp.full(n_manifest, obs_df),
+            jnp.full(n_manifest, obs_shape),
+            jnp.full(n_manifest, obs_r),
+            jnp.full(n_manifest, obs_concentration),
+        )
+        return eta_t, y_t
+
+    _, y_sim = lax.scan(scan_fn, eta_0, (Ad, Qd, cd, proc_keys, obs_keys))
+    return y_sim  # (T, n_manifest)
+
+
 def simulate_posterior_predictive(
     samples: dict[str, jnp.ndarray],
     times: jnp.ndarray,
     manifest_dist: str = "gaussian",
+    manifest_dists: list[str] | None = None,
     n_subsample: int = 50,
     rng_seed: int = 42,
 ) -> jnp.ndarray:
@@ -202,7 +349,11 @@ def simulate_posterior_predictive(
             "t0_means", "t0_cov". Optional: "cint", "manifest_means",
             "obs_df", "obs_shape".
         times: (T,) observation times.
-        manifest_dist: Noise family string (e.g. "gaussian", "student_t").
+        manifest_dist: Scalar noise family string (fallback when manifest_dists
+            is None or all channels share the same distribution).
+        manifest_dists: Per-channel noise families. When provided and channels
+            have different distributions, uses per-channel dispatch via
+            jax.lax.switch. Overrides manifest_dist.
         n_subsample: Number of posterior draws to use.
         rng_seed: Random seed for simulation.
 
@@ -266,10 +417,14 @@ def simulate_posterior_predictive(
     rng = jax.random.PRNGKey(rng_seed)
     draw_keys = jax.random.split(rng, n_use)
 
-    is_gaussian = manifest_dist in (NoiseFamily.GAUSSIAN, "gaussian")
+    # Determine dispatch path: all-Gaussian, uniform non-Gaussian, or mixed
+    effective_dists = manifest_dists if manifest_dists else None
+    unique_dists = set(effective_dists) if effective_dists else {manifest_dist}
+    all_gaussian = unique_dists == {DistributionFamily.GAUSSIAN} or unique_dists == {"gaussian"}
+    is_mixed = effective_dists is not None and len(unique_dists) > 1
 
-    if is_gaussian:
-        # Compute manifest cholesky from cov
+    if all_gaussian:
+        # Fast path: correlated Gaussian observation noise via Cholesky
         manifest_chol_sub = vmap(
             lambda cov: jnp.linalg.cholesky(cov + 1e-8 * jnp.eye(cov.shape[0]))
         )(manifest_cov_sub)
@@ -293,18 +448,66 @@ def simulate_posterior_predictive(
             )
 
         y_sim = vmap(sim_one)(jnp.arange(n_use))
-    else:
+
+    elif is_mixed:
+        # Per-channel dispatch: different distributions for different channels
         t0_chol_sub = vmap(lambda cov: jnp.linalg.cholesky(cov + 1e-8 * jnp.eye(cov.shape[0])))(
             t0_cov_sub
         )
 
-        obs_df_val = samples.get("obs_df")
-        obs_shape_val = samples.get("obs_shape")
-        # Extract scalar from draws if present
-        if obs_df_val is not None and obs_df_val.ndim > 0:
-            obs_df_val = float(jnp.mean(obs_df_val))
-        if obs_shape_val is not None and obs_shape_val.ndim > 0:
-            obs_shape_val = float(jnp.mean(obs_shape_val))
+        dist_indices = jnp.array([_DIST_IDX.get(d, 0) for d in effective_dists])
+
+        def _scalar(arr):
+            if arr is None:
+                return None
+            return float(jnp.mean(arr)) if hasattr(arr, "ndim") and arr.ndim > 0 else arr
+
+        obs_df_val = _scalar(samples.get("obs_df")) or 5.0
+        obs_shape_val = _scalar(samples.get("obs_shape")) or 2.0
+        obs_r_val = _scalar(samples.get("obs_r")) or 5.0
+        obs_conc_val = _scalar(samples.get("obs_concentration")) or 10.0
+
+        def sim_one(i):
+            ci = cint_sub[i] if cint_sub is not None else None
+            return _simulate_one_draw_mixed(
+                drift=drift_sub[i],
+                diffusion_chol=diffusion_sub[i],
+                cint=ci,
+                lambda_mat=lambda_sub[i],
+                manifest_means=manifest_means_sub[i],
+                manifest_cov=manifest_cov_sub[i],
+                t0_mean=t0_means_sub[i],
+                t0_chol=t0_chol_sub[i],
+                dt_array=dt_array,
+                rng_key=draw_keys[i],
+                dist_indices=dist_indices,
+                obs_df=obs_df_val,
+                obs_shape=obs_shape_val,
+                obs_r=obs_r_val,
+                obs_concentration=obs_conc_val,
+            )
+
+        y_sim = vmap(sim_one)(jnp.arange(n_use))
+
+    else:
+        # Uniform non-Gaussian: all channels share the same non-Gaussian distribution
+        t0_chol_sub = vmap(lambda cov: jnp.linalg.cholesky(cov + 1e-8 * jnp.eye(cov.shape[0])))(
+            t0_cov_sub
+        )
+
+        # Resolve effective scalar distribution
+        effective_dist = effective_dists[0] if effective_dists else manifest_dist
+
+        def _scalar(arr):
+            """Collapse a posterior draw array to a scalar mean."""
+            if arr is None:
+                return None
+            return float(jnp.mean(arr)) if hasattr(arr, "ndim") and arr.ndim > 0 else arr
+
+        obs_df_val = _scalar(samples.get("obs_df"))
+        obs_shape_val = _scalar(samples.get("obs_shape"))
+        obs_r_val = _scalar(samples.get("obs_r"))
+        obs_conc_val = _scalar(samples.get("obs_concentration"))
 
         def sim_one(i):
             ci = cint_sub[i] if cint_sub is not None else None
@@ -319,9 +522,11 @@ def simulate_posterior_predictive(
                 t0_chol=t0_chol_sub[i],
                 dt_array=dt_array,
                 rng_key=draw_keys[i],
-                manifest_dist=manifest_dist,
+                manifest_dist=effective_dist,
                 obs_df=obs_df_val,
                 obs_shape=obs_shape_val,
+                obs_r=obs_r_val,
+                obs_concentration=obs_conc_val,
             )
 
         y_sim = vmap(sim_one)(jnp.arange(n_use))
@@ -551,6 +756,7 @@ def run_posterior_predictive_checks(
     times: jnp.ndarray,
     manifest_names: list[str],
     manifest_dist: str = "gaussian",
+    manifest_dists: list[str] | None = None,
     n_subsample: int = 50,
     rng_seed: int = 42,
 ) -> PPCResult:
@@ -561,7 +767,8 @@ def run_posterior_predictive_checks(
         observations: (T, n_manifest) observed data
         times: (T,) observation times
         manifest_names: list of manifest variable names
-        manifest_dist: observation noise family
+        manifest_dist: scalar observation noise family (fallback)
+        manifest_dists: per-channel noise families (overrides manifest_dist)
         n_subsample: number of posterior draws to forward-simulate
         rng_seed: random seed
 
@@ -572,6 +779,7 @@ def run_posterior_predictive_checks(
         samples=samples,
         times=times,
         manifest_dist=manifest_dist,
+        manifest_dists=manifest_dists,
         n_subsample=n_subsample,
         rng_seed=rng_seed,
     )

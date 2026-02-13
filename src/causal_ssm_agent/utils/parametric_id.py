@@ -25,16 +25,16 @@ from jax import lax
 from jax.flatten_util import ravel_pytree
 
 from causal_ssm_agent.models.ssm.discretization import discretize_system_batched
-from causal_ssm_agent.models.ssm.model import NoiseFamily, SSMSpec
 from causal_ssm_agent.models.ssm.utils import (
     _assemble_deterministics,
     _build_eval_fns,
     _discover_sites,
 )
+from causal_ssm_agent.orchestrator.schemas_model import DistributionFamily
 
 if TYPE_CHECKING:
     from causal_ssm_agent.models.ssm.inference import InferenceResult
-    from causal_ssm_agent.models.ssm.model import SSMModel
+    from causal_ssm_agent.models.ssm.model import SSMModel, SSMSpec
 
 logger = logging.getLogger(__name__)
 
@@ -148,11 +148,15 @@ def count_free_params(spec: SSMSpec) -> dict[str, int]:
         counts["t0_var_diag"] = n_l
 
     # -- Noise family hyperparameters --
-    if spec.manifest_dist == NoiseFamily.STUDENT_T:
+    if spec.manifest_dist == DistributionFamily.STUDENT_T:
         counts["obs_df"] = 1
-    if spec.manifest_dist == NoiseFamily.GAMMA:
+    if spec.manifest_dist == DistributionFamily.GAMMA:
         counts["obs_shape"] = 1
-    if spec.diffusion_dist == NoiseFamily.STUDENT_T:
+    if spec.manifest_dist == DistributionFamily.NEGATIVE_BINOMIAL:
+        counts["obs_r"] = 1
+    if spec.manifest_dist == DistributionFamily.BETA:
+        counts["obs_concentration"] = 1
+    if spec.diffusion_dist == DistributionFamily.STUDENT_T:
         counts["proc_df"] = 1
 
     return counts
