@@ -13,7 +13,7 @@ from causal_ssm_agent.utils.llm import make_orchestrator_generate_fn
 
 
 @task(retries=2, retry_delay_seconds=30, cache_policy=INPUTS, result_serializer="json")
-def propose_latent_model(question: str) -> dict:
+async def propose_latent_model(question: str) -> dict:
     """Orchestrator proposes theoretical constructs and causal edges (latent model).
 
     This is Stage 1a - reasoning from domain knowledge only, no data.
@@ -24,12 +24,7 @@ def propose_latent_model(question: str) -> dict:
     Returns:
         LatentModel as a dictionary with 'constructs' and 'edges'
     """
-    import asyncio
-
-    async def run():
-        model = get_model(get_config().stage1_structure_proposal.model)
-        generate = make_orchestrator_generate_fn(model)
-        result = await run_stage1a(question=question, generate=generate)
-        return result.latent_model
-
-    return asyncio.run(run())
+    model = get_model(get_config().stage1_structure_proposal.model)
+    generate = make_orchestrator_generate_fn(model)
+    result = await run_stage1a(question=question, generate=generate)
+    return result.latent_model

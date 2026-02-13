@@ -10,7 +10,7 @@ from prefect import task
 from prefect.cache_policies import INPUTS
 
 from causal_ssm_agent.utils.data import chunk_lines, get_worker_chunk_size
-from causal_ssm_agent.workers.agents import WorkerResult, process_chunk
+from causal_ssm_agent.workers.agents import WorkerResult, process_chunk_async
 
 
 @task(cache_policy=INPUTS, result_serializer="json")
@@ -23,7 +23,7 @@ def load_worker_chunks(lines: list[str]) -> list[str]:
     retries=2,
     retry_delay_seconds=10,
 )
-def populate_indicators(chunk: str, question: str, causal_spec: dict) -> WorkerResult:
+async def populate_indicators(chunk: str, question: str, causal_spec: dict) -> WorkerResult:
     """Worker extracts indicator values from a chunk.
 
     Returns:
@@ -31,4 +31,4 @@ def populate_indicators(chunk: str, question: str, causal_spec: dict) -> WorkerR
         - output: Validated WorkerOutput with extractions
         - dataframe: Polars DataFrame with columns (indicator, value, timestamp)
     """
-    return process_chunk(chunk, question, causal_spec)
+    return await process_chunk_async(chunk, question, causal_spec)

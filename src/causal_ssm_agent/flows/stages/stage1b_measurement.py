@@ -29,7 +29,7 @@ def build_causal_spec(
 
 
 @task(cache_policy=INPUTS, result_serializer="json")
-def propose_measurement_with_identifiability_fix(
+async def propose_measurement_with_identifiability_fix(
     question: str,
     latent_model: dict,
     data_sample: list[str],
@@ -49,21 +49,16 @@ def propose_measurement_with_identifiability_fix(
     Returns:
         Dict with 'measurement_model' and 'identifiability_status'
     """
-    import asyncio
-
-    async def run():
-        model = get_model(get_config().stage1_structure_proposal.model)
-        generate = make_orchestrator_generate_fn(model)
-        result = await run_stage1b(
-            question=question,
-            latent_model=latent_model,
-            chunks=data_sample,
-            generate=generate,
-            dataset_summary=dataset_summary,
-        )
-        return {
-            "measurement_model": result.measurement_model,
-            "identifiability_status": result.identifiability_status,
-        }
-
-    return asyncio.run(run())
+    model = get_model(get_config().stage1_structure_proposal.model)
+    generate = make_orchestrator_generate_fn(model)
+    result = await run_stage1b(
+        question=question,
+        latent_model=latent_model,
+        chunks=data_sample,
+        generate=generate,
+        dataset_summary=dataset_summary,
+    )
+    return {
+        "measurement_model": result.measurement_model,
+        "identifiability_status": result.identifiability_status,
+    }

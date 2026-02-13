@@ -66,7 +66,7 @@ def build_raw_data_summary(raw_data: pl.DataFrame) -> str:
 
 
 @task(retries=2, retry_delay_seconds=10, task_run_name="propose-model-spec")
-def propose_model_task(
+async def propose_model_task(
     causal_spec: dict,
     question: str,
     raw_data: pl.DataFrame,
@@ -81,8 +81,6 @@ def propose_model_task(
     Returns:
         ModelSpec as dict
     """
-    import asyncio
-
     from inspect_ai.model import get_model
 
     from causal_ssm_agent.orchestrator.stage4_orchestrator import (
@@ -91,27 +89,24 @@ def propose_model_task(
     from causal_ssm_agent.utils.config import get_config
     from causal_ssm_agent.utils.llm import make_orchestrator_generate_fn
 
-    async def run():
-        config = get_config()
-        model = get_model(config.stage4_prior_elicitation.model)
-        generate = make_orchestrator_generate_fn(model)
+    config = get_config()
+    model = get_model(config.stage4_prior_elicitation.model)
+    generate = make_orchestrator_generate_fn(model)
 
-        data_summary = build_raw_data_summary(raw_data)
+    data_summary = build_raw_data_summary(raw_data)
 
-        result = await propose_model_spec(
-            causal_spec=causal_spec,
-            data_summary=data_summary,
-            question=question,
-            generate=generate,
-        )
+    result = await propose_model_spec(
+        causal_spec=causal_spec,
+        data_summary=data_summary,
+        question=question,
+        generate=generate,
+    )
 
-        return result.model_spec.model_dump()
-
-    return asyncio.run(run())
+    return result.model_spec.model_dump()
 
 
 @task(retries=2, retry_delay_seconds=5, task_run_name="search-literature-{parameter_spec[name]}")
-def search_literature_task(
+async def search_literature_task(
     parameter_spec: dict,
 ) -> dict:
     """Search Exa for literature relevant to a parameter.
@@ -124,25 +119,20 @@ def search_literature_task(
     Returns:
         Dict with 'sources' (raw Exa results) and 'formatted' (prompt string)
     """
-    import asyncio
-
     from causal_ssm_agent.orchestrator.schemas_model import ParameterSpec
     from causal_ssm_agent.workers.prior_research import search_parameter_literature
     from causal_ssm_agent.workers.prompts.prior_research import (
         format_literature_for_parameter,
     )
 
-    async def run():
-        param = ParameterSpec.model_validate(parameter_spec)
-        sources = await search_parameter_literature(param)
-        formatted = format_literature_for_parameter(sources)
-        return {"sources": sources, "formatted": formatted}
-
-    return asyncio.run(run())
+    param = ParameterSpec.model_validate(parameter_spec)
+    sources = await search_parameter_literature(param)
+    formatted = format_literature_for_parameter(sources)
+    return {"sources": sources, "formatted": formatted}
 
 
 @task(retries=2, retry_delay_seconds=5, task_run_name="elicit-prior-{parameter_spec[name]}")
-def elicit_prior_task(
+async def elicit_prior_task(
     parameter_spec: dict,
     question: str,
     literature: dict,
@@ -164,8 +154,6 @@ def elicit_prior_task(
     Returns:
         PriorProposal as dict
     """
-    import asyncio
-
     from inspect_ai.model import get_model
 
     from causal_ssm_agent.orchestrator.schemas_model import ParameterSpec
@@ -176,30 +164,27 @@ def elicit_prior_task(
         get_default_prior,
     )
 
-    async def run():
-        config = get_config()
-        worker_model = config.stage4_prior_elicitation.worker_model or config.stage2_workers.model
-        model = get_model(worker_model)
-        generate = make_worker_generate_fn(model)
+    config = get_config()
+    worker_model = config.stage4_prior_elicitation.worker_model or config.stage2_workers.model
+    model = get_model(worker_model)
+    generate = make_worker_generate_fn(model)
 
-        param = ParameterSpec.model_validate(parameter_spec)
+    param = ParameterSpec.model_validate(parameter_spec)
 
-        try:
-            result = await elicit_prior(
-                parameter=param,
-                question=question,
-                generate=generate,
-                literature_context=literature.get("formatted", ""),
-                literature_sources=literature.get("sources", []),
-                feedback=feedback,
-                n_paraphrases=n_paraphrases,
-            )
-            return result.proposal.model_dump()
-        except Exception as e:
-            logger.warning("Prior elicitation failed for %s: %s. Using default.", param.name, e)
-            return get_default_prior(param).model_dump()
-
-    return asyncio.run(run())
+    try:
+        result = await elicit_prior(
+            parameter=param,
+            question=question,
+            generate=generate,
+            literature_context=literature.get("formatted", ""),
+            literature_sources=literature.get("sources", []),
+            feedback=feedback,
+            n_paraphrases=n_paraphrases,
+        )
+        return result.proposal.model_dump()
+    except Exception as e:
+        logger.warning("Prior elicitation failed for %s: %s. Using default.", param.name, e)
+        return get_default_prior(param).model_dump()
 
 
 @task(retries=1, task_run_name="validate-priors")
