@@ -165,7 +165,9 @@ async def elicit_prior_task(
     )
 
     config = get_config()
-    worker_model = config.stage4_prior_elicitation.worker_model or config.stage2_workers.model
+    worker_model = (
+        config.stage4_prior_elicitation.worker_model or config.stage4_prior_elicitation.model
+    )
     model = get_model(worker_model)
     generate = make_worker_generate_fn(model)
 
@@ -276,7 +278,7 @@ def build_model_task(
 
 
 @flow(name="stage4-orchestrated", log_prints=True, persist_result=True, result_serializer="json")
-def stage4_orchestrated_flow(
+async def stage4_orchestrated_flow(
     causal_spec: dict,
     question: str,
     raw_data: pl.DataFrame,
@@ -322,7 +324,7 @@ def stage4_orchestrated_flow(
     n_paraphrases = paraphrasing.n_paraphrases if paraphrasing.enabled else 1
 
     # 1. Orchestrator proposes model specification
-    model_spec = propose_model_task(causal_spec, question, raw_data)
+    model_spec = await propose_model_task(causal_spec, question, raw_data)
     parameter_specs = model_spec.get("parameters", [])
 
     # Build a lookup from parameter name -> spec dict
