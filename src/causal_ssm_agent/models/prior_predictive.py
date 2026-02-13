@@ -435,6 +435,8 @@ def format_parameter_feedback(
         Formatted feedback string for inclusion in re-elicitation prompt
     """
     # Find results relevant to this parameter
+    # Global failures (affect all parameters) are always included
+    _GLOBAL_FAILURES = {"prior_predictive", "dynamics_stability", "model_build", "prior_sampling"}
     param_lower = parameter_name.lower()
     relevant = [
         r
@@ -443,7 +445,8 @@ def format_parameter_feedback(
         and (
             r.parameter == parameter_name
             or param_lower in r.parameter.lower()
-            or r.parameter in ("prior_predictive", "dynamics_stability", "model_build")
+            or r.parameter.lower().startswith("scale_")  # scale mismatch affects all
+            or r.parameter in _GLOBAL_FAILURES
         )
     ]
 
