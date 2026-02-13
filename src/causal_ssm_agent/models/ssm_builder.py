@@ -49,8 +49,6 @@ _ROLE_TO_SSM: dict[ParameterRole, tuple[str, dict]] = {
     ParameterRole.FIXED_EFFECT: ("drift_offdiag", {"mu": 0.0, "sigma": 0.5}),
     ParameterRole.RESIDUAL_SD: ("diffusion_diag", {"sigma": 1.0}),
     ParameterRole.LOADING: ("lambda_free", {"mu": 0.5, "sigma": 0.5}),
-    ParameterRole.RANDOM_INTERCEPT_SD: ("pop_sd", {"sigma": 1.0}),
-    ParameterRole.RANDOM_SLOPE_SD: ("pop_sd", {"sigma": 1.0}),
     ParameterRole.CORRELATION: ("drift_offdiag", {"mu": 0.0, "sigma": 0.5}),
 }
 
@@ -61,7 +59,6 @@ _KEYWORD_RULES: list[tuple[list[str], str, dict]] = [
     (["beta"], "drift_offdiag", {"mu": 0.0, "sigma": 0.5}),
     (["sigma", "sd"], "diffusion_diag", {"sigma": 1.0}),
     (["lambda", "loading"], "lambda_free", {"mu": 0.5, "sigma": 0.5}),
-    (["tau"], "pop_sd", {"sigma": 1.0}),
     (["cor"], "drift_offdiag", {"mu": 0.0, "sigma": 0.5}),
 ]
 
@@ -151,7 +148,7 @@ class SSMModelBuilder:
 
         return get_config().inference.to_sampler_config()
 
-    def _convert_spec_to_ssm(self, model_spec: ModelSpec | dict, data: pl.DataFrame) -> SSMSpec:
+    def _convert_spec_to_ssm(self, model_spec: ModelSpec | dict) -> SSMSpec:
         """Convert ModelSpec to SSMSpec.
 
         This is a heuristic conversion that maps the ModelSpec
@@ -159,7 +156,6 @@ class SSMModelBuilder:
 
         Args:
             model_spec: Model specification
-            data: Data frame with indicator columns
 
         Returns:
             SSMSpec for continuous-time model
@@ -197,12 +193,6 @@ class SSMModelBuilder:
                 n_latent,
             )
 
-        # Check for hierarchical structure
-        hierarchical = len(model_spec.random_effects) > 0
-        n_subjects = 1
-        if hierarchical and "subject_id" in data.columns:
-            n_subjects = data["subject_id"].n_unique()
-
         # Determine manifest noise family from likelihoods
         manifest_dist = NoiseFamily.GAUSSIAN
         for lik in model_spec.likelihoods:
@@ -229,9 +219,6 @@ class SSMModelBuilder:
             manifest_dist=manifest_dist,
             t0_means="free",
             t0_var="diag",
-            hierarchical=hierarchical,
-            n_subjects=n_subjects,
-            indvarying=["t0_means"],  # Allow individual variation in initial states
             latent_names=latent_names,
             manifest_names=manifest_cols,
         )
@@ -329,22 +316,16 @@ class SSMModelBuilder:
         if self._ssm_spec is not None:
             spec = self._ssm_spec
         elif self._model_spec is not None:
-            spec = self._convert_spec_to_ssm(self._model_spec, X)
+            spec = self._convert_spec_to_ssm(self._model_spec)
         else:
             # Auto-detect from data
             manifest_cols = [
-                c
-                for c in X.columns
-                if c not in ["time", "time_bucket", "subject_id", "subject"]
-                and not c.endswith("_lag1")
+                c for c in X.columns if c not in ["time", "time_bucket"] and not c.endswith("_lag1")
             ]
-            subject_col = "subject_id" if "subject_id" in X.columns else "subject"
             spec = SSMSpec(
                 n_latent=len(manifest_cols),
                 n_manifest=len(manifest_cols),
                 lambda_mat=jnp.eye(len(manifest_cols)),
-                hierarchical=subject_col in X.columns,
-                n_subjects=X[subject_col].n_unique() if subject_col in X.columns else 1,
             )
 
         # Convert priors
@@ -378,7 +359,7 @@ class SSMModelBuilder:
             self.build_model(X, y)
 
         # Prepare data
-        observations, times, subject_ids = self._prepare_data(X)
+        observations, times = self._prepare_data(X)
 
         # Merge sampler config with kwargs
         sampler_config = {**self._sampler_config, **kwargs}
@@ -390,7 +371,6 @@ class SSMModelBuilder:
             self._model,
             observations=observations,
             times=times,
-            subject_ids=subject_ids,
             method=method,
             **sampler_config,
         )
@@ -398,24 +378,21 @@ class SSMModelBuilder:
         self._result = result
         return result
 
-    def _prepare_data(self, X: pl.DataFrame) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray | None]:
+    def _prepare_data(self, X: pl.DataFrame) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Prepare data for SSM fitting.
 
         Args:
             X: Polars DataFrame with observations
 
         Returns:
-            Tuple of (observations, times, subject_ids)
+            Tuple of (observations, times)
         """
         # Get manifest columns
         if hasattr(self, "_spec") and self._spec.manifest_names:
             manifest_cols = self._spec.manifest_names
         else:
             manifest_cols = [
-                c
-                for c in X.columns
-                if c not in ["time", "time_bucket", "subject_id", "subject"]
-                and not c.endswith("_lag1")
+                c for c in X.columns if c not in ["time", "time_bucket"] and not c.endswith("_lag1")
             ]
 
         # Extract observations
@@ -438,18 +415,7 @@ class SSMModelBuilder:
             # Default: integer sequence
             times = jnp.arange(X.height, dtype=jnp.float32)
 
-        # Extract subject IDs
-        subject_col = "subject_id" if "subject_id" in X.columns else "subject"
-        if subject_col in X.columns:
-            # Convert to 0-indexed integers via rank("dense") - 1
-            subject_ids = jnp.array(
-                (X[subject_col].rank("dense") - 1).cast(pl.Int32).to_numpy(),
-                dtype=jnp.int32,
-            )
-        else:
-            subject_ids = None
-
-        return observations, times, subject_ids
+        return observations, times
 
     def sample_prior_predictive(self, samples: int = 500, times: jnp.ndarray | None = None) -> Any:
         """Sample from the prior predictive distribution.

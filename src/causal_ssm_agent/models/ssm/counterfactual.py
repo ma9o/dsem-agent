@@ -173,9 +173,9 @@ def compute_interventions(
             results.append(entry)
             continue
 
-        effects = vmap(
-            lambda d, c, ti=treat_idx, oi=outcome_idx: treatment_effect(d, c, ti, oi)
-        )(drift_draws, cint_draws)
+        effects = vmap(lambda d, c, ti=treat_idx, oi=outcome_idx: treatment_effect(d, c, ti, oi))(
+            drift_draws, cint_draws
+        )
 
         mean_effect = float(jnp.mean(effects))
         q025 = float(jnp.percentile(effects, 2.5))
@@ -193,9 +193,7 @@ def compute_interventions(
         if treatment_name in non_identifiable:
             blockers = blocker_details.get(treatment_name, [])
             if blockers:
-                entry["warning"] = (
-                    f"Effect not identifiable (blocked by: {', '.join(blockers)})"
-                )
+                entry["warning"] = f"Effect not identifiable (blocked by: {', '.join(blockers)})"
             else:
                 entry["warning"] = "Effect not identifiable (missing proxies)"
 
@@ -219,12 +217,8 @@ def compute_interventions(
 
         for entry in results:
             ti = name_to_idx.get(entry["treatment"])
-            relevant_vars = get_relevant_manifest_variables(
-                lambda_mat, ti, outcome_idx, m_names
-            )
-            entry_ppc = [
-                w for w in ppc_result["warnings"] if w.get("variable") in relevant_vars
-            ]
+            relevant_vars = get_relevant_manifest_variables(lambda_mat, ti, outcome_idx, m_names)
+            entry_ppc = [w for w in ppc_result["warnings"] if w.get("variable") in relevant_vars]
             if entry_ppc:
                 entry["ppc_warnings"] = entry_ppc
 
