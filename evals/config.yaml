@@ -40,9 +40,3 @@ judge_model: openrouter/anthropic/claude-opus-4.5
 
 # Worker timeout in seconds (for measurement adherence eval)
 worker_timeout_seconds: 1200
-
-# Default data sampling settings
-data_sampling:
-  orchestrator_chunks: 5
-  worker_chunks: 10
-  seed: 42
