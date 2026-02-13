@@ -50,6 +50,8 @@ from .stages import (
 def causal_inference_pipeline(
     query_file: str,
     input_file: str | None = None,
+    inference_method: str | None = None,
+    enable_literature: bool | None = None,
 ):
     """
     Main causal inference pipeline.
@@ -60,6 +62,8 @@ def causal_inference_pipeline(
     Args:
         query_file: Filename in data/queries/ (e.g., 'resolve-errors')
         input_file: Filename in data/processed/ (default: latest file)
+        inference_method: Override inference method ("svi" or "nuts", default from config)
+        enable_literature: Override literature search (default from config)
     """
     # Stage 0: Load question and resolve input path
     question = load_query(query_file)
@@ -193,13 +197,18 @@ def causal_inference_pipeline(
     from causal_ssm_agent.utils.config import get_config
 
     config = get_config()
+    lit_enabled = (
+        enable_literature
+        if enable_literature is not None
+        else config.stage4_prior_elicitation.literature_search.enabled
+    )
 
     print("\n=== Stage 4: Model Specification ===")
     stage4_result = stage4_orchestrated_flow(
         causal_spec=causal_spec,
         question=question,
         raw_data=data_for_model,
-        enable_literature=config.stage4_prior_elicitation.literature_search.enabled,
+        enable_literature=lit_enabled,
     )
 
     model_spec = stage4_result.get("model_spec", {})
@@ -244,7 +253,12 @@ def causal_inference_pipeline(
     # ══════════════════════════════════════════════════════════════════════════
     print("\n=== Stage 5: Inference ===")
     print(f"Estimating effects of {len(treatments)} treatments on {outcome}")
-    fitted = fit_model(stage4_result, data_for_model)
+    sampler_config = (
+        config.inference.to_sampler_config(method_override=inference_method)
+        if inference_method
+        else None
+    )
+    fitted = fit_model(stage4_result, data_for_model, sampler_config=sampler_config)
 
     # Post-fit power-scaling sensitivity diagnostic
     print("\n--- Power-Scaling Sensitivity ---")

@@ -11,13 +11,18 @@ from prefect import task
 
 
 @task
-def fit_model(stage4_result: dict, raw_data: pl.DataFrame) -> Any:
+def fit_model(
+    stage4_result: dict,
+    raw_data: pl.DataFrame,
+    sampler_config: dict | None = None,
+) -> Any:
     """Fit the SSM model to data.
 
     Args:
         stage4_result: Result from stage4_orchestrated_flow containing
             model_spec, priors, and model_info
         raw_data: Raw timestamped data (indicator, value, timestamp)
+        sampler_config: Override sampler configuration (None uses config defaults)
 
     Returns:
         Fitted model results
@@ -30,7 +35,9 @@ def fit_model(stage4_result: dict, raw_data: pl.DataFrame) -> Any:
     priors = stage4_result.get("priors", {})
 
     try:
-        builder = SSMModelBuilder(model_spec=model_spec, priors=priors)
+        builder = SSMModelBuilder(
+            model_spec=model_spec, priors=priors, sampler_config=sampler_config
+        )
 
         # Convert data to wide format
         if raw_data.is_empty():

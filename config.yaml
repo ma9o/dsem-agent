@@ -30,4 +30,30 @@ stage4_prior_elicitation:
     n_paraphrases: 10    # Number of paraphrased prompts per parameter
 
 # Stage 5: Intervention Analysis
-# Uses PyMC - no LLM needed
+# Uses NumPyro SSM - no LLM needed
+
+# Inference settings (shared across pipeline and benchmarks)
+inference:
+  method: svi
+  num_warmup: 1000
+  num_samples: 1000
+  num_chains: 4
+  seed: 0
+  svi:
+    num_steps: 5000
+    learning_rate: 0.01
+    guide_type: mvn
+  nuts:
+    target_accept_prob: 0.85
+    max_tree_depth: 8
+
+# LLM generation settings (shared across all model calls)
+llm:
+  max_tokens: 65536
+  timeout: 900
+  reasoning_effort: high
+  reasoning_tokens: 32768
+
+# Pipeline-level behavior
+pipeline:
+  max_prior_retries: 3

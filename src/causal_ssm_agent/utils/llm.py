@@ -33,13 +33,16 @@ WorkerGenerateFn = Callable[
 def get_generate_config() -> GenerateConfig:
     """Get standard GenerateConfig for all model calls.
 
-    Uses high reasoning effort to maximize model thinking.
+    Reads settings from config.yaml llm section.
     """
+    from causal_ssm_agent.utils.config import get_config
+
+    llm = get_config().llm
     return GenerateConfig(
-        max_tokens=65536,
-        timeout=900,  # 15 minutes
-        reasoning_effort="high",
-        reasoning_tokens=32768,
+        max_tokens=llm.max_tokens,
+        timeout=llm.timeout,
+        reasoning_effort=llm.reasoning_effort,
+        reasoning_tokens=llm.reasoning_tokens,
         reasoning_history="all",  # Preserve reasoning across tool calls (required by Gemini)
     )
 

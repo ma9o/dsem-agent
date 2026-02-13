@@ -147,13 +147,10 @@ class SSMModelBuilder:
 
     @staticmethod
     def get_default_sampler_config() -> dict:
-        """Default sampler configuration."""
-        return {
-            "num_warmup": 1000,
-            "num_samples": 1000,
-            "num_chains": 4,
-            "seed": 0,
-        }
+        """Default sampler configuration, read from config.yaml."""
+        from causal_ssm_agent.utils.config import get_config
+
+        return get_config().inference.to_sampler_config()
 
     def _convert_spec_to_ssm(self, model_spec: ModelSpec | dict, data: pd.DataFrame) -> SSMSpec:
         """Convert ModelSpec to SSMSpec.

@@ -7,7 +7,6 @@ Each worker researches a single parameter using:
 """
 
 import asyncio
-import os
 
 import numpy as np
 
@@ -50,7 +49,9 @@ async def search_parameter_literature(
     Returns:
         List of source dicts with title, url, snippet, effect_size
     """
-    api_key = os.getenv("EXA_API_KEY")
+    from causal_ssm_agent.utils.config import get_secret
+
+    api_key = get_secret("EXA_API_KEY")
     if not api_key:
         return []
 

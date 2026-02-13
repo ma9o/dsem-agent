@@ -20,8 +20,6 @@ from prefect import flow, task
 
 logger = logging.getLogger(__name__)
 
-MAX_PRIOR_RETRIES = 3
-
 
 def build_raw_data_summary(raw_data: pl.DataFrame) -> str:
     """Build a summary of data for the orchestrator.
@@ -304,7 +302,7 @@ def stage4_orchestrated_flow(
     question: str,
     raw_data: pl.DataFrame,
     enable_literature: bool = True,
-    max_prior_retries: int = MAX_PRIOR_RETRIES,
+    max_prior_retries: int | None = None,
 ) -> dict:
     """Stage 4 orchestrated flow with validation-driven prior elicitation.
 
@@ -339,6 +337,8 @@ def stage4_orchestrated_flow(
     from causal_ssm_agent.workers.schemas_prior import PriorValidationResult
 
     config = get_config()
+    if max_prior_retries is None:
+        max_prior_retries = config.pipeline.max_prior_retries
     paraphrasing = config.stage4_prior_elicitation.paraphrasing
     n_paraphrases = paraphrasing.n_paraphrases if paraphrasing.enabled else 1
 
