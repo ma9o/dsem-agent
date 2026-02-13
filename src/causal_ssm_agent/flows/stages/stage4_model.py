@@ -202,63 +202,6 @@ def elicit_prior_task(
     return asyncio.run(run())
 
 
-@task(retries=2, retry_delay_seconds=5)
-def research_prior_task(
-    parameter_spec: dict,
-    question: str,
-    enable_literature: bool = True,
-    n_paraphrases: int = 1,
-) -> dict:
-    """Worker researches prior for a single parameter (legacy convenience task).
-
-    For the validation loop flow, use search_literature_task + elicit_prior_task
-    instead. This task is kept for backward compatibility with direct calls.
-
-    Args:
-        parameter_spec: ParameterSpec as dict
-        question: Research question
-        enable_literature: Whether to search Exa
-        n_paraphrases: Number of paraphrased prompts (1 = original single-shot)
-
-    Returns:
-        PriorProposal as dict
-    """
-    import asyncio
-
-    from inspect_ai.model import get_model
-
-    from causal_ssm_agent.orchestrator.schemas_model import ParameterSpec
-    from causal_ssm_agent.utils.config import get_config
-    from causal_ssm_agent.utils.llm import make_worker_generate_fn
-    from causal_ssm_agent.workers.prior_research import (
-        get_default_prior,
-        research_single_prior,
-    )
-
-    async def run():
-        config = get_config()
-        worker_model = config.stage4_prior_elicitation.worker_model or config.stage2_workers.model
-        model = get_model(worker_model)
-        generate = make_worker_generate_fn(model)
-
-        param = ParameterSpec.model_validate(parameter_spec)
-
-        try:
-            result = await research_single_prior(
-                parameter=param,
-                question=question,
-                generate=generate,
-                enable_literature=enable_literature,
-                n_paraphrases=n_paraphrases,
-            )
-            return result.proposal.model_dump()
-        except Exception as e:
-            logger.warning("Prior research failed for %s: %s. Using default.", param.name, e)
-            return get_default_prior(param).model_dump()
-
-    return asyncio.run(run())
-
-
 @task(retries=1, task_run_name="validate-priors")
 def validate_priors_task(
     model_spec: dict,
