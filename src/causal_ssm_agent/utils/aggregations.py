@@ -79,7 +79,11 @@ def _build_agg_expr(agg_name: str) -> pl.Expr:
         return (col.quantile(0.75) - col.quantile(0.25)).alias("value")
 
     if agg_name == "cv":
-        return (col.std() / col.mean()).alias("value")
+        return (
+            pl.when(col.mean().abs() > 1e-15)
+            .then(col.std() / col.mean())
+            .otherwise(None)
+        ).alias("value")
 
     # MSSD: mean squared successive differences
     if agg_name == "instability":
@@ -184,9 +188,12 @@ def _encode_non_continuous(
                 unique_vals = sorted(
                     v for v in subset["value"].unique().to_list() if v is not None
                 )
-            label_map = {v: float(i) for i, v in enumerate(unique_vals)}
+            # Normalize for case-insensitive matching (mirrors binary branch)
+            label_map = {v.strip().lower() if isinstance(v, str) else v: float(i) for i, v in enumerate(unique_vals)}
             subset = subset.with_columns(
                 pl.col("value")
+                .str.strip_chars()
+                .str.to_lowercase()
                 .map_elements(lambda v, _lm=label_map: _lm.get(v), return_dtype=pl.Float64)
                 .alias("value")
             )
