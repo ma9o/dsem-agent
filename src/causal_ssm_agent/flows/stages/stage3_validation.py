@@ -49,9 +49,7 @@ HALLUCINATION_DUPLICATE_THRESHOLD = 0.5
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def _check_timestamps(
-    ind_data: pl.DataFrame, ind_name: str
-) -> tuple[list[dict], pl.Series]:
+def _check_timestamps(ind_data: pl.DataFrame, ind_name: str) -> tuple[list[dict], pl.Series]:
     """Check timestamp parseability.
 
     Returns:
@@ -93,9 +91,7 @@ def _check_timestamps(
     return issues, parsed.drop_nulls()
 
 
-def _check_dtype_range(
-    values: pl.Series, dtype: str, ind_name: str
-) -> list[dict]:
+def _check_dtype_range(values: pl.Series, dtype: str, ind_name: str) -> list[dict]:
     """Check values conform to declared measurement dtype."""
     issues: list[dict] = []
 
@@ -131,8 +127,7 @@ def _check_dtype_range(
                     "issue_type": "dtype_violation",
                     "severity": "error",
                     "message": (
-                        f"Count indicator has fractional values: "
-                        f"{fractional.to_list()[:5]}"
+                        f"Count indicator has fractional values: {fractional.to_list()[:5]}"
                     ),
                 }
             )
@@ -154,8 +149,7 @@ def _check_dtype_range(
                             "issue_type": "dtype_violation",
                             "severity": "warning",
                             "message": (
-                                f"{len(outliers)} outlier(s) outside "
-                                f"[{lower:.2f}, {upper:.2f}]"
+                                f"{len(outliers)} outlier(s) outside [{lower:.2f}, {upper:.2f}]"
                             ),
                         }
                     )
@@ -241,9 +235,7 @@ def _check_timestamp_gaps(
     return issues
 
 
-def _check_hallucination_signals(
-    values: pl.Series, dtype: str, ind_name: str
-) -> list[dict]:
+def _check_hallucination_signals(values: pl.Series, dtype: str, ind_name: str) -> list[dict]:
     """Check for patterns suspicious of LLM hallucination."""
     issues: list[dict] = []
     n = len(values)
@@ -487,9 +479,7 @@ def validate_extraction(
         ind_meta = indicator_lookup.get(ind_name, {})
         dtype = ind_meta.get("measurement_dtype")
         construct_name = ind_meta.get("construct_name")
-        construct_meta = (
-            construct_lookup.get(construct_name, {}) if construct_name else {}
-        )
+        construct_meta = construct_lookup.get(construct_name, {}) if construct_name else {}
         causal_gran = construct_meta.get("causal_granularity")
         is_time_invariant = construct_meta.get("temporal_status") == "time_invariant"
 
@@ -508,9 +498,7 @@ def validate_extraction(
 
         # 5. Hallucination signals
         issues.extend(
-            _check_hallucination_signals(
-                values["value"], dtype or "continuous", ind_name
-            )
+            _check_hallucination_signals(values["value"], dtype or "continuous", ind_name)
         )
 
     # 6. Cross-indicator construct correlations

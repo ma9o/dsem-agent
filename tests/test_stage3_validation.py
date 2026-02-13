@@ -356,7 +356,11 @@ class TestCheckTimestamps:
         """All parseable timestamps produce no issues."""
         spec = _make_spec()
         records = [
-            {"indicator": "stress_score", "value": str(float(i)), "timestamp": f"2024-01-{i + 1:02d} 10:00"}
+            {
+                "indicator": "stress_score",
+                "value": str(float(i)),
+                "timestamp": f"2024-01-{i + 1:02d} 10:00",
+            }
             for i in range(20)
         ]
         result = validate_extraction.fn(spec, _create_worker_results(records))
@@ -381,9 +385,7 @@ class TestCheckTimestamps:
         records = []
         for i in range(20):
             ts = f"2024-01-{i + 1:02d} 10:00" if i < 8 else "garbage"
-            records.append(
-                {"indicator": "stress_score", "value": str(float(i)), "timestamp": ts}
-            )
+            records.append({"indicator": "stress_score", "value": str(float(i)), "timestamp": ts})
         result = validate_extraction.fn(spec, _create_worker_results(records))
         ts_issues = [i for i in result["issues"] if i["issue_type"] == "unparseable_timestamps"]
         assert len(ts_issues) == 1
@@ -395,9 +397,7 @@ class TestCheckTimestamps:
         records = []
         for i in range(20):
             ts = "garbage" if i < 5 else f"2024-01-{i + 1:02d} 10:00"
-            records.append(
-                {"indicator": "stress_score", "value": str(float(i)), "timestamp": ts}
-            )
+            records.append({"indicator": "stress_score", "value": str(float(i)), "timestamp": ts})
         result = validate_extraction.fn(spec, _create_worker_results(records))
         ts_issues = [i for i in result["issues"] if i["issue_type"] == "unparseable_timestamps"]
         assert len(ts_issues) == 0
@@ -476,7 +476,11 @@ class TestCheckDtypeRange:
         """Continuous data without outliers produces no dtype issues."""
         spec = _make_spec(dtype="continuous")
         records = [
-            {"indicator": "stress_score", "value": str(float(i % 10)), "timestamp": f"2024-01-{i + 1:02d} 10:00"}
+            {
+                "indicator": "stress_score",
+                "value": str(float(i % 10)),
+                "timestamp": f"2024-01-{i + 1:02d} 10:00",
+            }
             for i in range(20)
         ]
         result = validate_extraction.fn(spec, _create_worker_results(records))
@@ -512,7 +516,11 @@ class TestCheckTimeCoverage:
         spec = _make_spec(causal_gran="daily")
         # Only 3 days of data, need 10 * 24h = 240h
         records = [
-            {"indicator": "stress_score", "value": str(float(i)), "timestamp": f"2024-01-{i + 1:02d} 10:00"}
+            {
+                "indicator": "stress_score",
+                "value": str(float(i)),
+                "timestamp": f"2024-01-{i + 1:02d} 10:00",
+            }
             for i in range(3)
         ]
         result = validate_extraction.fn(spec, _create_worker_results(records))
@@ -524,7 +532,11 @@ class TestCheckTimeCoverage:
         """Time-invariant constructs skip coverage check."""
         spec = _make_spec(causal_gran=None, temporal_status="time_invariant")
         records = [
-            {"indicator": "stress_score", "value": str(float(i)), "timestamp": f"2024-01-0{i + 1} 10:00"}
+            {
+                "indicator": "stress_score",
+                "value": str(float(i)),
+                "timestamp": f"2024-01-0{i + 1} 10:00",
+            }
             for i in range(3)
         ]
         result = validate_extraction.fn(spec, _create_worker_results(records))
@@ -644,7 +656,11 @@ class TestCheckHallucinationSignals:
         """Perfect arithmetic sequence → warning."""
         spec = _make_spec(dtype="continuous")
         records = [
-            {"indicator": "stress_score", "value": str(float(i * 2)), "timestamp": f"2024-01-{i + 1:02d} 10:00"}
+            {
+                "indicator": "stress_score",
+                "value": str(float(i * 2)),
+                "timestamp": f"2024-01-{i + 1:02d} 10:00",
+            }
             for i in range(20)
         ]
         result = validate_extraction.fn(spec, _create_worker_results(records))
@@ -664,7 +680,8 @@ class TestCheckHallucinationSignals:
         hall_issues = [
             i
             for i in result["issues"]
-            if i["issue_type"] == "suspicious_pattern" and "duplicate" in i.get("message", "").lower()
+            if i["issue_type"] == "suspicious_pattern"
+            and "duplicate" in i.get("message", "").lower()
         ]
         # No duplicate-based hallucination warning for binary
         assert len(hall_issues) == 0
@@ -682,7 +699,8 @@ class TestCheckHallucinationSignals:
         hall_issues = [
             i
             for i in result["issues"]
-            if i["issue_type"] == "suspicious_pattern" and "duplicate" in i.get("message", "").lower()
+            if i["issue_type"] == "suspicious_pattern"
+            and "duplicate" in i.get("message", "").lower()
         ]
         assert len(hall_issues) == 0
 
@@ -728,7 +746,9 @@ class TestCheckConstructCorrelations:
                 }
             )
         result = validate_extraction.fn(spec, _create_worker_results(records))
-        corr_issues = [i for i in result["issues"] if i["issue_type"] == "low_construct_correlation"]
+        corr_issues = [
+            i for i in result["issues"] if i["issue_type"] == "low_construct_correlation"
+        ]
         assert len(corr_issues) == 0
 
     def test_negative_correlation_warns(self):
@@ -764,7 +784,9 @@ class TestCheckConstructCorrelations:
                 }
             )
         result = validate_extraction.fn(spec, _create_worker_results(records))
-        corr_issues = [i for i in result["issues"] if i["issue_type"] == "low_construct_correlation"]
+        corr_issues = [
+            i for i in result["issues"] if i["issue_type"] == "low_construct_correlation"
+        ]
         assert len(corr_issues) == 1
         assert corr_issues[0]["severity"] == "warning"
 
@@ -780,7 +802,9 @@ class TestCheckConstructCorrelations:
             for i in range(20)
         ]
         result = validate_extraction.fn(spec, _create_worker_results(records))
-        corr_issues = [i for i in result["issues"] if i["issue_type"] == "low_construct_correlation"]
+        corr_issues = [
+            i for i in result["issues"] if i["issue_type"] == "low_construct_correlation"
+        ]
         assert len(corr_issues) == 0
 
     def test_insufficient_aligned_skipped(self):
@@ -816,5 +840,7 @@ class TestCheckConstructCorrelations:
                 }
             )
         result = validate_extraction.fn(spec, _create_worker_results(records))
-        corr_issues = [i for i in result["issues"] if i["issue_type"] == "low_construct_correlation"]
+        corr_issues = [
+            i for i in result["issues"] if i["issue_type"] == "low_construct_correlation"
+        ]
         assert len(corr_issues) == 0

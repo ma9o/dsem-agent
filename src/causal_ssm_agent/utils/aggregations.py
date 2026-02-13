@@ -80,9 +80,7 @@ def _build_agg_expr(agg_name: str) -> pl.Expr:
 
     if agg_name == "cv":
         return (
-            pl.when(col.mean().abs() > 1e-15)
-            .then(col.std() / col.mean())
-            .otherwise(None)
+            pl.when(col.mean().abs() > 1e-15).then(col.std() / col.mean()).otherwise(None)
         ).alias("value")
 
     # MSSD: mean squared successive differences
@@ -185,11 +183,12 @@ def _encode_non_continuous(
             if explicit_levels and dtype == "ordinal":
                 unique_vals = explicit_levels
             else:
-                unique_vals = sorted(
-                    v for v in subset["value"].unique().to_list() if v is not None
-                )
+                unique_vals = sorted(v for v in subset["value"].unique().to_list() if v is not None)
             # Normalize for case-insensitive matching (mirrors binary branch)
-            label_map = {v.strip().lower() if isinstance(v, str) else v: float(i) for i, v in enumerate(unique_vals)}
+            label_map = {
+                v.strip().lower() if isinstance(v, str) else v: float(i)
+                for i, v in enumerate(unique_vals)
+            }
             subset = subset.with_columns(
                 pl.col("value")
                 .str.strip_chars()
@@ -251,9 +250,7 @@ def aggregate_worker_measurements(
         ind.get("name"): ind.get("measurement_dtype", "continuous") for ind in indicators
     }
     ordinal_levels_lookup = {
-        ind.get("name"): ind["ordinal_levels"]
-        for ind in indicators
-        if ind.get("ordinal_levels")
+        ind.get("name"): ind["ordinal_levels"] for ind in indicators if ind.get("ordinal_levels")
     }
     combined = _encode_non_continuous(combined, dtype_lookup, ordinal_levels_lookup)
 
