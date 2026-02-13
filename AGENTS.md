@@ -51,11 +51,9 @@ Docs: https://docs.astral.sh/uv/
 
 ## Prefect
 Docs: https://docs.prefect.io/v3/get-started
-Patterns: [docs/guides/prefect.md](docs/guides/prefect.md)
 
 ## inspect (AISI)
 Docs: https://inspect.aisi.org.uk/
-Patterns: [docs/guides/inspect.md](docs/guides/inspect.md)
 
 ## NumPyro
 Docs: https://num.pyro.ai/en/stable/
@@ -81,7 +79,6 @@ Docs: https://python.arviz.org/en/stable/index.html
 
 ## Exa
 Docs: https://exa.ai/docs/sdks/python-sdk-specification
-Patterns: [docs/guides/exa.md](docs/guides/exa.md)
 
 ------
 

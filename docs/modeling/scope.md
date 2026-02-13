@@ -1,32 +1,5 @@
 # Scope
 
-<!--
-Previous versions of this document had a confused understanding of scope. Here's the history:
-
-1. ORIGINAL SIN: We had an "Observability" dimension (Observed/Latent) in the construct taxonomy,
-   leading to 8 "types" (2 roles × 2 observabilities × 2 temporal statuses).
-
-2. THE CONFUSION: We excluded Types 3, 6, 7, 8 based on "identification concerns." But
-   identification is y0's job in Stage 1b, not a schema-level exclusion. We were doing
-   y0's job at the wrong layer.
-
-3. THE REALIZATION: "Observed" just means "has ≥1 indicator." But whether a construct has
-   indicators doesn't affect what the schema should accept—it affects whether y0 can
-   identify your causal effect. That's a Stage 1b concern.
-
-4. THE FIX: Observability is not a schema-level concern. The schema accepts any DAG. 
-   y0 checks identification. The only dimensions that matter for the framework's 
-   behavior are Role (exogenous/endogenous) and Temporal (time-varying/time-invariant), 
-   because these determine AR structure.
-
-5. STATE-SPACE CONCERN: We worried about "unobserved + time-varying + AR" being a state-space
-   problem requiring Kalman filters. But this never arises because:
-   - If the unobserved construct blocks identification → y0 rejects, never reaches NumPyro
-   - If it doesn't block identification → we estimate effects through observed paths, 
-     we don't estimate the latent state itself
-   - If someone wants latent state values → wrong tool, use pykalman or similar
--->
-
 This framework models dynamics of time-varying constructs with optional time-invariant covariates. This is a **causal effect estimation** framework.
 
 ---

@@ -28,6 +28,9 @@ logs/
 
 scratchpad/**
 
+# Prefect result persistence
+results/
+
 repomix-output.xml
 
 # Streamlit component artifacts

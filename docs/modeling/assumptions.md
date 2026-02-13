@@ -130,7 +130,7 @@ But NOT via U_{t-2} or earlier, because U_{t-1} d-separates U_{t-2} from current
 
 **Assumption:** Once the measurement model is identified (via CFA for multi-indicator constructs, or by assumption for single-indicator constructs), constructs can be treated as effectively observed for the purpose of causal identification via the latent model.
 
-See theory.md §3 "Measurement Model Identification Enables Causal Identification" for the full rationale.
+See theory.md §3 "Measurement Model Enables Causal Identification" for the full rationale.
 
 ---
 
