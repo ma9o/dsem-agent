@@ -57,9 +57,26 @@ def load_text_chunks(path: Path, chunk_size: int | None = None) -> list[str]:
 
     chunks = []
     for i in range(0, len(lines), chunk_size):
-        chunk_lines = lines[i : i + chunk_size]
-        chunks.append("\n".join(chunk_lines))
+        batch = lines[i : i + chunk_size]
+        chunks.append("\n".join(batch))
 
+    return chunks
+
+
+def chunk_lines(lines: list[str], chunk_size: int) -> list[str]:
+    """Group lines into chunks joined by newlines.
+
+    Args:
+        lines: Individual text lines
+        chunk_size: Lines per chunk
+
+    Returns:
+        List of chunks, each a newline-joined group of lines
+    """
+    chunks = []
+    for i in range(0, len(lines), chunk_size):
+        batch = lines[i : i + chunk_size]
+        chunks.append("\n".join(batch))
     return chunks
 
 
@@ -129,33 +146,6 @@ def get_latest_preprocessed_file(
 
     # Sort by modification time, newest first
     return max(txt_files, key=lambda p: p.stat().st_mtime)
-
-
-def resolve_input_path(filename: str | None = None) -> Path:
-    """
-    Resolve input path from filename or find latest preprocessed file.
-
-    Args:
-        filename: Optional filename (just name, not full path) in preprocessed dir.
-                  If None, returns the latest preprocessed file.
-
-    Returns:
-        Full path to the input file
-
-    Raises:
-        FileNotFoundError: If no matching file found
-    """
-    if filename:
-        path = PROCESSED_DIR / filename
-        if not path.exists():
-            raise FileNotFoundError(f"File not found: {path}")
-        return path
-
-    latest = get_latest_preprocessed_file()
-    if not latest:
-        raise FileNotFoundError(f"No preprocessed files found in {PROCESSED_DIR}")
-
-    return latest
 
 
 def resolve_query_path(filename: str) -> Path:

@@ -29,12 +29,10 @@ def test_import_utils():
     assert callable(load_text_chunks)
 
 
-def test_preprocessing_script():
-    from evals.scripts.preprocess_google_takeout import (
-        parse_takeout_zip,
-    )
+def test_import_stage0():
+    from causal_ssm_agent.flows.stages.stage0_preprocess import preprocess_raw_input
 
-    assert callable(parse_takeout_zip)
+    assert callable(preprocess_raw_input)
 
 
 def test_schema_to_networkx():

@@ -6,24 +6,17 @@ Each worker returns a Polars DataFrame with (indicator, value, timestamp) tuples
 This is the "E" (Extract) in ETL. Transformation (aggregation) happens in Stage 3.
 """
 
-from pathlib import Path
-
 from prefect import task
 from prefect.cache_policies import INPUTS
 
-from causal_ssm_agent.utils.data import (
-    get_worker_chunk_size,
-)
-from causal_ssm_agent.utils.data import (
-    load_text_chunks as load_text_chunks_util,
-)
+from causal_ssm_agent.utils.data import chunk_lines, get_worker_chunk_size
 from causal_ssm_agent.workers.agents import WorkerResult, process_chunk
 
 
-@task(cache_policy=INPUTS)
-def load_worker_chunks(input_path: Path) -> list[str]:
-    """Load chunks sized for workers (stage 2)."""
-    return load_text_chunks_util(input_path, chunk_size=get_worker_chunk_size())
+@task(cache_policy=INPUTS, result_serializer="json")
+def load_worker_chunks(lines: list[str]) -> list[str]:
+    """Group preprocessed lines into worker-sized chunks."""
+    return chunk_lines(lines, chunk_size=get_worker_chunk_size())
 
 
 @task(

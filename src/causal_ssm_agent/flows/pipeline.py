@@ -7,15 +7,14 @@ Two-stage specification following Anderson & Gerbing (1988):
 - Stage 1b: Measurement model (data-driven operationalization)
 """
 
+from pathlib import Path
+
 from prefect import flow
+from prefect.artifacts import create_markdown_artifact, create_table_artifact
 from prefect.utilities.annotations import unmapped
 
 from causal_ssm_agent.utils.aggregations import flatten_aggregated_data
-from causal_ssm_agent.utils.data import (
-    SAMPLE_CHUNKS,
-    load_query,
-    resolve_input_path,
-)
+from causal_ssm_agent.utils.data import SAMPLE_CHUNKS, load_query
 from causal_ssm_agent.utils.effects import (
     get_all_treatments,
     get_outcome_from_latent_model,
@@ -33,10 +32,13 @@ from .stages import (
     # Stage 2
     load_worker_chunks,
     populate_indicators,
+    # Stage 0
+    preprocess_raw_input,
     # Stage 1a
     propose_latent_model,
     propose_measurement_with_identifiability_fix,
     run_interventions,
+    run_ppc,
     run_power_scaling,
     # Stage 4
     stage4_orchestrated_flow,
@@ -45,11 +47,18 @@ from .stages import (
     validate_extraction,
 )
 
+RESULT_STORAGE = Path("results")
 
-@flow(log_prints=True)
+
+@flow(
+    log_prints=True,
+    persist_result=True,
+    result_storage=RESULT_STORAGE,
+    result_serializer="pickle",
+)
 def causal_inference_pipeline(
     query_file: str,
-    input_file: str | None = None,
+    user_id: str = "test_user",
     inference_method: str | None = None,
     enable_literature: bool | None = None,
 ):
@@ -60,18 +69,20 @@ def causal_inference_pipeline(
     effects of all potential treatments, ranking them by effect size.
 
     Args:
-        query_file: Filename in data/queries/ (e.g., 'resolve-errors')
-        input_file: Filename in data/processed/ (default: latest file)
+        query_file: Filename in data/queries/ (e.g., 'procrastination-patterns')
+        user_id: User subdirectory under data/raw/ (default: test_user)
         inference_method: Override inference method ("svi" or "nuts", default from config)
         enable_literature: Override literature search (default from config)
     """
-    # Stage 0: Load question and resolve input path
+    # ══════════════════════════════════════════════════════════════════════════
+    # Stage 0: Preprocess raw input and load question
+    # ══════════════════════════════════════════════════════════════════════════
     question = load_query(query_file)
     print(f"Query: {query_file}")
     print(f"Question: {question[:100]}..." if len(question) > 100 else f"Question: {question}")
 
-    input_path = resolve_input_path(input_file)
-    print(f"Using input file: {input_path.name}")
+    print(f"\n=== Stage 0: Preprocess (user: {user_id}) ===")
+    lines = preprocess_raw_input(user_id)
 
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 1a: Propose latent model (theory only, no data)
@@ -99,7 +110,7 @@ def causal_inference_pipeline(
     # Stage 1b: Propose measurement model (with identifiability check)
     # ══════════════════════════════════════════════════════════════════════════
     print("\n=== Stage 1b: Measurement Model with Identifiability ===")
-    orchestrator_chunks = load_orchestrator_chunks(input_path)
+    orchestrator_chunks = load_orchestrator_chunks(lines)
     print(f"Loaded {len(orchestrator_chunks)} orchestrator chunks")
 
     # Propose measurements and check identifiability
@@ -131,6 +142,16 @@ def causal_inference_pipeline(
                 print(f"  - {treatment} → {outcome}")
         print("These effects will be flagged in the final ranking.")
 
+    create_markdown_artifact(
+        key="causal-spec",
+        markdown=f"## Causal Specification\n\n"
+        f"- **Constructs**: {n_constructs}\n"
+        f"- **Edges**: {n_edges}\n"
+        f"- **Indicators**: {n_indicators}\n"
+        f"- **Non-identifiable treatments**: "
+        f"{list(non_identifiable.keys()) if non_identifiable else 'none'}\n",
+    )
+
     # Combine into full causal spec with identifiability status
     causal_spec = build_causal_spec(latent_model, measurement_model, identifiability_status)
 
@@ -138,7 +159,7 @@ def causal_inference_pipeline(
     # Stage 2: Parallel indicator population (worker chunk size)
     # ══════════════════════════════════════════════════════════════════════════
     print("\n=== Stage 2: Worker Extraction ===")
-    worker_chunks = load_worker_chunks(input_path)
+    worker_chunks = load_worker_chunks(lines)
     print(f"Loaded {len(worker_chunks)} worker chunks")
 
     worker_results = populate_indicators.map(
@@ -191,6 +212,21 @@ def causal_inference_pipeline(
                     f"    - {issue['indicator']}: {issue['issue_type']} ({issue['severity']}) {issue['message']}"
                 )
 
+    if validation_report and validation_report.get("issues"):
+        create_table_artifact(
+            key="validation-issues",
+            table=[
+                {
+                    "indicator": i["indicator"],
+                    "type": i["issue_type"],
+                    "severity": i["severity"],
+                    "message": i["message"],
+                }
+                for i in validation_report["issues"]
+            ],
+            description="Stage 3 extraction validation issues",
+        )
+
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 4: Model Specification (Orchestrator-Worker Architecture)
     # ══════════════════════════════════════════════════════════════════════════
@@ -226,6 +262,15 @@ def causal_inference_pipeline(
     model_info = stage4_result.get("model_info", {})
     if not model_info.get("model_built", True):
         print(f"⚠️  Stage 4 model build failed: {model_info.get('error')}")
+
+    create_markdown_artifact(
+        key="model-spec",
+        markdown=f"## Model Specification\n\n"
+        f"- **Clock**: {model_spec.get('model_clock', 'unknown')}\n"
+        f"- **Parameters**: {len(model_spec.get('parameters', []))}\n"
+        f"- **Priors valid**: {validation.get('is_valid', 'unknown')}\n"
+        f"- **Model built**: {model_info.get('model_built', 'unknown')}\n",
+    )
 
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 4b: Parametric Identifiability Diagnostics
@@ -274,6 +319,7 @@ def causal_inference_pipeline(
             gpu=config.inference.gpu,
         )
         ps_result = gpu_result["ps_result"]
+        ppc_result = gpu_result.get("ppc_result", {"checked": False})
         intervention_results = gpu_result["intervention_results"]
     else:
         # ── Local path: run stage 5 tasks via Prefect ──
@@ -283,8 +329,12 @@ def causal_inference_pipeline(
         power_scaling = run_power_scaling(fitted, data_for_model)
         ps_result = power_scaling.result() if hasattr(power_scaling, "result") else power_scaling
 
-        # Run interventions for all treatments
-        results = run_interventions(fitted, treatments, outcome, causal_spec)
+        # Posterior predictive checks
+        ppc_task = run_ppc(fitted, data_for_model)
+        ppc_result = ppc_task.result() if hasattr(ppc_task, "result") else ppc_task
+
+        # Run interventions for all treatments (with PPC warnings)
+        results = run_interventions(fitted, treatments, outcome, causal_spec, ppc_result)
         intervention_results = results.result() if hasattr(results, "result") else results
 
     # Print power-scaling results (shared by both paths)
@@ -301,6 +351,19 @@ def causal_inference_pipeline(
             print("  All parameters well-identified")
     else:
         print(f"  Skipped: {ps_result.get('error', 'unknown')}")
+
+    # Print PPC results
+    print("\n--- Posterior Predictive Checks ---")
+    if ppc_result.get("checked", False):
+        ppc_warnings = ppc_result.get("warnings", [])
+        if ppc_warnings:
+            print(f"  {len(ppc_warnings)} warning(s):")
+            for w in ppc_warnings:
+                print(f"    - {w['variable']}: {w['message']}")
+        else:
+            print("  All checks passed")
+    else:
+        print(f"  Skipped: {ppc_result.get('error', 'unknown')}")
 
     # Print ranked results table
     print(f"\n=== Treatment Ranking by Effect on {outcome} ===")
@@ -324,7 +387,32 @@ def causal_inference_pipeline(
                 warning = entry.get("warning", "no estimate")
                 print(f"{rank:<5} {name:<30} {'—':>10} {'':>22} {'':>8} {ident:>4}  ({warning})")
 
-    return intervention_results
+    if intervention_results:
+        create_table_artifact(
+            key="treatment-ranking",
+            table=[
+                {
+                    "rank": i + 1,
+                    "treatment": r["treatment"],
+                    "effect": (
+                        f"{r['effect_size']:+.4f}" if r.get("effect_size") is not None else "—"
+                    ),
+                    "95% CI": (
+                        f"[{r['credible_interval'][0]:+.3f}, {r['credible_interval'][1]:+.3f}]"
+                        if r.get("credible_interval")
+                        else ""
+                    ),
+                    "P(>0)": (
+                        f"{r['prob_positive']:.2f}" if r.get("prob_positive") is not None else ""
+                    ),
+                    "identifiable": "yes" if r.get("identifiable", True) else "NO",
+                }
+                for i, r in enumerate(intervention_results)
+            ],
+            description="Final treatment effect ranking",
+        )
+
+    return {"intervention_results": intervention_results, "ppc": ppc_result}
 
 
 if __name__ == "__main__":

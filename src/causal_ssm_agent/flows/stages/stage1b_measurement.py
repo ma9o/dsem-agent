@@ -3,8 +3,6 @@
 Wraps the core Stage 1b logic for use in Prefect pipelines.
 """
 
-from pathlib import Path
-
 from inspect_ai.model import get_model
 from prefect import task
 from prefect.cache_policies import INPUTS
@@ -12,22 +10,17 @@ from prefect.cache_policies import INPUTS
 from causal_ssm_agent.orchestrator.agents import build_causal_spec as build_causal_spec_agent
 from causal_ssm_agent.orchestrator.stage1b import run_stage1b
 from causal_ssm_agent.utils.config import get_config
-from causal_ssm_agent.utils.data import (
-    get_orchestrator_chunk_size,
-)
-from causal_ssm_agent.utils.data import (
-    load_text_chunks as load_text_chunks_util,
-)
+from causal_ssm_agent.utils.data import chunk_lines, get_orchestrator_chunk_size
 from causal_ssm_agent.utils.llm import make_orchestrator_generate_fn
 
 
-@task(cache_policy=INPUTS)
-def load_orchestrator_chunks(input_path: Path) -> list[str]:
-    """Load chunks sized for orchestrator (stage 1b)."""
-    return load_text_chunks_util(input_path, chunk_size=get_orchestrator_chunk_size())
+@task(cache_policy=INPUTS, result_serializer="json")
+def load_orchestrator_chunks(lines: list[str]) -> list[str]:
+    """Group preprocessed lines into orchestrator-sized chunks."""
+    return chunk_lines(lines, chunk_size=get_orchestrator_chunk_size())
 
 
-@task(cache_policy=INPUTS)
+@task(cache_policy=INPUTS, result_serializer="json")
 def build_causal_spec(
     latent_model: dict, measurement_model: dict, identifiability_status: dict | None = None
 ) -> dict:
@@ -37,7 +30,7 @@ def build_causal_spec(
     return causal_spec
 
 
-@task(cache_policy=INPUTS)
+@task(cache_policy=INPUTS, result_serializer="json")
 def propose_measurement_with_identifiability_fix(
     question: str,
     latent_model: dict,
