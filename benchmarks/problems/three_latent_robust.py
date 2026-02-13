@@ -13,7 +13,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 
 from causal_ssm_agent.models.ssm import SSMPriors, SSMSpec
-from causal_ssm_agent.models.ssm.model import NoiseFamily
+from causal_ssm_agent.orchestrator.schemas_model import DistributionFamily
 
 from .four_latent import RecoveryProblem
 
@@ -55,7 +55,7 @@ def _make_three_latent_robust() -> RecoveryProblem:
         lambda_mat="free",
         manifest_means="free",
         manifest_var="diag",
-        manifest_dist=NoiseFamily.STUDENT_T,
+        manifest_dist=DistributionFamily.STUDENT_T,
         t0_means="free",
         t0_var="diag",
         latent_names=names,

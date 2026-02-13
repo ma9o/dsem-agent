@@ -362,13 +362,7 @@ def _score_functional_spec(model_spec: dict, causal_spec: dict) -> dict:
     else:
         bonus_details.append(f"Edge coverage: {covered_edges}/{len(edge_pairs)}")
 
-    total_points = (
-        likelihood_points
-        + link_points
-        + ar_points
-        + constraint_points
-        + bonus_points
-    )
+    total_points = likelihood_points + link_points + ar_points + constraint_points + bonus_points
     max_points = likelihood_max + link_max + ar_max + constraint_max + bonus_max
 
     return {

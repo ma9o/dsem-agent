@@ -145,10 +145,7 @@ def create_agraph_elements(
         edge_pairs.add(pair)
 
     # Compute which constructs have indicators (derived observability)
-    measured_constructs = {
-        ind.get("construct_name")
-        for ind in data.get("indicators", [])
-    }
+    measured_constructs = {ind.get("construct_name") for ind in data.get("indicators", [])}
 
     # Extract marginalization sets
     can_marginalize = marg_analysis.get("can_marginalize", set()) if marg_analysis else set()
@@ -273,10 +270,10 @@ def render_construct_info(
     st.markdown(
         f"""
         <div class="info-box">
-            <div class="info-title">{construct['name']}</div>
+            <div class="info-title">{construct["name"]}</div>
             <div class="info-row">
                 <span class="info-label">Description</span>
-                <span class="info-value">{construct.get('description', '—')}</span>
+                <span class="info-value">{construct.get("description", "—")}</span>
             </div>
             <div class="info-row">
                 <span class="info-label">Tags</span>
@@ -284,11 +281,11 @@ def render_construct_info(
             </div>
             <div class="info-row">
                 <span class="info-label">Temporal</span>
-                <span class="info-value">{construct.get('temporal_status', '—')}</span>
+                <span class="info-value">{construct.get("temporal_status", "—")}</span>
             </div>
             <div class="info-row">
                 <span class="info-label">Granularity</span>
-                <span class="info-value">{construct.get('causal_granularity', '—')}</span>
+                <span class="info-value">{construct.get("causal_granularity", "—")}</span>
             </div>
         </div>
         """,
@@ -303,10 +300,10 @@ def render_edge_info(edge: dict):
     st.markdown(
         f"""
         <div class="info-box">
-            <div class="info-title">{edge['cause']} → {edge['effect']}</div>
+            <div class="info-title">{edge["cause"]} → {edge["effect"]}</div>
             <div class="info-row">
                 <span class="info-label">Description</span>
-                <span class="info-value">{edge.get('description', '—')}</span>
+                <span class="info-value">{edge.get("description", "—")}</span>
             </div>
             <div class="info-row">
                 <span class="info-label">Timing</span>
@@ -329,7 +326,7 @@ def render_indicator_info(indicator: dict):
     st.markdown(
         f"""
         <div class="indicator-box">
-            <div class="indicator-name">{indicator.get('name', 'unnamed')}</div>
+            <div class="indicator-name">{indicator.get("name", "unnamed")}</div>
             <div class="indicator-detail"><strong>Construct:</strong> {construct}</div>
             <div class="indicator-detail"><strong>Type:</strong> {dtype} @ {granularity}</div>
             <div class="indicator-detail"><strong>Aggregation:</strong> {aggregation}</div>
@@ -342,10 +339,7 @@ def render_indicator_info(indicator: dict):
 
 def get_indicators_for_construct(indicators: list[dict], construct_name: str) -> list[dict]:
     """Get all indicators that measure a given construct."""
-    return [
-        ind for ind in indicators
-        if (ind.get("construct_name")) == construct_name
-    ]
+    return [ind for ind in indicators if (ind.get("construct_name")) == construct_name]
 
 
 # =============================================================================
@@ -478,7 +472,9 @@ with col_graph:
                 with st.expander(f"✗ Non-identifiable Treatments ({len(non_identifiable)})"):
                     for treatment in sorted(non_identifiable.keys()):
                         details = non_identifiable[treatment]
-                        blockers = details.get("confounders", []) if isinstance(details, dict) else []
+                        blockers = (
+                            details.get("confounders", []) if isinstance(details, dict) else []
+                        )
                         notes = details.get("notes") if isinstance(details, dict) else None
                         if blockers:
                             st.markdown(f"**{treatment}** — blocked by: {', '.join(blockers)}")
@@ -500,7 +496,7 @@ with col_graph:
                     f'<div class="info-box">'
                     f'<div class="info-title" style="color: #3fb950;">✓ Can Marginalize ({len(can_marg)})</div>'
                     f'<div style="color: #8b949e; font-size: 11px; margin-bottom: 8px;">'
-                    f'These can be omitted from model spec - effects absorbed into error terms</div>',
+                    f"These can be omitted from model spec - effects absorbed into error terms</div>",
                     unsafe_allow_html=True,
                 )
                 for u in sorted(can_marg):
@@ -513,7 +509,7 @@ with col_graph:
                     f'<div class="info-box">'
                     f'<div class="info-title" style="color: #f85149;">✗ Needs Modeling ({len(needs_model)})</div>'
                     f'<div style="color: #8b949e; font-size: 11px; margin-bottom: 8px;">'
-                    f'These block identification - need proxies or explicit latent variables</div>',
+                    f"These block identification - need proxies or explicit latent variables</div>",
                     unsafe_allow_html=True,
                 )
                 for u in sorted(needs_model):
@@ -530,10 +526,14 @@ with col_graph:
             # Graph info
             with st.expander("Graph Info"):
                 info = id_result["graph_info"]
-                st.markdown(f"- **Observed:** {len(info['observed_constructs'])}/{info['total_constructs']} constructs")
+                st.markdown(
+                    f"- **Observed:** {len(info['observed_constructs'])}/{info['total_constructs']} constructs"
+                )
                 st.markdown(f"- **Directed edges:** {info['n_directed_edges']}")
                 if info["unobserved_confounders"]:
-                    st.markdown(f"- **Unobserved confounders:** {', '.join(info['unobserved_confounders'])}")
+                    st.markdown(
+                        f"- **Unobserved confounders:** {', '.join(info['unobserved_confounders'])}"
+                    )
     else:
         st.info("Paste DAG JSON to visualize")
 
@@ -542,15 +542,10 @@ with col_info:
     if data:
         selected_node = st.session_state.get("selected_node")
         # Compute measured constructs from indicators
-        measured_constructs = {
-            ind.get("construct_name")
-            for ind in data.get("indicators", [])
-        }
+        measured_constructs = {ind.get("construct_name") for ind in data.get("indicators", [])}
 
         if selected_node:
-            construct = next(
-                (c for c in data["constructs"] if c["name"] == selected_node), None
-            )
+            construct = next((c for c in data["constructs"] if c["name"] == selected_node), None)
             if construct:
                 # Determine marginalization status
                 diagnostics = st.session_state.get("dag_diagnostics")
@@ -582,7 +577,8 @@ with col_info:
 
                 st.markdown("**Connected Edges**")
                 connected_edges = [
-                    edge for edge in data["edges"]
+                    edge
+                    for edge in data["edges"]
                     if edge["cause"] == selected_node or edge["effect"] == selected_node
                 ]
                 if connected_edges:

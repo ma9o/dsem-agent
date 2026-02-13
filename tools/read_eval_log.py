@@ -135,9 +135,7 @@ def extract_log_summary(log: EvalLog) -> dict[str, Any]:
             "scores": [
                 {
                     "name": s.name,
-                    "metrics": {
-                        name: m.value for name, m in s.metrics.items()
-                    },
+                    "metrics": {name: m.value for name, m in s.metrics.items()},
                 }
                 for s in log.results.scores
             ]
@@ -170,14 +168,10 @@ def print_log_summary(
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Read and summarize inspect eval log files"
-    )
+    parser = argparse.ArgumentParser(description="Read and summarize inspect eval log files")
     parser.add_argument("-f", "--filename", help="Specific log filename")
     parser.add_argument("-e", "--eval-name", help="Eval name to find latest log for")
-    parser.add_argument(
-        "--list", action="store_true", help="List available log files"
-    )
+    parser.add_argument("--list", action="store_true", help="List available log files")
 
     args = parser.parse_args()
 

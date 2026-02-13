@@ -2,157 +2,157 @@
   "likelihoods": [
     {
       "variable": "late_night_browsing",
-      "distribution": "Bernoulli",
+      "distribution": "bernoulli",
       "link": "logit",
       "reasoning": "Binary indicator (0/1) for late-night browsing; logit link standard for binary outcomes"
     },
     {
       "variable": "morning_start_hour",
-      "distribution": "Normal",
+      "distribution": "gaussian",
       "link": "identity",
       "reasoning": "Continuous hour-of-day measure; approximately normally distributed around typical start times"
     },
     {
       "variable": "technical_entry_count",
-      "distribution": "NegativeBinomial",
+      "distribution": "negative_binomial",
       "link": "log",
       "reasoning": "Count of technical browsing entries; likely overdispersed due to high variability in daily coding tasks"
     },
     {
       "variable": "distinct_work_topics",
-      "distribution": "NegativeBinomial",
+      "distribution": "negative_binomial",
       "link": "log",
       "reasoning": "Count of distinct topics; overdispersed as some days are focused while others span many topics"
     },
     {
       "variable": "topic_switch_count",
-      "distribution": "NegativeBinomial",
+      "distribution": "negative_binomial",
       "link": "log",
       "reasoning": "Count of context switches; overdispersed reflecting variable interruption patterns across days"
     },
     {
       "variable": "work_gap_count",
-      "distribution": "NegativeBinomial",
+      "distribution": "negative_binomial",
       "link": "log",
       "reasoning": "Count of work activity gaps; overdispersed with high day-to-day variability"
     },
     {
       "variable": "last_work_hour",
-      "distribution": "Normal",
+      "distribution": "gaussian",
       "link": "identity",
       "reasoning": "Continuous hour-of-day timestamp; normal distribution around typical end-of-work hours"
     },
     {
       "variable": "first_work_hour",
-      "distribution": "Normal",
+      "distribution": "gaussian",
       "link": "identity",
       "reasoning": "Continuous hour-of-day timestamp; normal distribution around typical start-of-work hours"
     },
     {
       "variable": "complex_debug_search_count",
-      "distribution": "NegativeBinomial",
+      "distribution": "negative_binomial",
       "link": "log",
       "reasoning": "Count of complex debugging searches; overdispersed with many zeros on non-debugging days"
     },
     {
       "variable": "error_message_search_count",
-      "distribution": "NegativeBinomial",
+      "distribution": "negative_binomial",
       "link": "log",
       "reasoning": "Count of error message lookups; overdispersed with excess zeros when no errors occur"
     },
     {
       "variable": "nonwork_entry_count",
-      "distribution": "NegativeBinomial",
+      "distribution": "negative_binomial",
       "link": "log",
       "reasoning": "Count of non-work browsing entries; overdispersed due to individual differences and fatigue variation"
     },
     {
       "variable": "afternoon_work_count",
-      "distribution": "NegativeBinomial",
+      "distribution": "negative_binomial",
       "link": "log",
       "reasoning": "Count of afternoon work entries; overdispersed as afternoon productivity varies substantially with fatigue"
     },
     {
       "variable": "stress_health_search_count",
-      "distribution": "Poisson",
+      "distribution": "poisson",
       "link": "log",
       "reasoning": "Count of stress/health-related searches; rare events with low baseline rate suitable for Poisson"
     },
     {
       "variable": "escape_behavior_count",
-      "distribution": "Poisson",
+      "distribution": "poisson",
       "link": "log",
       "reasoning": "Count of escape/avoidance browsing; rare stress-coping events with low rates suitable for Poisson"
     },
     {
       "variable": "work_clustering_rating",
-      "distribution": "OrderedLogistic",
+      "distribution": "ordered_logistic",
       "link": "cumulative_logit",
       "reasoning": "Ordinal rating of work session clustering; ordered categories require cumulative logit model"
     },
     {
       "variable": "max_consecutive_work_entries",
-      "distribution": "NegativeBinomial",
+      "distribution": "negative_binomial",
       "link": "log",
       "reasoning": "Count of max consecutive work entries; overdispersed as focus episodes vary widely across days"
     },
     {
       "variable": "basic_lookup_count",
-      "distribution": "NegativeBinomial",
+      "distribution": "negative_binomial",
       "link": "log",
       "reasoning": "Count of basic code lookups; overdispersed depending on task novelty and code familiarity"
     },
     {
       "variable": "documentation_visit_count",
-      "distribution": "NegativeBinomial",
+      "distribution": "negative_binomial",
       "link": "log",
       "reasoning": "Count of documentation visits; overdispersed with high variability depending on task type"
     },
     {
       "variable": "external_help_count",
-      "distribution": "Poisson",
+      "distribution": "poisson",
       "link": "log",
       "reasoning": "Count of external help-seeking events; typically low counts making Poisson appropriate"
     },
     {
       "variable": "multi_site_same_query",
-      "distribution": "Bernoulli",
+      "distribution": "bernoulli",
       "link": "logit",
       "reasoning": "Binary indicator of searching same query across multiple sites; logit link for binary outcome"
     },
     {
       "variable": "debug_search_specificity",
-      "distribution": "OrderedLogistic",
+      "distribution": "ordered_logistic",
       "link": "cumulative_logit",
       "reasoning": "Ordinal rating of search specificity level; ordered categories require cumulative logit"
     },
     {
       "variable": "repeated_search_count",
-      "distribution": "NegativeBinomial",
+      "distribution": "negative_binomial",
       "link": "log",
       "reasoning": "Count of repeated searches for same issue; overdispersed with many zeros on productive days"
     },
     {
       "variable": "search_progression_rating",
-      "distribution": "OrderedLogistic",
+      "distribution": "ordered_logistic",
       "link": "cumulative_logit",
       "reasoning": "Ordinal rating of systematic search progression; ordered categories require cumulative logit"
     },
     {
       "variable": "has_methodology_search",
-      "distribution": "Bernoulli",
+      "distribution": "bernoulli",
       "link": "logit",
       "reasoning": "Binary indicator of debugging methodology search; logit link for binary outcome"
     },
     {
       "variable": "debug_entry_count",
-      "distribution": "NegativeBinomial",
+      "distribution": "negative_binomial",
       "link": "log",
       "reasoning": "Count of debug-related entries; overdispersed as debugging effort varies substantially day to day"
     },
     {
       "variable": "stuck_on_error",
-      "distribution": "Bernoulli",
+      "distribution": "bernoulli",
       "link": "logit",
       "reasoning": "Binary indicator of being stuck on an error; logit link for binary outcome"
     }

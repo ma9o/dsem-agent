@@ -10,43 +10,43 @@ from __future__ import annotations
 # Each template uses {var}, {construct}, {loading} placeholders.
 
 _MEASUREMENT_TEMPLATES: dict[str, str] = {
-    "Normal/identity": (
+    "gaussian/identity": (
         r"{var}_t \sim \mathcal{{N}}"
         r"\!\left({loading}\,\eta_{{\text{{{construct}}},t}},\;"
         r"\sigma^2_{{\text{{{var}}}}}\right)"
     ),
-    "Bernoulli/logit": (
+    "bernoulli/logit": (
         r"{var}_t \sim \text{{Bern}}\!\left("
         r"\text{{logit}}^{{-1}}\!\left({loading}\,\eta_{{\text{{{construct}}},t}}\right)\right)"
     ),
-    "Bernoulli/probit": (
+    "bernoulli/probit": (
         r"{var}_t \sim \text{{Bern}}\!\left("
         r"\Phi\!\left({loading}\,\eta_{{\text{{{construct}}},t}}\right)\right)"
     ),
-    "Poisson/log": (
+    "poisson/log": (
         r"{var}_t \sim \text{{Pois}}\!\left("
         r"\exp\!\left({loading}\,\eta_{{\text{{{construct}}},t}}\right)\right)"
     ),
-    "NegativeBinomial/log": (
+    "negative_binomial/log": (
         r"{var}_t \sim \text{{NegBin}}\!\left("
         r"\exp\!\left({loading}\,\eta_{{\text{{{construct}}},t}}\right),\;r_{{\text{{{var}}}}}\right)"
     ),
-    "Gamma/log": (
+    "gamma/log": (
         r"{var}_t \sim \text{{Gamma}}\!\left(\alpha_{{\text{{{var}}}}},\;"
         r"\exp\!\left(-{loading}\,\eta_{{\text{{{construct}}},t}}\right)\right)"
     ),
-    "OrderedLogistic/cumulative_logit": (
+    "ordered_logistic/cumulative_logit": (
         r"{var}_t \sim \text{{OrdLogistic}}\!\left("
         r"{loading}\,\eta_{{\text{{{construct}}},t}},\;\mathbf{{c}}_{{\text{{{var}}}}}\right)"
     ),
-    "Beta/logit": (
+    "beta/logit": (
         r"{var}_t \sim \text{{Beta}}\!\left("
         r"\text{{logit}}^{{-1}}\!\left({loading}\,\eta_{{\text{{{construct}}},t}}\right)"
         r"\cdot\phi,\;"
         r"\left(1-\text{{logit}}^{{-1}}\!\left({loading}\,\eta_{{\text{{{construct}}},t}}"
         r"\right)\right)\cdot\phi\right)"
     ),
-    "Categorical/softmax": (
+    "categorical/softmax": (
         r"{var}_t \sim \text{{Cat}}\!\left("
         r"\text{{softmax}}\!\left({loading}\,\eta_{{\text{{{construct}}},t}}\right)\right)"
     ),
@@ -99,7 +99,7 @@ def _build_loading_set(model_spec: dict) -> set[str]:
             # loading_<indicator_name>
             raw = p["name"]
             if raw.startswith("loading_"):
-                names.add(raw[len("loading_"):])
+                names.add(raw[len("loading_") :])
     return names
 
 
@@ -150,7 +150,7 @@ def _param_symbol(name: str, role: str) -> str:
         "correlation": "correlation_",
     }
     prefix = prefix_map.get(role, "")
-    subscript = name[len(prefix):] if name.startswith(prefix) else name
+    subscript = name[len(prefix) :] if name.startswith(prefix) else name
 
     if role == "fixed_effect" and "_" in subscript:
         # Try to split cause_effect — find the split point by trying all positions
@@ -204,7 +204,8 @@ def render_structural(model_spec: dict, causal_spec: dict) -> list[str]:
     ar_params = {p["name"]: p for p in params_by_role.get("ar_coefficient", [])}
 
     endogenous_tv = [
-        c for c in constructs
+        c
+        for c in constructs
         if c.get("role") == "endogenous" and c.get("temporal_status") == "time_varying"
     ]
 

@@ -46,7 +46,9 @@ def _(Path, mo, yaml):
     for _qfile in sorted(_questions_dir.glob("*/question.yaml")):
         with _qfile.open() as _f:
             _data = yaml.safe_load(_f)
-        _questions.append({"slug": _qfile.parent.name, "question": _data["question"], "dir": _qfile.parent})
+        _questions.append(
+            {"slug": _qfile.parent.name, "question": _data["question"], "dir": _qfile.parent}
+        )
 
     # marimo dropdown: {display_label: returned_value}
     _options = {f"Q{q['slug'].split('_', 1)[0]}: {q['question']}": q["slug"] for q in _questions}
@@ -68,7 +70,9 @@ def _(Path, json, question_selector, yaml):
     for _qfile in sorted(_questions_dir.glob("*/question.yaml")):
         with _qfile.open() as _f:
             _data = yaml.safe_load(_f)
-        _questions.append({"slug": _qfile.parent.name, "question": _data["question"], "dir": _qfile.parent})
+        _questions.append(
+            {"slug": _qfile.parent.name, "question": _data["question"], "dir": _qfile.parent}
+        )
 
     _selected = question_selector.value or _questions[0]["slug"]
     _q = next(q for q in _questions if q["slug"] == _selected)
@@ -119,9 +123,7 @@ def _(causal_spec, mo):
         _edges = _spec.get("latent", {}).get("edges", [])
         _indicators = _spec.get("measurement", {}).get("indicators", [])
 
-        _measured = {
-            _ind.get("construct_name") for _ind in _indicators
-        }
+        _measured = {_ind.get("construct_name") for _ind in _indicators}
 
         _edge_set = {(_e["cause"], _e["effect"]) for _e in _edges}
         _feedback = {_p for _p in _edge_set if (_p[1], _p[0]) in _edge_set}
@@ -192,7 +194,10 @@ def _(causal_spec, mo):
             _net.add_node(
                 _name,
                 label=_label,
-                color={"background": _color if not _is_unmeasured else _color + "33", "border": _color},
+                color={
+                    "background": _color if not _is_unmeasured else _color + "33",
+                    "border": _color,
+                },
                 shape=_shape,
                 borderWidth=2 if _is_unmeasured else 1,
                 title=_c.get("description", ""),
@@ -217,10 +222,7 @@ def _(causal_spec, mo):
     _dag_html = _build_dag_html(causal_spec)
     # Escape for srcdoc embedding
     _escaped = _dag_html.replace("&", "&amp;").replace('"', "&quot;")
-    mo.Html(
-        f'<iframe srcdoc="{_escaped}" '
-        f'width="100%" height="580" style="border:none;"></iframe>'
-    )
+    mo.Html(f'<iframe srcdoc="{_escaped}" width="100%" height="580" style="border:none;"></iframe>')
     return
 
 
@@ -233,19 +235,25 @@ def _(causal_spec, mo):
 
     _rows = []
     for _c in _constructs:
-        _rows.append({
-            "Name": _c["name"],
-            "Role": _c.get("role", "?"),
-            "Temporal": _c.get("temporal_status", "?"),
-            "Granularity": _c.get("causal_granularity") or "\u2014",
-            "Measured": "yes" if _c["name"] in _measured else "no",
-            "Outcome": "yes" if _c.get("is_outcome") else "",
-        })
+        _rows.append(
+            {
+                "Name": _c["name"],
+                "Role": _c.get("role", "?"),
+                "Temporal": _c.get("temporal_status", "?"),
+                "Granularity": _c.get("causal_granularity") or "\u2014",
+                "Measured": "yes" if _c["name"] in _measured else "no",
+                "Outcome": "yes" if _c.get("is_outcome") else "",
+            }
+        )
 
-    mo.vstack([
-        mo.md(f"**{len(_constructs)} constructs**, **{len(_edges)} edges**, **{len(_indicators)} indicators**"),
-        mo.ui.table(_rows, label="Constructs"),
-    ])
+    mo.vstack(
+        [
+            mo.md(
+                f"**{len(_constructs)} constructs**, **{len(_edges)} edges**, **{len(_indicators)} indicators**"
+            ),
+            mo.ui.table(_rows, label="Constructs"),
+        ]
+    )
     return
 
 
@@ -273,7 +281,10 @@ def _(causal_spec, mo):
         format_marginalization_report as _fmt_marg,
     )
 
-    _latent = {"constructs": causal_spec["latent"]["constructs"], "edges": causal_spec["latent"]["edges"]}
+    _latent = {
+        "constructs": causal_spec["latent"]["constructs"],
+        "edges": causal_spec["latent"]["edges"],
+    }
     _measurement = {"indicators": causal_spec.get("measurement", {}).get("indicators", [])}
 
     _id_result = _check_id(_latent, _measurement)
@@ -283,10 +294,12 @@ def _(causal_spec, mo):
     _id_report = _fmt_id(_id_result, _outcome)
     _marg_report = _fmt_marg(_marg_result)
 
-    mo.vstack([
-        mo.md(f"```\n{_id_report}\n```"),
-        mo.md(f"```\n{_marg_report}\n```"),
-    ])
+    mo.vstack(
+        [
+            mo.md(f"```\n{_id_report}\n```"),
+            mo.md(f"```\n{_marg_report}\n```"),
+        ]
+    )
     return
 
 
@@ -295,7 +308,9 @@ def _(mo, model_spec):
     if model_spec:
         mo.md("## 3. Functional Specification")
     else:
-        mo.md("## 3. Functional Specification\n\n*No model spec found for this question. Run eval5 to generate one.*")
+        mo.md(
+            "## 3. Functional Specification\n\n*No model spec found for this question. Run eval5 to generate one.*"
+        )
     return
 
 
@@ -362,11 +377,11 @@ def _(mo, model_spec):
     | Likelihoods | {len(_liks)} |
     | Parameters | {len(_params)} |
 
-    **Distributions**: {', '.join(f'{_d} ({_n})' for _d, _n in _dist_counts.most_common())}
+    **Distributions**: {", ".join(f"{_d} ({_n})" for _d, _n in _dist_counts.most_common())}
 
-    **Parameters by role**: {', '.join(f'{_r} ({_n})' for _r, _n in _role_counts.most_common())}
+    **Parameters by role**: {", ".join(f"{_r} ({_n})" for _r, _n in _role_counts.most_common())}
 
-    **Reasoning**: {model_spec.get('reasoning', '\u2014')}
+    **Reasoning**: {model_spec.get("reasoning", "\u2014")}
         """)
     return
 

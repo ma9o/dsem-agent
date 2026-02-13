@@ -66,15 +66,18 @@ def profile():
                 self._thread.join(timeout=2)
             if not self.readings:
                 return "n/a"
-            return (f"mean={sum(self.readings)/len(self.readings):.0f}% "
-                    f"peak={max(self.readings)}% (n={len(self.readings)})")
+            return (
+                f"mean={sum(self.readings) / len(self.readings):.0f}% "
+                f"peak={max(self.readings)}% (n={len(self.readings)})"
+            )
 
         def _poll(self):
             while not self._stop.is_set():
                 r = subprocess.run(
-                    ["nvidia-smi", "--query-gpu=utilization.gpu",
-                     "--format=csv,noheader,nounits"],
-                    capture_output=True, text=True, check=False,
+                    ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
                 )
                 if r.returncode == 0 and r.stdout.strip().isdigit():
                     self.readings.append(int(r.stdout.strip()))
@@ -87,8 +90,8 @@ def profile():
     print("=" * 60)
     print(f"JAX {jax.__version__}  backend={jax.default_backend()}  devices={jax.devices()}")
     subprocess.run(
-        ["nvidia-smi", "--query-gpu=name,memory.total,compute_cap",
-         "--format=csv,noheader"], check=False,
+        ["nvidia-smi", "--query-gpu=name,memory.total,compute_cap", "--format=csv,noheader"],
+        check=False,
     )
     print()
 
@@ -126,14 +129,10 @@ def profile():
 
     sweep_results = []
     for n_particles in [200, 1_000, 5_000, 10_000, 50_000, 100_000, 500_000]:
-        backend = ParticleLikelihood(
-            n_latent=2, n_manifest=2, n_particles=n_particles
-        )
+        backend = ParticleLikelihood(n_latent=2, n_manifest=2, n_particles=n_particles)
 
         def ll_fn(drift_diag, _backend=backend):
-            ct = CTParams(
-                drift=jnp.diag(drift_diag), diffusion_cov=jnp.eye(2) * 0.09, cint=None
-            )
+            ct = CTParams(drift=jnp.diag(drift_diag), diffusion_cov=jnp.eye(2) * 0.09, cint=None)
             return _backend.compute_log_likelihood(
                 ct, meas_params, init, observations, time_intervals
             )
@@ -198,7 +197,7 @@ def profile():
     t_mcmc = time.perf_counter() - t0
     gpu_mcmc = monitor.stop()
 
-    print(f"\nTotal: {t_mcmc:.1f}s  ({t_mcmc/100:.2f}s/step)")
+    print(f"\nTotal: {t_mcmc:.1f}s  ({t_mcmc / 100:.2f}s/step)")
     print(f"GPU during MCMC: {gpu_mcmc}")
 
     samples = mcmc.get_samples()
@@ -209,8 +208,10 @@ def profile():
         print(f"Accept prob: {float(jnp.mean(extra['accept_prob'])):.3f}")
     if "num_steps" in extra:
         steps = extra["num_steps"]
-        print(f"Tree steps: mean={float(jnp.mean(steps)):.1f}, "
-              f"max={int(jnp.max(steps))}, median={float(jnp.median(steps)):.0f}")
+        print(
+            f"Tree steps: mean={float(jnp.mean(steps)):.1f}, "
+            f"max={int(jnp.max(steps))}, median={float(jnp.median(steps)):.0f}"
+        )
 
     print("\nPosterior vs True:")
     drift_samples = samples.get("drift_diag_pop")
@@ -225,8 +226,8 @@ def profile():
     # Final memory snapshot
     print()
     subprocess.run(
-        ["nvidia-smi", "--query-gpu=memory.used,memory.total",
-         "--format=csv,noheader"], check=False,
+        ["nvidia-smi", "--query-gpu=memory.used,memory.total", "--format=csv,noheader"],
+        check=False,
     )
 
 

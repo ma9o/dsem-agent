@@ -3,14 +3,14 @@
 # Stage 1: Structure Proposal (Orchestrator)
 # The orchestrator proposes dimensions, autocorrelations, time granularities, and DAG
 stage1_structure_proposal:
-  model: openrouter/anthropic/claude-opus-4.5
+  model: openrouter/anthropic/claude-opus-4.6
   sample_chunks: 10  # Number of chunks to show orchestrator
   chunk_size: 100    # Lines per chunk for orchestrator
 
 # Stage 2: Dimension Population (Workers)
 # Workers process chunks in parallel to populate dimensions and suggest graph edits
 stage2_workers:
-  model: openrouter/google/gemini-2.0-flash-001
+  model: openrouter/google/gemini-3-flash-preview
   chunk_size: 20  # Lines per chunk for each worker
 
 # Stage 3: Identifiability & Sensitivity Analysis
@@ -18,7 +18,7 @@ stage2_workers:
 
 # Stage 4: Model Specification & Prior Elicitation
 stage4_prior_elicitation:
-  model: openrouter/anthropic/claude-opus-4.5
+  model: openrouter/anthropic/claude-opus-4.6
   # Literature search for grounding priors (requires EXA_API_KEY in .env)
   literature_search:
     enabled: true

@@ -86,8 +86,8 @@ Key fields:
 | `manifest_var` | `(n_m, n_m)` or `"free"` / `"diag"` | Measurement error Cholesky |
 | `t0_means` | `(n_l,)` or `"free"` | Initial state means |
 | `t0_var` | `(n_l, n_l)` or `"free"` / `"diag"` | Initial state covariance Cholesky |
-| `diffusion_dist` | `NoiseFamily` | Process noise family (default: Gaussian) |
-| `manifest_dist` | `NoiseFamily` | Observation noise family (default: Gaussian) |
+| `diffusion_dist` | `DistributionFamily` | Process noise family (default: Gaussian) |
+| `manifest_dist` | `DistributionFamily` | Observation noise family (default: Gaussian) |
 | `hierarchical` | `bool` | Enable multi-subject hierarchical structure |
 | `n_subjects` | `int` | Number of subjects |
 | `indvarying` | `list[str]` | Parameters that vary across individuals |
@@ -190,7 +190,7 @@ Translates a `ModelSpec` (from the orchestrator) into an `SSMSpec`:
 1. **Manifest columns**: extracted from `model_spec.likelihoods[*].variable`.
 2. **Latent dimension**: inferred from the count of `ParameterRole.AR_COEFFICIENT` parameters (minimum 1).
 3. **Hierarchical structure**: enabled if `model_spec.random_effects` is non-empty; `n_subjects` counted from `data["subject_id"]`.
-4. **Noise family**: any non-Gaussian likelihood distribution triggers the particle backend. The mapping from `DistributionFamily` to `NoiseFamily` is in `_DIST_TO_NOISE`.
+4. **Noise family**: any non-Gaussian likelihood distribution triggers the particle backend. `DistributionFamily` is used directly — supported distributions have native emission functions in `emissions.py`.
 5. **Lambda matrix**: defaults to identity `eye(n_manifest, n_latent)`.
 6. **Defaults**: drift free, diffusion diagonal, CINT free, manifest_var diagonal, individual-varying `t0_means`.
 
