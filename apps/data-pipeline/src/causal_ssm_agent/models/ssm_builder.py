@@ -184,7 +184,7 @@ class SSMModelBuilder:
     def _get_construct_dt_days(self, construct_name: str) -> float:
         """Get the time-step size in fractional days for a construct.
 
-        Looks up ``causal_granularity`` from the causal_spec and converts
+        Looks up ``temporal_scale`` from the causal_spec and converts
         via ``GRANULARITY_HOURS``.  Falls back to 1.0 (daily) when no
         spec is available or the construct is not found.
         """
@@ -193,7 +193,7 @@ class SSMModelBuilder:
         for c in self._causal_spec.get("latent", {}).get("constructs", []):
             name = c.get("name") if isinstance(c, dict) else c.name
             if name == construct_name:
-                gran = c.get("causal_granularity") if isinstance(c, dict) else c.causal_granularity
+                gran = c.get("temporal_scale") if isinstance(c, dict) else c.temporal_scale
                 if gran and gran in GRANULARITY_HOURS:
                     return GRANULARITY_HOURS[gran] / 24.0
         return 1.0
@@ -458,7 +458,12 @@ class SSMModelBuilder:
             if param_name in diag_param_index:
                 attr, idx = diag_param_index[param_name]
                 construct_name = param_name.removeprefix("rho_").removeprefix("ar_")
-                dt = self._get_construct_dt_days(construct_name)
+                # Precedence: reference_interval_days > temporal_scale > default 1.0
+                ref_days = prior_spec.get("reference_interval_days")
+                if ref_days is not None and ref_days > 0:
+                    dt = float(ref_days)
+                else:
+                    dt = self._get_construct_dt_days(construct_name)
                 mu_ar = max(0.001, min(normalized.get("mu", 0.5), 0.999))
                 sigma_ar = normalized.get("sigma", 0.2)
                 mu_drift = -math.log(mu_ar) / dt
@@ -473,15 +478,20 @@ class SSMModelBuilder:
             # the drift off-diagonal is a continuous-time rate: β_CT ≈ β_DT / dt
             if param_name in offdiag_param_index:
                 attr, idx = offdiag_param_index[param_name]
-                dt = 1.0  # default daily
-                # Parse "beta_<cause>_<effect>" to get effect construct's dt
-                if ssm_spec and ssm_spec.latent_names:
-                    latent_set = set(ssm_spec.latent_names)
-                    compound = param_name.removeprefix("beta_")
-                    split = _split_compound_name(compound, latent_set, latent_set)
-                    if split:
-                        _cause, effect = split
-                        dt = self._get_construct_dt_days(effect)
+                # Precedence: reference_interval_days > temporal_scale > default 1.0
+                ref_days = prior_spec.get("reference_interval_days")
+                if ref_days is not None and ref_days > 0:
+                    dt = float(ref_days)
+                else:
+                    dt = 1.0  # default daily
+                    # Parse "beta_<cause>_<effect>" to get effect construct's dt
+                    if ssm_spec and ssm_spec.latent_names:
+                        latent_set = set(ssm_spec.latent_names)
+                        compound = param_name.removeprefix("beta_")
+                        split = _split_compound_name(compound, latent_set, latent_set)
+                        if split:
+                            _cause, effect = split
+                            dt = self._get_construct_dt_days(effect)
                 mu_beta = normalized.get("mu", 0.0)
                 sigma_beta = normalized.get("sigma", 0.5)
                 per_element.setdefault(attr, []).append(
@@ -553,7 +563,58 @@ class SSMModelBuilder:
 
             setattr(ssm_priors, attr, result)
 
+        # Diagnostic: warn when first-order approximation may be inaccurate
+        self._warn_first_order_approximation(ssm_priors)
+
         return ssm_priors
+
+    @staticmethod
+    def _warn_first_order_approximation(ssm_priors: SSMPriors) -> None:
+        """Log warning when off-diagonal drift magnitudes suggest first-order error > 20%.
+
+        The first-order approximation beta_CT = beta_DT / dt has error
+        O(dt * ||A_offdiag||). When any off-diagonal magnitude exceeds 20%
+        of the corresponding diagonal magnitude, the approximation may be
+        significantly inaccurate.
+        """
+        diag_prior = ssm_priors.drift_diag
+        offdiag_prior = ssm_priors.drift_offdiag
+        if diag_prior is None or offdiag_prior is None:
+            return
+
+        diag_mu = diag_prior.get("mu")
+        offdiag_mu = offdiag_prior.get("mu")
+        if diag_mu is None or offdiag_mu is None:
+            return
+
+        # Normalize to lists
+        if isinstance(diag_mu, (int, float)):
+            diag_mu = [diag_mu]
+        if isinstance(offdiag_mu, (int, float)):
+            offdiag_mu = [offdiag_mu]
+
+        if not diag_mu or not offdiag_mu:
+            return
+
+        # Use minimum diagonal magnitude as reference
+        min_diag = min(abs(float(d)) for d in diag_mu)
+        if min_diag < 1e-10:
+            return
+
+        for i, od in enumerate(offdiag_mu):
+            ratio = abs(float(od)) / min_diag
+            if ratio > 0.2:
+                logger.warning(
+                    "First-order DT->CT approximation may be inaccurate: "
+                    "off-diagonal drift[%d] magnitude (%.3f) is %.0f%% of "
+                    "minimum diagonal magnitude (%.3f). Consider exact matrix "
+                    "logarithm conversion (Phase 2).",
+                    i,
+                    abs(float(od)),
+                    ratio * 100,
+                    min_diag,
+                )
+                break  # One warning is enough
 
     def _build_prior_index_maps(
         self,
