@@ -12,8 +12,24 @@ interface PriorCardProps {
   prior: PriorProposal;
 }
 
+function confidenceVariant(
+  prior: PriorProposal,
+): "success" | "warning" | "destructive" | "secondary" {
+  if (prior.confidence_level) {
+    return prior.confidence_level === "high"
+      ? "success"
+      : prior.confidence_level === "medium"
+        ? "warning"
+        : "destructive";
+  }
+  // No pipeline-provided level — show neutral badge
+  return "secondary";
+}
+
 export function PriorCard({ prior }: PriorCardProps) {
-  const pdfData = evaluatePdf(prior.distribution, prior.params);
+  // Prefer pipeline-provided density points; fall back to client-side approximation
+  const pdfData = prior.density_points ?? evaluatePdf(prior.distribution, prior.params);
+  const isApproximate = !prior.density_points;
 
   return (
     <Card>
@@ -23,22 +39,19 @@ export function PriorCard({ prior }: PriorCardProps) {
             <CardTitle className="text-base font-mono">{prior.parameter}</CardTitle>
             <CardDescription>{prior.distribution}</CardDescription>
           </div>
-          <Badge
-            variant={
-              prior.confidence >= 0.7
-                ? "success"
-                : prior.confidence >= 0.4
-                  ? "warning"
-                  : "destructive"
-            }
-          >
+          <Badge variant={confidenceVariant(prior)}>
             Confidence: {formatPercent(prior.confidence)}
           </Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* PDF Chart */}
-        <div className="h-40 w-full">
+        <div className="relative h-40 w-full">
+          {isApproximate && (
+            <span className="absolute top-1 right-2 z-10 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+              approx.
+            </span>
+          )}
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={pdfData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />

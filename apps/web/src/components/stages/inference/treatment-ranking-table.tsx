@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { StatTooltip } from "@/components/ui/stat-tooltip";
 import {
   Table,
   TableBody,
@@ -23,12 +24,42 @@ export function TreatmentRankingTable({ results }: TreatmentRankingTableProps) {
       <TableHeader>
         <TableRow>
           <TableHead>Treatment</TableHead>
-          <TableHead className="text-right">{"\u03B2\u0302"}</TableHead>
-          <TableHead className="text-right">SE</TableHead>
-          <TableHead className="text-right">95% CI</TableHead>
-          <TableHead className="text-right">P({"\u03B2"}&gt;0)</TableHead>
-          <TableHead>Identifiable</TableHead>
-          <TableHead>Sensitivity</TableHead>
+          <TableHead className="text-right">
+            <span className="inline-flex items-center gap-1">
+              {"\u03B2\u0302"}
+              <StatTooltip explanation="Posterior mean of the causal effect. Positive values indicate the treatment increases the outcome." />
+            </span>
+          </TableHead>
+          <TableHead className="text-right">
+            <span className="inline-flex items-center gap-1">
+              SE
+              <StatTooltip explanation="Standard error of the posterior estimate. Smaller values indicate more precise estimates." />
+            </span>
+          </TableHead>
+          <TableHead className="text-right">
+            <span className="inline-flex items-center gap-1">
+              95% CI
+              <StatTooltip explanation="95% credible interval. The true effect lies within this range with 95% posterior probability." />
+            </span>
+          </TableHead>
+          <TableHead className="text-right">
+            <span className="inline-flex items-center gap-1">
+              P({"\u03B2"}&gt;0)
+              <StatTooltip explanation="Posterior probability that the effect is positive. Values near 1 or 0 indicate strong directional evidence." />
+            </span>
+          </TableHead>
+          <TableHead>
+            <span className="inline-flex items-center gap-1">
+              Identifiable
+              <StatTooltip explanation="Whether the causal effect can be uniquely determined from the observational data given the DAG structure." />
+            </span>
+          </TableHead>
+          <TableHead>
+            <span className="inline-flex items-center gap-1">
+              Sensitivity
+              <StatTooltip explanation="Robustness to unobserved confounding. 'Sensitive' means the estimate may change substantially if assumptions are violated." />
+            </span>
+          </TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

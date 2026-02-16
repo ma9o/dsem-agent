@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatTooltip } from "@/components/ui/stat-tooltip";
 import type { IdentifiabilityStatus } from "@causal-ssm/api-types";
 import { CheckCircle, XCircle } from "lucide-react";
 
@@ -18,6 +19,7 @@ export function IdentifiabilityPanel({
           <h3 className="flex items-center gap-2 text-sm font-medium">
             <CheckCircle className="h-4 w-4 text-emerald-600" />
             Identified Treatments
+            <StatTooltip explanation="Treatments whose causal effects can be uniquely estimated from observational data, given the DAG and available instruments." />
           </h3>
           <div className="grid gap-3 sm:grid-cols-2">
             {identified.map(([name, status]) => (
@@ -58,6 +60,7 @@ export function IdentifiabilityPanel({
           <h3 className="flex items-center gap-2 text-sm font-medium">
             <XCircle className="h-4 w-4 text-destructive" />
             Non-Identifiable Treatments
+            <StatTooltip explanation="Treatments with unobserved confounders that prevent unique identification of causal effects from the data." />
           </h3>
           <div className="grid gap-3 sm:grid-cols-2">
             {nonIdentifiable.map(([name, status]) => (

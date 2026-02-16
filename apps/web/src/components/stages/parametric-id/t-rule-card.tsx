@@ -2,6 +2,7 @@
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatTooltip } from "@/components/ui/stat-tooltip";
 import type { TRuleResult } from "@causal-ssm/api-types";
 import {
   Bar,
@@ -30,7 +31,10 @@ export function TRuleCard({ tRule }: TRuleCardProps) {
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">T-Rule Check</CardTitle>
+          <CardTitle className="inline-flex items-center gap-1.5 text-base">
+            T-Rule Check
+            <StatTooltip explanation="The t-rule checks if there are enough moment conditions (data constraints) to uniquely identify all free parameters. Requires moments >= free params." />
+          </CardTitle>
           <Badge variant={tRule.satisfies ? "success" : "destructive"}>
             {tRule.satisfies ? "Pass" : "Fail"}
           </Badge>

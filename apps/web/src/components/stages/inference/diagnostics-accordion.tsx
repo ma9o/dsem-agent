@@ -7,6 +7,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
+import { StatTooltip } from "@/components/ui/stat-tooltip";
 import {
   Table,
   TableBody,
@@ -42,7 +43,10 @@ export function DiagnosticsAccordion({ powerScaling, ppc }: DiagnosticsAccordion
       {/* Power Scaling Section */}
       <AccordionItem value="power-scaling">
         <AccordionTrigger value="power-scaling" className="text-sm">
-          Power Scaling Diagnostics
+          <span className="inline-flex items-center gap-1.5">
+            Power Scaling Diagnostics
+            <StatTooltip explanation="Tests whether posteriors are driven by data (good) or priors (concerning). Scales the likelihood and prior to detect sensitivity." />
+          </span>
           <Badge
             variant={
               powerScaling.every((p) => p.diagnosis === "well_identified") ? "success" : "warning"
@@ -58,9 +62,24 @@ export function DiagnosticsAccordion({ powerScaling, ppc }: DiagnosticsAccordion
             <TableHeader>
               <TableRow>
                 <TableHead>Parameter</TableHead>
-                <TableHead>Diagnosis</TableHead>
-                <TableHead className="text-right">Prior Sensitivity</TableHead>
-                <TableHead className="text-right">Likelihood Sensitivity</TableHead>
+                <TableHead>
+                  <span className="inline-flex items-center gap-1">
+                    Diagnosis
+                    <StatTooltip explanation="'Well Identified' = data-driven. 'Prior Dominated' = prior choice matters too much. 'Prior-Data Conflict' = prior and data disagree." />
+                  </span>
+                </TableHead>
+                <TableHead className="text-right">
+                  <span className="inline-flex items-center gap-1">
+                    Prior Sens.
+                    <StatTooltip explanation="How much the posterior changes when the prior is scaled. Low values (<0.05) are good." />
+                  </span>
+                </TableHead>
+                <TableHead className="text-right">
+                  <span className="inline-flex items-center gap-1">
+                    Lik. Sens.
+                    <StatTooltip explanation="How much the posterior changes when the likelihood is scaled. High values indicate the data is informative." />
+                  </span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -88,7 +107,10 @@ export function DiagnosticsAccordion({ powerScaling, ppc }: DiagnosticsAccordion
       {/* PPC Section */}
       <AccordionItem value="ppc">
         <AccordionTrigger value="ppc" className="text-sm">
-          Posterior Predictive Checks
+          <span className="inline-flex items-center gap-1.5">
+            Posterior Predictive Checks
+            <StatTooltip explanation="Simulates data from the fitted model and compares to observed data. Failures suggest model misspecification." />
+          </span>
           <Badge variant={ppc.overall_passed ? "success" : "destructive"} className="ml-2">
             {ppc.overall_passed ? "Passed" : "Failed"}
           </Badge>

@@ -1,19 +1,12 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatDate } from "@/lib/utils/format";
 import { Calendar, Database } from "lucide-react";
 
 interface DataSummaryStatsProps {
   nRecords: number;
   dateRange: { start: string; end: string };
   activityTypeCounts: Record<string, number>;
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
 }
 
 export function DataSummaryStats({

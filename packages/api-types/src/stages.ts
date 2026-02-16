@@ -17,6 +17,8 @@ export interface StageMeta {
   number: string;
   hasGate: boolean;
   prefectTaskName: string;
+  /** Human-readable hint shown while this stage is running. */
+  loadingHint: string;
 }
 
 export const STAGES: StageMeta[] = [
@@ -26,6 +28,7 @@ export const STAGES: StageMeta[] = [
     number: "0",
     hasGate: false,
     prefectTaskName: "preprocess_raw_input",
+    loadingHint: "Parsing and preprocessing your data...",
   },
   {
     id: "stage-1a",
@@ -33,6 +36,7 @@ export const STAGES: StageMeta[] = [
     number: "1a",
     hasGate: false,
     prefectTaskName: "propose_latent_model",
+    loadingHint: "LLM is proposing a causal DAG...",
   },
   {
     id: "stage-1b",
@@ -40,6 +44,7 @@ export const STAGES: StageMeta[] = [
     number: "1b",
     hasGate: true,
     prefectTaskName: "propose_measurement_with_identifiability_fix",
+    loadingHint: "Mapping indicators and checking identifiability...",
   },
   {
     id: "stage-2",
@@ -47,6 +52,7 @@ export const STAGES: StageMeta[] = [
     number: "2",
     hasGate: false,
     prefectTaskName: "populate_indicators",
+    loadingHint: "Extracting indicator values from your data...",
   },
   {
     id: "stage-3",
@@ -54,6 +60,7 @@ export const STAGES: StageMeta[] = [
     number: "3",
     hasGate: true,
     prefectTaskName: "validate_extraction",
+    loadingHint: "Validating extraction quality...",
   },
   {
     id: "stage-4",
@@ -61,6 +68,7 @@ export const STAGES: StageMeta[] = [
     number: "4",
     hasGate: false,
     prefectTaskName: "stage4_orchestrated_flow",
+    loadingHint: "LLM is specifying priors and model parameters...",
   },
   {
     id: "stage-4b",
@@ -68,6 +76,7 @@ export const STAGES: StageMeta[] = [
     number: "4b",
     hasGate: true,
     prefectTaskName: "stage4b_parametric_id_flow",
+    loadingHint: "Checking parametric identifiability...",
   },
   {
     id: "stage-5",
@@ -75,5 +84,6 @@ export const STAGES: StageMeta[] = [
     number: "5",
     hasGate: false,
     prefectTaskName: "fit_model",
+    loadingHint: "Running Bayesian inference...",
   },
 ];

@@ -17,10 +17,13 @@ import {
 interface PriorDensityChartProps {
   distribution: string;
   params: Record<string, number>;
+  /** Pre-computed density points from the pipeline (preferred over client-side approximation). */
+  densityPoints?: Array<{ x: number; y: number }>;
 }
 
-export function PriorDensityChart({ distribution, params }: PriorDensityChartProps) {
-  const pdfData = evaluatePdf(distribution, params);
+export function PriorDensityChart({ distribution, params, densityPoints }: PriorDensityChartProps) {
+  const pdfData = densityPoints ?? evaluatePdf(distribution, params);
+  const isApproximate = !densityPoints;
 
   // Find the mode (peak) of the distribution for annotation
   const peak = pdfData.reduce((max, point) => (point.y > max.y ? point : max), pdfData[0]);
@@ -35,7 +38,12 @@ export function PriorDensityChart({ distribution, params }: PriorDensityChartPro
 
   return (
     <div className="space-y-3">
-      <div className="h-48 w-full">
+      <div className="relative h-48 w-full">
+        {isApproximate && (
+          <span className="absolute top-1 right-2 z-10 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+            approx.
+          </span>
+        )}
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={pdfData} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />

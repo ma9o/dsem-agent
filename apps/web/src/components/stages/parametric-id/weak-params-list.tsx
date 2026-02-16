@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { StatTooltip } from "@/components/ui/stat-tooltip";
 import {
   Table,
   TableBody,
@@ -35,8 +36,18 @@ export function WeakParamsList({ params }: WeakParamsListProps) {
       <TableHeader>
         <TableRow>
           <TableHead>Parameter</TableHead>
-          <TableHead>Classification</TableHead>
-          <TableHead>Contraction Ratio</TableHead>
+          <TableHead>
+            <span className="inline-flex items-center gap-1">
+              Classification
+              <StatTooltip explanation="Structurally identified: uniquely determined by the model. Boundary: near the identification boundary. Weak: poorly identified — posterior dominated by the prior." />
+            </span>
+          </TableHead>
+          <TableHead>
+            <span className="inline-flex items-center gap-1">
+              Contraction
+              <StatTooltip explanation="Prior-to-posterior contraction ratio. Values near 1 mean the data strongly informs the parameter; values near 0 mean the posterior is dominated by the prior (weak identification)." />
+            </span>
+          </TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

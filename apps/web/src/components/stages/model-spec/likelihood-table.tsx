@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { StatTooltip } from "@/components/ui/stat-tooltip";
 import {
   Table,
   TableBody,
@@ -19,8 +20,18 @@ export function LikelihoodTable({ likelihoods }: LikelihoodTableProps) {
       <TableHeader>
         <TableRow>
           <TableHead>Variable</TableHead>
-          <TableHead>Distribution</TableHead>
-          <TableHead>Link Function</TableHead>
+          <TableHead>
+            <span className="inline-flex items-center gap-1">
+              Distribution
+              <StatTooltip explanation="The probability distribution family chosen by the pipeline for this observed variable (e.g., Gaussian for continuous, Poisson for counts, Bernoulli for binary)." />
+            </span>
+          </TableHead>
+          <TableHead>
+            <span className="inline-flex items-center gap-1">
+              Link
+              <StatTooltip explanation="The link function mapping the latent linear predictor to the distribution's natural parameter (e.g., identity for Gaussian, log for Poisson, logit for Bernoulli)." />
+            </span>
+          </TableHead>
           <TableHead>Reasoning</TableHead>
         </TableRow>
       </TableHeader>

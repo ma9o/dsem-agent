@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { StatTooltip } from "@/components/ui/stat-tooltip";
 import {
   Table,
   TableBody,
@@ -14,6 +15,8 @@ interface ParameterTableProps {
 }
 
 export function ParameterTable({ parameters }: ParameterTableProps) {
+  const hasSearchContext = parameters.some((p) => p.search_context);
+
   return (
     <Table>
       <TableHeader>
@@ -22,6 +25,14 @@ export function ParameterTable({ parameters }: ParameterTableProps) {
           <TableHead>Role</TableHead>
           <TableHead>Constraint</TableHead>
           <TableHead>Description</TableHead>
+          {hasSearchContext && (
+            <TableHead>
+              <span className="inline-flex items-center gap-1">
+                Search Context
+                <StatTooltip explanation="The search query used by the pipeline to find prior literature for this parameter's effect size." />
+              </span>
+            </TableHead>
+          )}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -37,6 +48,11 @@ export function ParameterTable({ parameters }: ParameterTableProps) {
             <TableCell className="max-w-sm text-sm text-muted-foreground">
               {param.description}
             </TableCell>
+            {hasSearchContext && (
+              <TableCell className="max-w-xs text-xs text-muted-foreground italic">
+                {param.search_context || "--"}
+              </TableCell>
+            )}
           </TableRow>
         ))}
       </TableBody>
