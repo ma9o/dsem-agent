@@ -35,8 +35,8 @@ def simple_causal_spec():
     return {
         "latent": {
             "constructs": [
-                {"name": "stress", "causal_granularity": "daily"},
-                {"name": "sleep", "causal_granularity": "daily"},
+                {"name": "stress", "temporal_scale": "daily"},
+                {"name": "sleep", "temporal_scale": "daily"},
             ],
             "edges": [{"cause": "stress", "effect": "sleep"}],
         },
@@ -80,7 +80,6 @@ def _make_spec(
             "name": indicator_name,
             "construct_name": construct_name,
             "measurement_dtype": dtype,
-            "measurement_granularity": causal_gran if causal_gran else "finest",
             "how_to_measure": f"Extract {indicator_name}",
         },
     ]
@@ -90,7 +89,7 @@ def _make_spec(
     constructs = [
         {
             "name": construct_name,
-            "causal_granularity": causal_gran,
+            "temporal_scale": causal_gran,
             "temporal_status": temporal_status,
         },
     ]
@@ -104,7 +103,7 @@ def _make_spec(
                 constructs.append(
                     {
                         "name": cn,
-                        "causal_granularity": causal_gran,
+                        "temporal_scale": causal_gran,
                         "temporal_status": temporal_status,
                     }
                 )
@@ -723,7 +722,6 @@ class TestCheckConstructCorrelations:
                     "name": "stress_self_report",
                     "construct_name": "stress",
                     "measurement_dtype": "continuous",
-                    "measurement_granularity": "daily",
                     "how_to_measure": "Self reported stress",
                 },
             ],
@@ -761,7 +759,6 @@ class TestCheckConstructCorrelations:
                     "name": "stress_self_report",
                     "construct_name": "stress",
                     "measurement_dtype": "continuous",
-                    "measurement_granularity": "daily",
                     "how_to_measure": "Self reported stress",
                 },
             ],
@@ -817,7 +814,6 @@ class TestCheckConstructCorrelations:
                     "name": "stress_self_report",
                     "construct_name": "stress",
                     "measurement_dtype": "continuous",
-                    "measurement_granularity": "daily",
                     "how_to_measure": "Self reported stress",
                 },
             ],

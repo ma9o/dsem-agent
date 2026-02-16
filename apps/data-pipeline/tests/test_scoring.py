@@ -37,7 +37,7 @@ class TestScoreLatentModel:
         pred = MockPrediction(structure='{"constructs": [], "edges": []}')
         assert score_latent_model(None, pred) == 0.0
 
-        # Invalid: time_varying without causal_granularity
+        # Invalid: time_varying without temporal_scale
         invalid = {
             "constructs": [
                 {
@@ -46,7 +46,7 @@ class TestScoreLatentModel:
                     "role": "endogenous",
                     "is_outcome": True,
                     "temporal_status": "time_varying",
-                    # missing causal_granularity
+                    # missing temporal_scale
                 }
             ],
             "edges": [],
@@ -64,7 +64,7 @@ class TestScoreLatentModel:
                     "role": "endogenous",
                     "is_outcome": True,
                     "temporal_status": "time_varying",
-                    "causal_granularity": "daily",
+                    "temporal_scale": "daily",
                 }
             ],
             "edges": [{"cause": "nonexistent", "effect": "mood", "description": "Test"}],
@@ -81,7 +81,7 @@ class TestScoreLatentModel:
                     "description": "Daily stress",
                     "role": "exogenous",
                     "temporal_status": "time_varying",
-                    "causal_granularity": "daily",
+                    "temporal_scale": "daily",
                 },
                 {
                     "name": "mood",
@@ -89,7 +89,7 @@ class TestScoreLatentModel:
                     "role": "endogenous",
                     "is_outcome": True,
                     "temporal_status": "time_varying",
-                    "causal_granularity": "daily",
+                    "temporal_scale": "daily",
                 },
             ],
             "edges": [
@@ -114,7 +114,7 @@ class TestScoreLatentModel:
                     "description": "input",
                     "role": "exogenous",
                     "temporal_status": "time_varying",
-                    "causal_granularity": "daily",
+                    "temporal_scale": "daily",
                 },
                 {
                     "name": "Y",
@@ -122,7 +122,7 @@ class TestScoreLatentModel:
                     "role": "endogenous",
                     "is_outcome": True,
                     "temporal_status": "time_varying",
-                    "causal_granularity": "daily",
+                    "temporal_scale": "daily",
                 },
             ],
             "edges": [{"cause": "X", "effect": "Y", "description": "X causes Y"}],
@@ -135,14 +135,14 @@ class TestScoreLatentModel:
                     "description": "hourly stress",
                     "role": "exogenous",
                     "temporal_status": "time_varying",
-                    "causal_granularity": "hourly",
+                    "temporal_scale": "hourly",
                 },
                 {
                     "name": "sleep",
                     "description": "daily sleep",
                     "role": "endogenous",
                     "temporal_status": "time_varying",
-                    "causal_granularity": "daily",
+                    "temporal_scale": "daily",
                 },
                 {
                     "name": "mood",
@@ -150,7 +150,7 @@ class TestScoreLatentModel:
                     "role": "endogenous",
                     "is_outcome": True,
                     "temporal_status": "time_varying",
-                    "causal_granularity": "daily",
+                    "temporal_scale": "daily",
                 },
                 {
                     "name": "age",
@@ -165,7 +165,6 @@ class TestScoreLatentModel:
                     "cause": "sleep",
                     "effect": "mood",
                     "description": "Sleep affects mood",
-                    "lagged": False,
                 },
                 {"cause": "mood", "effect": "sleep", "description": "Mood affects sleep"},
             ],
@@ -190,7 +189,7 @@ class TestCountRulePoints:
             edges=[CausalEdge(cause="stress", effect="mood", description="Test")],
         )
         points = _count_rule_points(structure)
-        # +1 role, +1 temporal_status, +1 causal_granularity present, +1 valid causal_granularity (per construct)
+        # +1 role, +1 temporal_status, +1 temporal_scale present, +1 valid temporal_scale (per construct)
         assert points >= 4
 
     def test_time_invariant_construct_points(self, construct_factory):
@@ -255,7 +254,7 @@ class TestNormalizedScoring:
                     "description": "input",
                     "role": "exogenous",
                     "temporal_status": "time_varying",
-                    "causal_granularity": "daily",
+                    "temporal_scale": "daily",
                 },
                 {
                     "name": "Y",
@@ -263,7 +262,7 @@ class TestNormalizedScoring:
                     "role": "endogenous",
                     "is_outcome": True,
                     "temporal_status": "time_varying",
-                    "causal_granularity": "daily",
+                    "temporal_scale": "daily",
                 },
             ],
             "edges": [{"cause": "X", "effect": "Y", "description": "X causes Y"}],
@@ -286,14 +285,14 @@ class TestExogenousEffectViolation:
                     "role": "endogenous",
                     "is_outcome": True,
                     "temporal_status": "time_varying",
-                    "causal_granularity": "daily",
+                    "temporal_scale": "daily",
                 },
                 {
                     "name": "weather",
                     "description": "input",
                     "role": "exogenous",
                     "temporal_status": "time_varying",
-                    "causal_granularity": "daily",
+                    "temporal_scale": "daily",
                 },
             ],
             "edges": [
@@ -316,7 +315,7 @@ class TestCrossScaleEdges:
                     "description": "hourly",
                     "role": "exogenous",
                     "temporal_status": "time_varying",
-                    "causal_granularity": "hourly",
+                    "temporal_scale": "hourly",
                 },
                 {
                     "name": "daily_mood",
@@ -324,7 +323,7 @@ class TestCrossScaleEdges:
                     "role": "endogenous",
                     "is_outcome": True,
                     "temporal_status": "time_varying",
-                    "causal_granularity": "daily",
+                    "temporal_scale": "daily",
                 },
             ],
             "edges": [
@@ -347,7 +346,7 @@ class TestCrossScaleEdges:
                     "description": "weekly",
                     "role": "exogenous",
                     "temporal_status": "time_varying",
-                    "causal_granularity": "weekly",
+                    "temporal_scale": "weekly",
                 },
                 {
                     "name": "daily_mood",
@@ -355,7 +354,7 @@ class TestCrossScaleEdges:
                     "role": "endogenous",
                     "is_outcome": True,
                     "temporal_status": "time_varying",
-                    "causal_granularity": "daily",
+                    "temporal_scale": "daily",
                 },
             ],
             "edges": [

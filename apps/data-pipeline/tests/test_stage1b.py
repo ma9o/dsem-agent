@@ -74,7 +74,6 @@ class TestMergeProxies:
                         {
                             "name": "confounder_proxy",
                             "how_to_measure": "Extract proxy value from data",
-                            "measurement_granularity": "daily",
                             "measurement_dtype": "continuous",
                             "aggregation": "mean",
                         }
@@ -96,7 +95,6 @@ class TestMergeProxies:
         new_indicator = result["indicators"][-1]
         assert new_indicator["name"] == "confounder_proxy"
         assert new_indicator["construct_name"] == "Confounder"
-        assert new_indicator["measurement_granularity"] == "daily"
         assert new_indicator["measurement_dtype"] == "continuous"
         assert new_indicator["aggregation"] == "mean"
         # how_to_measure should be prepended with proxy justification

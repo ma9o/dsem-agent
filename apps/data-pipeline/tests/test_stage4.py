@@ -979,7 +979,7 @@ class TestSSMPriorConversion:
                 "constructs": [
                     {
                         "name": "heart_rate",
-                        "causal_granularity": "hourly",
+                        "temporal_scale": "hourly",
                         "temporal_status": "time_varying",
                     },
                 ],
@@ -1119,12 +1119,12 @@ class TestSSMPriorConversion:
                 "constructs": [
                     {
                         "name": "heart_rate",
-                        "causal_granularity": "hourly",
+                        "temporal_scale": "hourly",
                         "temporal_status": "time_varying",
                     },
                     {
                         "name": "activity",
-                        "causal_granularity": "hourly",
+                        "temporal_scale": "hourly",
                         "temporal_status": "time_varying",
                     },
                 ],

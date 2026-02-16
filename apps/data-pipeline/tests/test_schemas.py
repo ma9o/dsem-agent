@@ -32,11 +32,11 @@ class TestConstruct:
             description="Daily mood state",
             role=Role.ENDOGENOUS,
             temporal_status=TemporalStatus.TIME_VARYING,
-            causal_granularity="daily",
+            temporal_scale="daily",
         )
         assert c.role == Role.ENDOGENOUS
         assert c.temporal_status == TemporalStatus.TIME_VARYING
-        assert c.causal_granularity == "daily"
+        assert c.temporal_scale == "daily"
 
     def test_exogenous_time_varying(self):
         """Exogenous, time-varying construct (classic input)."""
@@ -45,7 +45,7 @@ class TestConstruct:
             description="Daily temperature",
             role=Role.EXOGENOUS,
             temporal_status=TemporalStatus.TIME_VARYING,
-            causal_granularity="daily",
+            temporal_scale="daily",
         )
         assert c.role == Role.EXOGENOUS
         assert c.temporal_status == TemporalStatus.TIME_VARYING
@@ -60,12 +60,12 @@ class TestConstruct:
         )
         assert c.role == Role.EXOGENOUS
         assert c.temporal_status == TemporalStatus.TIME_INVARIANT
-        assert c.causal_granularity is None
+        assert c.temporal_scale is None
 
-    def test_time_varying_requires_causal_granularity(self):
-        """Time-varying construct requires causal_granularity."""
+    def test_time_varying_requires_temporal_scale(self):
+        """Time-varying construct requires temporal_scale."""
         with pytest.raises(
-            ValueError, match=r"Time-varying construct .* requires causal_granularity"
+            ValueError, match=r"Time-varying construct .* requires temporal_scale"
         ):
             Construct(
                 name="mood",
@@ -74,17 +74,17 @@ class TestConstruct:
                 temporal_status=TemporalStatus.TIME_VARYING,
             )
 
-    def test_time_invariant_forbids_causal_granularity(self):
-        """Time-invariant construct must not have causal_granularity."""
+    def test_time_invariant_forbids_temporal_scale(self):
+        """Time-invariant construct must not have temporal_scale."""
         with pytest.raises(
-            ValueError, match=r"Time-invariant construct .* must not have causal_granularity"
+            ValueError, match=r"Time-invariant construct .* must not have temporal_scale"
         ):
             Construct(
                 name="age",
                 description="Invalid",
                 role=Role.EXOGENOUS,
                 temporal_status=TemporalStatus.TIME_INVARIANT,
-                causal_granularity="daily",
+                temporal_scale="daily",
             )
 
     def test_exogenous_cannot_be_outcome(self):
@@ -96,7 +96,7 @@ class TestConstruct:
                 role=Role.EXOGENOUS,
                 is_outcome=True,
                 temporal_status=TemporalStatus.TIME_VARYING,
-                causal_granularity="daily",
+                temporal_scale="daily",
             )
 
 
@@ -250,7 +250,6 @@ class TestIndicator:
             name="mood_rating",
             construct_name="mood",
             how_to_measure="Extract mood ratings (1-10 scale)",
-            measurement_granularity="daily",
             measurement_dtype="continuous",
             aggregation="mean",
         )
@@ -264,21 +263,8 @@ class TestIndicator:
                 name="mood_rating",
                 construct_name="mood",
                 how_to_measure="Extract mood",
-                measurement_granularity="daily",
                 measurement_dtype="continuous",
                 aggregation="invalid_agg",
-            )
-
-    def test_invalid_measurement_granularity(self):
-        """Invalid measurement_granularity is rejected."""
-        with pytest.raises(ValueError, match="Invalid measurement_granularity"):
-            Indicator(
-                name="mood_rating",
-                construct_name="mood",
-                how_to_measure="Extract mood",
-                measurement_granularity="invalid_value",
-                measurement_dtype="continuous",
-                aggregation="mean",
             )
 
     def test_invalid_measurement_dtype(self):
@@ -288,7 +274,6 @@ class TestIndicator:
                 name="mood_rating",
                 construct_name="mood",
                 how_to_measure="Extract mood",
-                measurement_granularity="daily",
                 measurement_dtype="invalid_type",
                 aggregation="mean",
             )
@@ -305,7 +290,6 @@ class TestMeasurementModel:
                     name="mood_rating",
                     construct_name="mood",
                     how_to_measure="Extract mood ratings",
-                    measurement_granularity="daily",
                     measurement_dtype="continuous",
                     aggregation="mean",
                 ),
@@ -313,7 +297,6 @@ class TestMeasurementModel:
                     name="mood_text",
                     construct_name="mood",
                     how_to_measure="Extract mood from text",
-                    measurement_granularity="daily",
                     measurement_dtype="ordinal",
                     aggregation="mean",
                 ),
@@ -321,7 +304,6 @@ class TestMeasurementModel:
                     name="stress_level",
                     construct_name="stress",
                     how_to_measure="Extract stress ratings",
-                    measurement_granularity="daily",
                     measurement_dtype="continuous",
                     aggregation="mean",
                 ),
@@ -395,27 +377,6 @@ class TestCausalSpec:
         causal_spec = CausalSpec(latent=latent, measurement=measurement)
         assert len(causal_spec.latent.constructs) == 2
         assert len(causal_spec.measurement.indicators) == 1
-
-    def test_invalid_measurement_granularity_coarser_than_causal(
-        self, construct_factory, indicator_factory
-    ):
-        """Indicator measurement_granularity must be finer than construct's causal_granularity."""
-        latent = LatentModel(
-            constructs=[
-                construct_factory("stress", "daily", Role.EXOGENOUS),
-                construct_factory("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
-            ],
-            edges=[CausalEdge(cause="stress", effect="mood", description="Test")],
-        )
-        measurement = MeasurementModel(
-            indicators=[
-                indicator_factory(
-                    "mood_rating", "mood", granularity="weekly"
-                ),  # coarser than daily
-            ]
-        )
-        with pytest.raises(ValueError, match="coarser than construct"):
-            CausalSpec(latent=latent, measurement=measurement)
 
     def test_to_networkx_includes_loading_edges(self, construct_factory, indicator_factory):
         """CausalSpec.to_networkx includes construct→indicator loading edges."""
