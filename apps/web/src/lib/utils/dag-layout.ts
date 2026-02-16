@@ -64,11 +64,21 @@ export function layoutDag(
     id: `causal-${i}`,
     source: e.cause,
     target: e.effect,
-    type: "causal",
     data: { ...e },
-    style: { strokeDasharray: e.lagged ? undefined : "5,5" },
+    style: {
+      stroke: e.lagged ? "var(--edge-lagged)" : "var(--edge-contemporary)",
+      strokeWidth: 2,
+      strokeDasharray: e.lagged ? undefined : "5,5",
+    },
     label: e.lagged ? "t-1 → t" : "t → t",
+    labelStyle: { fontSize: 10, fill: "var(--edge-label)" },
     animated: !e.lagged,
+    markerEnd: {
+      type: "arrowclosed" as const,
+      color: e.lagged ? "var(--edge-lagged)" : "var(--edge-contemporary)",
+      width: 16,
+      height: 16,
+    },
   }));
 
   if (indicators) {
@@ -77,8 +87,13 @@ export function layoutDag(
         id: `loading-${ind.name}`,
         source: ind.construct_name,
         target: ind.name,
-        type: "loading",
-        style: { stroke: "#94a3b8", strokeDasharray: "3,3" },
+        style: { stroke: "var(--edge-indicator)", strokeWidth: 1.5, strokeDasharray: "3,3" },
+        markerEnd: {
+          type: "arrowclosed" as const,
+          color: "var(--edge-indicator)",
+          width: 12,
+          height: 12,
+        },
       });
     }
   }

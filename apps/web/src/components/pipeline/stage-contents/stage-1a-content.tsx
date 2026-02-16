@@ -20,13 +20,12 @@ export default function Stage1aContent({ data }: { data: Stage1aData }) {
         exogenousCount={data.latent_model.constructs.filter((c) => c.role === "exogenous").length}
         graphProperties={data.graph_properties}
       />
-      <div className="h-[400px] rounded-lg border">
-        <CausalDag
-          constructs={data.latent_model.constructs}
-          edges={data.latent_model.edges}
-          onNodeClick={setSelectedConstruct}
-        />
-      </div>
+      <CausalDag
+        constructs={data.latent_model.constructs}
+        edges={data.latent_model.edges}
+        onNodeClick={setSelectedConstruct}
+        height="min(500px, 60vh)"
+      />
       {selected && <ConstructDetailPanel construct={selected} />}
       <EdgeList edges={data.latent_model.edges} />
     </div>

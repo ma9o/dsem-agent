@@ -7,20 +7,22 @@ import { Handle, type NodeProps, Position } from "@xyflow/react";
 import { Star } from "lucide-react";
 import { memo } from "react";
 
-function ConstructNodeInner({ data }: NodeProps) {
+function ConstructNodeInner({ data, selected }: NodeProps) {
   const construct = data as unknown as Construct;
 
   return (
     <div
       className={cn(
-        "rounded-lg border-2 bg-card px-4 py-3 shadow-sm transition-shadow hover:shadow-md",
+        "rounded-lg border-2 bg-card px-4 py-3 shadow-sm transition-all duration-200 cursor-pointer",
+        "hover:shadow-md hover:-translate-y-0.5",
         construct.role === "endogenous"
           ? "border-blue-400 dark:border-blue-600"
           : "border-slate-300 dark:border-slate-600",
         construct.is_outcome && "ring-2 ring-amber-400 ring-offset-1 dark:ring-amber-500",
+        selected && "shadow-lg ring-2 ring-primary ring-offset-2",
       )}
     >
-      <Handle type="target" position={Position.Top} className="!bg-muted-foreground" />
+      <Handle type="target" position={Position.Top} className="!bg-muted-foreground !w-2 !h-2" />
 
       <div className="flex items-center gap-1.5">
         <span className="text-sm font-semibold leading-tight">{construct.name}</span>
@@ -46,7 +48,11 @@ function ConstructNodeInner({ data }: NodeProps) {
         )}
       </div>
 
-      <Handle type="source" position={Position.Bottom} className="!bg-muted-foreground" />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        className="!bg-muted-foreground !w-2 !h-2"
+      />
     </div>
   );
 }

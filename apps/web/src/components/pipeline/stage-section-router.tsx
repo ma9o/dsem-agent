@@ -1,7 +1,8 @@
 "use client";
 
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { LLMTraceAccordion } from "@/components/ui/custom/llm-trace-accordion";
-import type { StageRunStatus } from "@/lib/hooks/use-run-events";
+import type { StageTiming, StageRunStatus } from "@/lib/hooks/use-run-events";
 import { useStageData } from "@/lib/hooks/use-stage-data";
 import type {
   Stage0Data,
@@ -30,19 +31,37 @@ export function StageSectionRouter({
   stage,
   runId,
   status,
+  timing,
 }: {
   stage: StageMeta;
   runId: string;
   status: StageRunStatus;
+  timing?: StageTiming;
 }) {
   const isCompleted = status === "completed";
+  const elapsedMs =
+    timing?.completedAt && timing?.startedAt ? timing.completedAt - timing.startedAt : undefined;
+
+  // Read context from the stage data (shared query key — cache hit when stage content is loaded)
+  const { data: stageData } = useStageData<{ context?: string }>(runId, stage.id, isCompleted);
 
   return (
-    <StageSection number={stage.number} title={stage.label} status={status}>
+    <StageSection
+      id={stage.id}
+      number={stage.number}
+      title={stage.label}
+      status={status}
+      elapsedMs={elapsedMs}
+      context={stageData?.context}
+      hasGate={stage.hasGate}
+      loadingHint={stage.loadingHint}
+    >
       {isCompleted && (
-        <Suspense fallback={null}>
-          <StageContent stageId={stage.id} runId={runId} />
-        </Suspense>
+        <ErrorBoundary>
+          <Suspense fallback={null}>
+            <StageContent stageId={stage.id} runId={runId} />
+          </Suspense>
+        </ErrorBoundary>
       )}
     </StageSection>
   );

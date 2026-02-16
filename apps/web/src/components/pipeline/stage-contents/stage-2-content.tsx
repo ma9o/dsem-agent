@@ -3,6 +3,15 @@ import { WorkerProgressGrid } from "@/components/stages/extraction/worker-progre
 import type { Stage2Data } from "@causal-ssm/api-types";
 
 export default function Stage2Content({ data }: { data: Stage2Data }) {
+  if (data.workers.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+        No extraction workers were dispatched. Check if indicators were defined in the previous
+        stage.
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <WorkerProgressGrid workers={data.workers} />

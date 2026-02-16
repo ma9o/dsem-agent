@@ -33,6 +33,8 @@ interface ForestDatum {
 }
 
 export function ForestPlotPanel({ results }: ForestPlotPanelProps) {
+  if (results.length === 0) return null;
+
   // Sort by effect size descending
   const sorted = [...results].sort((a, b) => b.beta_hat - a.beta_hat);
 

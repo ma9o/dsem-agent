@@ -13,13 +13,12 @@ export default function Stage1bContent({ data }: { data: Stage1bData }) {
 
   return (
     <div className="space-y-4">
-      <div className="h-[400px] rounded-lg border">
-        <CausalDag
-          constructs={spec.latent.constructs}
-          edges={spec.latent.edges}
-          indicators={spec.measurement.indicators}
-        />
-      </div>
+      <CausalDag
+        constructs={spec.latent.constructs}
+        edges={spec.latent.edges}
+        indicators={spec.measurement.indicators}
+        height="min(500px, 60vh)"
+      />
       <IndicatorTable indicators={spec.measurement.indicators} />
       {spec.identifiability && <IdentifiabilityPanel identifiability={spec.identifiability} />}
       {hasNonIdentifiable && (
