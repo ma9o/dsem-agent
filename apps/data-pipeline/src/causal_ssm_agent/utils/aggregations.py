@@ -1,12 +1,12 @@
-"""Aggregate raw worker extractions to measurement_granularity.
+"""Aggregate raw worker extractions to a pipeline-level aggregation window.
 
 Workers extract at the finest resolution visible in their chunk.
 This module buckets timestamps and applies each indicator's aggregation
-function to reach measurement_granularity. SSM discretization then
-handles measurement_granularity -> continuous time.
+function within a shared aggregation window (default: daily).
+SSM discretization then handles the aggregated observations -> continuous time.
 
     Workers extract at raw resolution
-      -> aggregate_worker_measurements() -> measurement_granularity
+      -> aggregate_worker_measurements() -> aggregation window
       -> SSM discretization -> continuous time
 """
 
@@ -217,18 +217,26 @@ def _encode_non_continuous(
 def aggregate_worker_measurements(
     worker_dfs: list[pl.DataFrame | None],
     causal_spec: dict,
+    aggregation_window: str = "daily",
 ) -> dict[str, pl.DataFrame]:
-    """Aggregate raw worker extractions to measurement_granularity.
+    """Aggregate raw worker extractions within a shared aggregation window.
+
+    All indicators are aggregated at the same temporal resolution (the
+    pipeline-level ``aggregation_window``), eliminating sparse-pivot issues
+    from mixed per-indicator granularities.
 
     Args:
         worker_dfs: List of DataFrames with columns (indicator, value, timestamp),
                     each from a worker. None entries are skipped.
         causal_spec: The full CausalSpec dict with measurement.indicators.
+        aggregation_window: Pipeline-level aggregation window for all indicators.
+            One of "daily", "hourly", "weekly", "monthly", "yearly", or "finest".
+            Default is "daily".
 
     Returns:
-        Dict keyed by granularity level (e.g. "daily", "hourly", "finest").
+        Dict keyed by aggregation window (e.g. "daily", "finest").
         Each value is a DataFrame with columns (indicator, value, time_bucket).
-        For "finest" granularity, time_bucket is the original datetime.
+        For "finest", time_bucket is the original datetime.
     """
     # Filter out None DataFrames and empty list
     valid_dfs = [df for df in worker_dfs if df is not None and not df.is_empty()]
@@ -268,16 +276,13 @@ def aggregate_worker_measurements(
     if combined.is_empty():
         return {}
 
-    # 5. Build indicator -> (measurement_granularity, aggregation) lookup
+    # 5. Build indicator -> aggregation lookup
     indicators = causal_spec.get("measurement", {}).get("indicators", [])
-    indicator_info: dict[str, dict[str, str]] = {}
+    indicator_info: dict[str, str] = {}
     for ind in indicators:
         name = ind.get("name")
         if name:
-            indicator_info[name] = {
-                "granularity": ind.get("measurement_granularity", "finest"),
-                "aggregation": ind.get("aggregation", "mean"),
-            }
+            indicator_info[name] = ind.get("aggregation", "mean")
 
     # 6. Filter to known indicators only
     known_names = set(indicator_info.keys())
@@ -286,72 +291,66 @@ def aggregate_worker_measurements(
     if combined.is_empty():
         return {}
 
-    # 7. Group indicators by their measurement_granularity
-    granularity_groups: dict[str, list[str]] = {}
-    for name, info in indicator_info.items():
-        gran = info["granularity"]
-        granularity_groups.setdefault(gran, []).append(name)
-
+    # 7. Aggregate all indicators at the shared aggregation_window
     results: dict[str, pl.DataFrame] = {}
+    ind_names = list(indicator_info.keys())
 
-    for gran, ind_names in granularity_groups.items():
-        subset = combined.filter(pl.col("indicator").is_in(ind_names))
-        if subset.is_empty():
-            continue
-
-        if gran == "finest":
-            # Deduplicate exact (indicator, datetime, value) triples
-            deduped = subset.unique(subset=["indicator", "datetime", "value"])
-            results["finest"] = deduped.select(
-                pl.col("indicator"),
-                pl.col("value"),
-                pl.col("datetime").alias("time_bucket"),
-            ).sort("indicator", "time_bucket")
-        else:
-            # Bucket timestamps and aggregate
-            interval = _TRUNCATE_INTERVAL.get(gran)
-            if interval is None:
-                continue
-
-            # Add time_bucket column
-            bucketed = subset.with_columns(
-                pl.col("datetime").dt.truncate(interval).alias("time_bucket"),
+    if aggregation_window == "finest":
+        # Deduplicate exact (indicator, datetime, value) triples
+        deduped = combined.unique(subset=["indicator", "datetime", "value"])
+        results["finest"] = deduped.select(
+            pl.col("indicator"),
+            pl.col("value"),
+            pl.col("datetime").alias("time_bucket"),
+        ).sort("indicator", "time_bucket")
+    else:
+        # Bucket timestamps and aggregate
+        interval = _TRUNCATE_INTERVAL.get(aggregation_window)
+        if interval is None:
+            raise ValueError(
+                f"Unknown aggregation_window '{aggregation_window}'. "
+                f"Must be 'finest' or one of: {', '.join(sorted(_TRUNCATE_INTERVAL.keys()))}"
             )
 
-            # Sort by datetime so first/last are chronological
-            bucketed = bucketed.sort("datetime")
+        # Add time_bucket column
+        bucketed = combined.with_columns(
+            pl.col("datetime").dt.truncate(interval).alias("time_bucket"),
+        )
 
-            # Aggregate per indicator per time_bucket
-            agg_frames = []
-            for ind_name in ind_names:
-                ind_data = bucketed.filter(pl.col("indicator") == ind_name)
-                if ind_data.is_empty():
-                    continue
+        # Sort by datetime so first/last are chronological
+        bucketed = bucketed.sort("datetime")
 
-                agg_name = indicator_info[ind_name]["aggregation"]
+        # Aggregate per indicator per time_bucket
+        agg_frames = []
+        for ind_name in ind_names:
+            ind_data = bucketed.filter(pl.col("indicator") == ind_name)
+            if ind_data.is_empty():
+                continue
 
-                if agg_name in _MAP_GROUPS_AGGREGATIONS:
-                    fn = _build_map_groups_fn(agg_name)
-                    agged = (
-                        ind_data.group_by("time_bucket", maintain_order=True)
-                        .map_groups(fn)
-                        .with_columns(pl.lit(ind_name).alias("indicator"))
-                        .select("indicator", "value", "time_bucket")
-                    )
-                else:
-                    agg_expr = _build_agg_expr(agg_name)
-                    agged = (
-                        ind_data.group_by("time_bucket", maintain_order=True)
-                        .agg(agg_expr)
-                        .with_columns(pl.lit(ind_name).alias("indicator"))
-                        .select("indicator", "value", "time_bucket")
-                    )
-                agg_frames.append(agged)
+            agg_name = indicator_info[ind_name]
 
-            if agg_frames:
-                results[gran] = pl.concat(agg_frames, how="vertical").sort(
-                    "indicator", "time_bucket"
+            if agg_name in _MAP_GROUPS_AGGREGATIONS:
+                fn = _build_map_groups_fn(agg_name)
+                agged = (
+                    ind_data.group_by("time_bucket", maintain_order=True)
+                    .map_groups(fn)
+                    .with_columns(pl.lit(ind_name).alias("indicator"))
+                    .select("indicator", "value", "time_bucket")
                 )
+            else:
+                agg_expr = _build_agg_expr(agg_name)
+                agged = (
+                    ind_data.group_by("time_bucket", maintain_order=True)
+                    .agg(agg_expr)
+                    .with_columns(pl.lit(ind_name).alias("indicator"))
+                    .select("indicator", "value", "time_bucket")
+                )
+            agg_frames.append(agged)
+
+        if agg_frames:
+            results[aggregation_window] = pl.concat(agg_frames, how="vertical").sort(
+                "indicator", "time_bucket"
+            )
 
     return results
 

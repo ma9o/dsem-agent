@@ -11,8 +11,8 @@ Validation checks (semantic only - Polars handles structural validation):
 
 Aggregation: Workers extract at the finest resolution visible in their chunk.
 aggregate_measurements() buckets timestamps and applies each indicator's
-aggregation function to reach measurement_granularity. SSM discretization
-then handles measurement_granularity -> continuous time.
+aggregation function within a shared pipeline-level aggregation window.
+SSM discretization then handles the aggregated observations -> continuous time.
 
 See docs/reference/pipeline.md for full specification.
 """
@@ -159,16 +159,16 @@ def _check_dtype_range(values: pl.Series, dtype: str, ind_name: str) -> list[dic
 
 def _check_time_coverage(
     parsed_ts: pl.Series,
-    causal_granularity: str | None,
+    temporal_scale: str | None,
     ind_name: str,
 ) -> list[dict]:
     """Check if data spans enough time for temporal modeling."""
     issues: list[dict] = []
 
-    if causal_granularity is None:
+    if temporal_scale is None:
         return issues
 
-    gran_hours = GRANULARITY_HOURS.get(causal_granularity)
+    gran_hours = GRANULARITY_HOURS.get(temporal_scale)
     if gran_hours is None:
         return issues
 
@@ -187,7 +187,7 @@ def _check_time_coverage(
                 "severity": "warning",
                 "message": (
                     f"Time span {time_span_hours:.0f}h < required {min_hours}h "
-                    f"({MIN_COVERAGE_PERIODS} x {causal_granularity})"
+                    f"({MIN_COVERAGE_PERIODS} x {temporal_scale})"
                 ),
             }
         )
@@ -197,16 +197,16 @@ def _check_time_coverage(
 
 def _check_timestamp_gaps(
     parsed_ts: pl.Series,
-    causal_granularity: str | None,
+    temporal_scale: str | None,
     ind_name: str,
 ) -> list[dict]:
     """Check for excessively large gaps in timestamps."""
     issues: list[dict] = []
 
-    if causal_granularity is None:
+    if temporal_scale is None:
         return issues
 
-    gran_hours = GRANULARITY_HOURS.get(causal_granularity)
+    gran_hours = GRANULARITY_HOURS.get(temporal_scale)
     if gran_hours is None:
         return issues
 
@@ -227,7 +227,7 @@ def _check_timestamp_gaps(
                 "severity": "warning",
                 "message": (
                     f"Max consecutive gap {max_gap_hours:.0f}h > "
-                    f"{MAX_GAP_MULTIPLIER}x {causal_granularity} ({threshold}h)"
+                    f"{MAX_GAP_MULTIPLIER}x {temporal_scale} ({threshold}h)"
                 ),
             }
         )
@@ -493,7 +493,7 @@ def validate_extraction(
         dtype = ind_meta.get("measurement_dtype")
         construct_name = ind_meta.get("construct_name")
         construct_meta = construct_lookup.get(construct_name, {}) if construct_name else {}
-        causal_gran = construct_meta.get("causal_granularity")
+        causal_gran = construct_meta.get("temporal_scale")
         is_time_invariant = construct_meta.get("temporal_status") == "time_invariant"
 
         # 1. Timestamp parseability
@@ -551,18 +551,18 @@ def aggregate_measurements(
     causal_spec: dict,
     worker_results: list["WorkerResult"],
 ) -> dict[str, pl.DataFrame]:
-    """Aggregate raw worker extractions to measurement_granularity.
+    """Aggregate raw worker extractions within a shared aggregation window.
 
     Workers extract at the finest resolution visible in their chunk.
     This task buckets timestamps and applies each indicator's aggregation
-    function to reach measurement_granularity.
+    function within the pipeline-level aggregation window (default: daily).
 
     Args:
         causal_spec: The full causal spec with measurement model
         worker_results: List of WorkerResults from Stage 2
 
     Returns:
-        Dict keyed by granularity level (e.g. "daily", "hourly", "finest").
+        Dict keyed by aggregation window (e.g. "daily").
         Each value is a DataFrame with columns (indicator, value, time_bucket).
     """
     worker_dfs = [wr.dataframe for wr in worker_results]

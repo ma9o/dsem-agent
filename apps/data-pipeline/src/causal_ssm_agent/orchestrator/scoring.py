@@ -59,8 +59,8 @@ def _count_rule_points(structure: LatentModel) -> float:
     Points per construct:
     - +1 valid role
     - +1 valid temporal_status
-    - +1 correct causal_granularity constraint (required for time_varying, forbidden for time_invariant)
-    - +1 valid causal_granularity value (if specified)
+    - +1 correct temporal_scale constraint (required for time_varying, forbidden for time_invariant)
+    - +1 valid temporal_scale value (if specified)
 
     Points per edge:
     - +1 cause exists in constructs
@@ -86,15 +86,15 @@ def _count_rule_points(structure: LatentModel) -> float:
 
         is_time_varying = construct.temporal_status == TemporalStatus.TIME_VARYING
 
-        # Correct causal_granularity constraint
+        # Correct temporal_scale constraint
         if is_time_varying:
-            if construct.causal_granularity is not None:
+            if construct.temporal_scale is not None:
                 points += 1
                 # Valid granularity value
-                if construct.causal_granularity in GRANULARITY_HOURS:
+                if construct.temporal_scale in GRANULARITY_HOURS:
                     points += 1
         else:  # time_invariant
-            if construct.causal_granularity is None:
+            if construct.temporal_scale is None:
                 points += 1
 
     # Points for edges
@@ -115,8 +115,8 @@ def _count_rule_points(structure: LatentModel) -> float:
             if effect_construct.role == Role.ENDOGENOUS:
                 points += 1
 
-            cause_gran = cause_construct.causal_granularity
-            effect_gran = effect_construct.causal_granularity
+            cause_gran = cause_construct.temporal_scale
+            effect_gran = effect_construct.temporal_scale
 
             # Timescale handling
             if cause_gran == effect_gran:
@@ -147,7 +147,7 @@ def score_latent_model_normalized(example, pred, trace=None) -> float:
     except (json.JSONDecodeError, AttributeError):
         return 0.0
 
-    # Theoretical max per construct: ~4 points (2 classification + 2 causal_granularity)
+    # Theoretical max per construct: ~4 points (2 classification + 2 temporal_scale)
     # Theoretical max per edge: ~4 points (cause + effect + endogenous + timescale/cross-timescale bonus)
     max_construct_points = n_constructs * 4
     max_edge_points = n_edges * 4

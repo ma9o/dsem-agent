@@ -35,12 +35,12 @@ Each construct has three properties:
 Set `is_outcome: true` for the primary outcome Y implied by the question. Exactly one construct must be the outcome. Only endogenous constructs can be outcomes.
 
 ### 3. Temporal Status
-| Value | Description | causal_granularity |
+| Value | Description | temporal_scale |
 |-------|-------------|---------------------|
 | **time_varying** | Changes within person over time | Required (hourly/daily/weekly/monthly/yearly) |
 | **time_invariant** | Fixed for each person | Must be null |
 
-**causal_granularity**: The timescale at which causal dynamics operate. Ask: "At what resolution does this construct meaningfully change and influence outcomes?"
+**temporal_scale**: The timescale at which causal dynamics operate. Ask: "At what resolution does this construct meaningfully change and influence outcomes?"
 
 ## Causal Edges
 
@@ -71,7 +71,7 @@ Contemporaneous edges must form a DAG within each time slice (A4). Feedback loop
       "role": "endogenous" | "exogenous",
       "is_outcome": true | false,
       "temporal_status": "time_varying" | "time_invariant",
-      "causal_granularity": "hourly" | "daily" | "weekly" | "monthly" | "yearly" | null
+      "temporal_scale": "hourly" | "daily" | "weekly" | "monthly" | "yearly" | null
     }
   ],
   "edges": [
@@ -109,7 +109,7 @@ Review your proposed latent model for theoretical coherence.
 
 1. **Outcome clarity**: Is exactly one construct marked as is_outcome=true?
 2. **Causal completeness**: Are there important confounders missing?
-3. **Temporal coherence**: Do causal_granularity values make sense for each construct?
+3. **Temporal coherence**: Do temporal_scale values make sense for each construct?
 4. **Edge validity**: Are all edges theoretically justified? Are contemporaneous edges truly instantaneous?
 5. **Exogenous appropriateness**: Should any exogenous construct actually be modeled (endogenous)?
 

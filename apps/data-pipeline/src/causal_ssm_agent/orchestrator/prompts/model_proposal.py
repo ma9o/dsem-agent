@@ -95,7 +95,7 @@ The underlying model is a **continuous-time** state-space model (CT-SSM). Time i
 
 - **AR coefficients** (role `ar_coefficient`) represent **discrete-time persistence** per observation interval. They are automatically converted to continuous-time drift rates internally via `drift = -ln(AR) / dt`. You do NOT need to do this conversion — just propose AR values in [0, 1].
 - **Fixed effects** (beta coefficients) represent **discrete-time cross-lagged regression coefficients** — e.g. "a 1-unit increase in X predicts a 0.3-unit change in Y at the next observation." They are automatically converted to continuous-time coupling rates internally via `rate = beta / dt`. You do NOT need to do this conversion — just propose betas on the discrete-time scale you find in the literature.
-- Each construct's `causal_granularity` (hourly, daily, weekly, etc.) determines the natural timescale for both AR and beta conversions. The system handles this automatically.
+- Each construct's `temporal_scale` (hourly, daily, weekly, etc.) determines the natural timescale for both AR and beta conversions. The system handles this automatically.
 
 ## Guidelines
 
@@ -153,7 +153,7 @@ def format_constructs(causal_spec: dict) -> str:
         name = construct.get("name", "?")
         role = construct.get("role", "?")
         temporal = construct.get("temporal_status", "?")
-        gran = construct.get("causal_granularity", "N/A")
+        gran = construct.get("temporal_scale", "N/A")
         outcome = " [OUTCOME]" if construct.get("is_outcome") else ""
         desc = construct.get("description", "")
         lines.append(f"- **{name}**: {role}, {temporal}, granularity={gran}{outcome}")
@@ -183,8 +183,7 @@ def format_indicators(causal_spec: dict) -> str:
         name = indicator.get("name", "?")
         construct = indicator.get("construct_name", "?")
         dtype = indicator.get("measurement_dtype", "?")
-        gran = indicator.get("measurement_granularity", "?")
         agg = indicator.get("aggregation", "?")
         lines.append(f"- **{name}**: measures {construct}")
-        lines.append(f"  dtype={dtype}, granularity={gran}, aggregation={agg}")
+        lines.append(f"  dtype={dtype}, aggregation={agg}")
     return "\n".join(lines)
