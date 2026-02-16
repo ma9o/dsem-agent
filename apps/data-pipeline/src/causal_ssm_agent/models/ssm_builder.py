@@ -5,6 +5,7 @@ while using the NumPyro SSM implementation underneath.
 """
 
 import logging
+import math
 from typing import Any
 
 import jax.numpy as jnp
@@ -18,6 +19,7 @@ from causal_ssm_agent.models.ssm import (
     SSMSpec,
     fit,
 )
+from causal_ssm_agent.orchestrator.schemas import GRANULARITY_HOURS
 from causal_ssm_agent.orchestrator.schemas_model import (
     DistributionFamily,
     ModelSpec,
@@ -178,6 +180,23 @@ class SSMModelBuilder:
         from causal_ssm_agent.utils.config import get_config
 
         return get_config().inference.to_sampler_config()
+
+    def _get_construct_dt_days(self, construct_name: str) -> float:
+        """Get the time-step size in fractional days for a construct.
+
+        Looks up ``causal_granularity`` from the causal_spec and converts
+        via ``GRANULARITY_HOURS``.  Falls back to 1.0 (daily) when no
+        spec is available or the construct is not found.
+        """
+        if self._causal_spec is None:
+            return 1.0
+        for c in self._causal_spec.get("latent", {}).get("constructs", []):
+            name = c.get("name") if isinstance(c, dict) else c.name
+            if name == construct_name:
+                gran = c.get("causal_granularity") if isinstance(c, dict) else c.causal_granularity
+                if gran and gran in GRANULARITY_HOURS:
+                    return GRANULARITY_HOURS[gran] / 24.0
+        return 1.0
 
     def _convert_spec_to_ssm(self, model_spec: ModelSpec | dict) -> SSMSpec:
         """Convert ModelSpec to SSMSpec.
@@ -424,7 +443,9 @@ class SSMModelBuilder:
         per_element: dict[str, list[tuple[int, dict]]] = {}
 
         # Build index maps from masks if available
-        offdiag_param_index, lambda_param_index = self._build_prior_index_maps(ssm_spec, model_spec)
+        offdiag_param_index, lambda_param_index, diag_param_index = self._build_prior_index_maps(
+            ssm_spec, model_spec
+        )
 
         for param_name, prior_spec in priors.items():
             distribution = prior_spec.get("distribution", "Normal")
@@ -432,6 +453,20 @@ class SSMModelBuilder:
 
             # Normalize distribution params to mu/sigma
             normalized = _normalize_prior_params(distribution, params)
+
+            # AR coefficient → apply DT-to-CT drift transform
+            if param_name in diag_param_index:
+                attr, idx = diag_param_index[param_name]
+                construct_name = param_name.removeprefix("rho_").removeprefix("ar_")
+                dt = self._get_construct_dt_days(construct_name)
+                mu_ar = max(0.001, min(normalized.get("mu", 0.5), 0.999))
+                sigma_ar = normalized.get("sigma", 0.2)
+                mu_drift = -math.log(mu_ar) / dt
+                sigma_drift = sigma_ar / (mu_ar * dt)  # delta method
+                per_element.setdefault(attr, []).append(
+                    (idx, {"mu": mu_drift, "sigma": sigma_drift})
+                )
+                continue
 
             # Check if this parameter maps to a specific array position
             if param_name in offdiag_param_index:
@@ -509,7 +544,7 @@ class SSMModelBuilder:
         self,
         ssm_spec: SSMSpec | None,
         model_spec: ModelSpec | dict | None,
-    ) -> tuple[dict[str, tuple[str, int]], dict[str, tuple[str, int]]]:
+    ) -> tuple[dict[str, tuple[str, int]], dict[str, tuple[str, int]], dict[str, tuple[str, int]]]:
         """Build parameter name → (SSMPriors field, array index) maps.
 
         Uses drift_mask and lambda_mask to determine which array position
@@ -517,27 +552,38 @@ class SSMModelBuilder:
         the sampling order in _sample_drift/_sample_lambda.
 
         Returns:
-            (offdiag_param_index, lambda_param_index) — both are
-            {param_name: (ssm_field, index)} dicts. Empty if no masks.
+            (offdiag_param_index, lambda_param_index, diag_param_index) —
+            all are {param_name: (ssm_field, index)} dicts. Empty if no
+            spec/masks.
         """
         offdiag_index: dict[str, tuple[str, int]] = {}
         lambda_index: dict[str, tuple[str, int]] = {}
+        diag_index: dict[str, tuple[str, int]] = {}
 
         if ssm_spec is None:
-            return offdiag_index, lambda_index
+            return offdiag_index, lambda_index, diag_index
 
         # Parse model_spec for parameter names + roles
         if not model_spec:
-            return offdiag_index, lambda_index
+            return offdiag_index, lambda_index, diag_index
         if isinstance(model_spec, dict):
             spec_obj = ModelSpec.model_validate(model_spec)
         elif isinstance(model_spec, ModelSpec):
             spec_obj = model_spec
         else:
-            return offdiag_index, lambda_index
+            return offdiag_index, lambda_index, diag_index
 
         latent_names = ssm_spec.latent_names or []
         latent_idx_map = {name: i for i, name in enumerate(latent_names)}
+
+        # --- Drift diagonal index (AR coefficients) ---
+        for p in spec_obj.parameters:
+            if p.role != ParameterRole.AR_COEFFICIENT:
+                continue
+            # Convention: parameter name "rho_<construct>" or "ar_<construct>"
+            construct = p.name.removeprefix("rho_").removeprefix("ar_")
+            if construct in latent_idx_map:
+                diag_index[p.name] = ("drift_diag", latent_idx_map[construct])
 
         # --- Drift off-diagonal index ---
         if ssm_spec.drift_mask is not None:
@@ -603,7 +649,7 @@ class SSMModelBuilder:
                 if pos in positions:
                     lambda_index[p.name] = ("lambda_free", positions.index(pos))
 
-        return offdiag_index, lambda_index
+        return offdiag_index, lambda_index, diag_index
 
     def build_model(
         self,
