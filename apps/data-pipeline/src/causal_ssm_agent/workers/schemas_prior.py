@@ -16,6 +16,10 @@ class PriorSource(BaseModel):
     effect_size: str | None = Field(
         default=None, description="Reported effect size if available (e.g., 'r=0.3', 'β=0.2')"
     )
+    study_interval_days: float | None = Field(
+        default=None,
+        description="Observation/measurement interval of this study in days (daily=1, weekly=7, monthly=30)",
+    )
 
 
 class PriorProposal(BaseModel):
@@ -36,6 +40,15 @@ class PriorProposal(BaseModel):
     )
     reasoning: str = Field(
         description="Justification for the chosen prior distribution and parameters"
+    )
+    reference_interval_days: float | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "Observation interval (in days) that the DT prior is expressed in. "
+            "Sourced from the study's measurement schedule (e.g., 7 for a weekly study). "
+            "Used for DT→CT conversion: drift = beta / reference_interval_days."
+        ),
     )
 
 
