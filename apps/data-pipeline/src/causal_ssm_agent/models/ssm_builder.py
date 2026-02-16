@@ -468,10 +468,25 @@ class SSMModelBuilder:
                 )
                 continue
 
-            # Check if this parameter maps to a specific array position
+            # Fixed effect (beta) → apply DT-to-CT coupling rate transform
+            # Literature betas are discrete-time cross-lagged coefficients;
+            # the drift off-diagonal is a continuous-time rate: β_CT ≈ β_DT / dt
             if param_name in offdiag_param_index:
                 attr, idx = offdiag_param_index[param_name]
-                per_element.setdefault(attr, []).append((idx, normalized))
+                dt = 1.0  # default daily
+                # Parse "beta_<cause>_<effect>" to get effect construct's dt
+                if ssm_spec and ssm_spec.latent_names:
+                    latent_set = set(ssm_spec.latent_names)
+                    compound = param_name.removeprefix("beta_")
+                    split = _split_compound_name(compound, latent_set, latent_set)
+                    if split:
+                        _cause, effect = split
+                        dt = self._get_construct_dt_days(effect)
+                mu_beta = normalized.get("mu", 0.0)
+                sigma_beta = normalized.get("sigma", 0.5)
+                per_element.setdefault(attr, []).append(
+                    (idx, {"mu": mu_beta / dt, "sigma": sigma_beta / dt})
+                )
                 continue
             if param_name in lambda_param_index:
                 attr, idx = lambda_param_index[param_name]

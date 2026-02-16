@@ -998,3 +998,201 @@ class TestSSMPriorConversion:
         mu = ssm_priors.drift_diag["mu"]
         mu_val = mu[0] if isinstance(mu, list) else mu
         assert abs(mu_val - expected_mu) < 0.1
+
+    def test_beta_prior_dt_to_ct_transform(self):
+        """FIXED_EFFECT beta priors are converted from DT to CT via beta/dt."""
+        from causal_ssm_agent.models.ssm import SSMSpec
+        from causal_ssm_agent.models.ssm_builder import SSMModelBuilder
+
+        model_spec = {
+            "likelihoods": [
+                {
+                    "variable": "mood_score",
+                    "distribution": "gaussian",
+                    "link": "identity",
+                    "reasoning": "",
+                },
+                {
+                    "variable": "stress_score",
+                    "distribution": "gaussian",
+                    "link": "identity",
+                    "reasoning": "",
+                },
+            ],
+            "parameters": [
+                {
+                    "name": "rho_mood",
+                    "role": "ar_coefficient",
+                    "constraint": "unit_interval",
+                    "description": "",
+                    "search_context": "",
+                },
+                {
+                    "name": "rho_stress",
+                    "role": "ar_coefficient",
+                    "constraint": "unit_interval",
+                    "description": "",
+                    "search_context": "",
+                },
+                {
+                    "name": "beta_stress_mood",
+                    "role": "fixed_effect",
+                    "constraint": "none",
+                    "description": "",
+                    "search_context": "",
+                },
+            ],
+            "reasoning": "",
+        }
+        priors = {
+            "rho_mood": {"distribution": "Beta", "params": {"alpha": 2.0, "beta": 2.0}},
+            "rho_stress": {"distribution": "Beta", "params": {"alpha": 2.0, "beta": 2.0}},
+            "beta_stress_mood": {"distribution": "Normal", "params": {"mu": 0.3, "sigma": 0.15}},
+        }
+        # drift_mask enables off-diagonal at [mood, stress] position
+        drift_mask = np.array([[True, True], [False, True]])
+        ssm_spec = SSMSpec(
+            n_latent=2,
+            n_manifest=2,
+            latent_names=["mood", "stress"],
+            drift_mask=drift_mask,
+        )
+        builder = SSMModelBuilder(model_spec=model_spec, priors=priors)
+        ssm_priors = builder._convert_priors_to_ssm(priors, model_spec, ssm_spec=ssm_spec)
+
+        # With daily default (dt=1.0): beta_CT = 0.3 / 1.0 = 0.3
+        # sigma_CT = 0.15 / 1.0 = 0.15
+        mu = ssm_priors.drift_offdiag["mu"]
+        mu_val = mu[0] if isinstance(mu, list) else mu
+        assert abs(mu_val - 0.3) < 0.01
+
+    def test_beta_prior_dt_to_ct_respects_granularity(self):
+        """FIXED_EFFECT beta transform uses effect construct's granularity."""
+        from causal_ssm_agent.models.ssm import SSMSpec
+        from causal_ssm_agent.models.ssm_builder import SSMModelBuilder
+
+        model_spec = {
+            "likelihoods": [
+                {"variable": "hr", "distribution": "gaussian", "link": "identity", "reasoning": ""},
+                {
+                    "variable": "act",
+                    "distribution": "gaussian",
+                    "link": "identity",
+                    "reasoning": "",
+                },
+            ],
+            "parameters": [
+                {
+                    "name": "rho_heart_rate",
+                    "role": "ar_coefficient",
+                    "constraint": "unit_interval",
+                    "description": "",
+                    "search_context": "",
+                },
+                {
+                    "name": "rho_activity",
+                    "role": "ar_coefficient",
+                    "constraint": "unit_interval",
+                    "description": "",
+                    "search_context": "",
+                },
+                {
+                    "name": "beta_activity_heart_rate",
+                    "role": "fixed_effect",
+                    "constraint": "none",
+                    "description": "",
+                    "search_context": "",
+                },
+            ],
+            "reasoning": "",
+        }
+        priors = {
+            "rho_heart_rate": {"distribution": "Beta", "params": {"alpha": 2.0, "beta": 2.0}},
+            "rho_activity": {"distribution": "Beta", "params": {"alpha": 2.0, "beta": 2.0}},
+            "beta_activity_heart_rate": {
+                "distribution": "Normal",
+                "params": {"mu": 0.3, "sigma": 0.15},
+            },
+        }
+        causal_spec = {
+            "latent": {
+                "constructs": [
+                    {
+                        "name": "heart_rate",
+                        "causal_granularity": "hourly",
+                        "temporal_status": "time_varying",
+                    },
+                    {
+                        "name": "activity",
+                        "causal_granularity": "hourly",
+                        "temporal_status": "time_varying",
+                    },
+                ],
+                "edges": [{"cause": "activity", "effect": "heart_rate"}],
+            },
+            "measurement": {"indicators": []},
+        }
+        drift_mask = np.array([[True, True], [False, True]])
+        ssm_spec = SSMSpec(
+            n_latent=2,
+            n_manifest=2,
+            latent_names=["heart_rate", "activity"],
+            drift_mask=drift_mask,
+        )
+        builder = SSMModelBuilder(model_spec=model_spec, priors=priors, causal_spec=causal_spec)
+        ssm_priors = builder._convert_priors_to_ssm(priors, model_spec, ssm_spec=ssm_spec)
+
+        # Effect construct is heart_rate (hourly → dt=1/24)
+        # beta_CT = 0.3 / (1/24) = 7.2
+        dt_hourly = 1.0 / 24.0
+        expected_mu = 0.3 / dt_hourly
+        mu = ssm_priors.drift_offdiag["mu"]
+        mu_val = mu[0] if isinstance(mu, list) else mu
+        assert abs(mu_val - expected_mu) < 0.1
+
+
+# --- Sparsity Validation Tests ---
+
+
+class TestSparsityValidation:
+    """Test post-pivot sparsity detection."""
+
+    def test_pivot_warns_on_sparse_matrix(self, caplog):
+        """Sparse multi-granularity data triggers a warning."""
+        import logging
+
+        from causal_ssm_agent.utils.data import pivot_to_wide
+
+        # 3 indicators at hourly resolution, but B and C only have 1 observation each.
+        # Total cells = 24*3 = 72, nulls = 23+23 = 46, sparsity = 64% > 50%.
+        rows = []
+        for h in range(24):
+            rows.append({"indicator": "hourly_var", "value": float(h), "time_bucket": h})
+        rows.append({"indicator": "daily_b", "value": 5.0, "time_bucket": 0})
+        rows.append({"indicator": "daily_c", "value": 9.0, "time_bucket": 0})
+
+        raw = pl.DataFrame(rows)
+        logger = logging.getLogger("causal_ssm_agent.utils.data")
+        logger.propagate = True
+        with caplog.at_level(logging.WARNING, logger="causal_ssm_agent.utils.data"):
+            wide = pivot_to_wide(raw)
+
+        assert wide.height == 24
+        assert any("Sparse observation matrix" in msg for msg in caplog.messages)
+
+    def test_pivot_no_warning_on_complete_matrix(self, caplog):
+        """Complete data should not trigger sparsity warning."""
+        import logging
+
+        from causal_ssm_agent.utils.data import pivot_to_wide
+
+        rows = []
+        for t in range(10):
+            rows.append({"indicator": "A", "value": float(t), "time_bucket": t})
+            rows.append({"indicator": "B", "value": float(t * 2), "time_bucket": t})
+
+        raw = pl.DataFrame(rows)
+        with caplog.at_level(logging.WARNING, logger="causal_ssm_agent.utils.data"):
+            pivot_to_wide(raw)
+
+        assert not any("Sparse" in msg for msg in caplog.messages)

@@ -61,13 +61,15 @@ Return a JSON object:
 
 ### Parameter Guidelines by Type
 
-| Parameter Type | Typical Distribution | Typical Range |
-|---------------|---------------------|---------------|
-| beta (causal effect) | Normal(0, 0.5) | [-2, 2] |
-| rho (AR coefficient) | Beta(2, 2) or Uniform(0, 1) | [0, 1] |
-| sigma (residual SD) | HalfNormal(1) | [0, 5] |
-| lambda (loading) | HalfNormal(1) | [0, 3] |
-| tau (random SD) | HalfNormal(0.5) | [0, 2] |
+| Parameter Type | Typical Distribution | Typical Range | Scale |
+|---------------|---------------------|---------------|-------|
+| beta (causal effect) | Normal(0, 0.5) | [-2, 2] | Discrete-time (per observation interval) |
+| rho (AR coefficient) | Beta(2, 2) or Uniform(0, 1) | [0, 1] | Discrete-time persistence |
+| sigma (residual SD) | HalfNormal(1) | [0, 5] | Data scale |
+| lambda (loading) | HalfNormal(1) | [0, 3] | Data scale |
+| tau (random SD) | HalfNormal(0.5) | [0, 2] | Data scale |
+
+**Important**: Both beta and rho priors should be on the **discrete-time scale** (e.g. standardized regression coefficients from the literature). They are automatically converted to continuous-time rates internally.
 """
 
 USER = """\
