@@ -261,9 +261,7 @@ def _sample_channel(loc_j, key, dist_idx, std_j, df, shape_p, r_p, phi_p):
         return g1 / jnp.maximum(g1 + g2, 1e-10)
 
     branches = [_gauss, _student_t, _poisson, _gamma, _bernoulli, _negbin, _beta]
-    return jax.lax.switch(
-        dist_idx, branches, loc_j, key, std_j, df, shape_p, r_p, phi_p
-    )
+    return jax.lax.switch(dist_idx, branches, loc_j, key, std_j, df, shape_p, r_p, phi_p)
 
 
 def _simulate_one_draw_mixed(
@@ -321,7 +319,10 @@ def _simulate_one_draw_mixed(
         loc = lambda_mat @ eta_t + manifest_means
         channel_keys = jax.random.split(okey, n_manifest)
         y_t = vmap(_sample_channel)(
-            loc, channel_keys, dist_indices, manifest_std,
+            loc,
+            channel_keys,
+            dist_indices,
+            manifest_std,
             jnp.full(n_manifest, obs_df),
             jnp.full(n_manifest, obs_shape),
             jnp.full(n_manifest, obs_r),

@@ -1,1 +1,1 @@
-@AGENTS.md
+@apps/data-pipeline/AGENTS.md

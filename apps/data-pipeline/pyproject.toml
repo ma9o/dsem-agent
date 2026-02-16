@@ -2,7 +2,7 @@
 name = "causal-ssm-agent"
 version = "0.1.0"
 description = "LLM-orchestrated causal inference over long-context, multi-source data"
-readme = "README.md"
+readme = "../../README.md"
 authors = [
     { name = "ma9o", email = "magogagiovanni@gmail.com" }
 ]

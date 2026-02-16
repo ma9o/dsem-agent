@@ -1,3 +1,4 @@
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -17,19 +18,17 @@ build/
 .DS_Store
 
 # Data files (raw and processed are gitignored, training and queries are tracked)
-data/raw/**
-data/processed/**
+apps/data-pipeline/data/raw/**
+apps/data-pipeline/data/processed/**
 
 # Inspect AI eval logs
-logs/
-
-# Track queries and training data (committed)
-# data/queries/ - test queries for pipeline
-
-scratchpad/**
+apps/data-pipeline/logs/
 
 # Prefect result persistence
-results/
+apps/data-pipeline/results/
+
+# Local scratchpad
+scratchpad/**
 
 repomix-output.xml
 
@@ -38,6 +37,11 @@ lib/
 
 # Marimo session artifacts
 __marimo__/
+
+# Node / Turborepo
+node_modules/
+.next/
+.turbo/
 
 # Always track gitkeeps (must be last to override above patterns)
 !**/.gitkeep

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import modal
 
-ROOT = Path(__file__).parent
+ROOT = Path(__file__).parent.parent
 
 image = (
     modal.Image.debian_slim(python_version="3.12")
