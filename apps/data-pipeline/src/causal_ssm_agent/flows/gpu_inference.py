@@ -170,6 +170,7 @@ def _stage5_on_gpu(
             ppc_result=ppc_result,
             manifest_names=spec.manifest_names or [],
             ps_result=ps_result,
+            times=times,
         )
     except Exception as e:
         logger.exception("Intervention analysis failed")

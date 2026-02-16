@@ -5,8 +5,10 @@ Implements the standard Bayesian causal inference pattern:
 2. Compute CT steady state: η* = -A⁻¹c
 3. Apply do(X=x) by solving the modified linear system
 4. Compare to baseline → treatment effect
+5. (Optional) Forward-simulate intervention trajectory over time
 
-Uses exact analytic solutions (no scan approximation).
+Uses exact analytic solutions (no scan approximation) for steady-state,
+and discrete-time forward simulation for temporal trajectories.
 """
 
 from __future__ import annotations
@@ -17,6 +19,8 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 from jax import vmap
+
+from causal_ssm_agent.models.ssm.discretization import discretize_system
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +104,98 @@ def treatment_effect(
     return intervened[outcome_idx] - baseline[outcome_idx]
 
 
+def forward_simulate_intervention(
+    drift: jnp.ndarray,
+    cint: jnp.ndarray,
+    treat_idx: int,
+    outcome_idx: int,
+    shift_size: float,
+    dt: float,
+    horizon_steps: int,
+) -> jnp.ndarray:
+    """Forward-simulate an intervention trajectory over time.
+
+    Discretizes the CT system once, finds a baseline via iterative convergence,
+    then clamps the treatment variable at each step and records the outcome
+    trajectory.
+
+    Args:
+        drift: (n, n) continuous-time drift matrix A
+        cint: (n,) continuous intercept c
+        treat_idx: Index of the treatment variable to clamp
+        outcome_idx: Index of the outcome variable to track
+        shift_size: Size of the intervention shift above baseline
+        dt: Time step in fractional days
+        horizon_steps: Number of forward steps to simulate
+
+    Returns:
+        (horizon_steps,) array of outcome effects relative to baseline
+    """
+    n = drift.shape[0]
+    # Discretize once
+    diffusion_cov = jnp.zeros((n, n))  # no noise for mean trajectory
+    Ad, _, cd = discretize_system(drift, diffusion_cov, cint, dt)
+    # cd may be None if cint is zero; handle gracefully
+    if cd is None:
+        cd = jnp.zeros(n)
+
+    # Find baseline via iterative convergence (avoids A⁻¹)
+    def _converge_step(eta, _):
+        return Ad @ eta + cd, None
+
+    eta0 = jnp.zeros(n)
+    baseline, _ = jax.lax.scan(_converge_step, eta0, None, length=500)
+    baseline_outcome = baseline[outcome_idx]
+
+    # Intervened value
+    do_value = baseline[treat_idx] + shift_size
+
+    # Forward simulate with treatment clamped
+    def _step(eta, _):
+        eta_next = Ad @ eta + cd
+        eta_next = eta_next.at[treat_idx].set(do_value)
+        return eta_next, eta_next[outcome_idx] - baseline_outcome
+
+    init = baseline.at[treat_idx].set(do_value)
+    _, trajectory = jax.lax.scan(_step, init, None, length=horizon_steps)
+    return trajectory
+
+
+def _summarize_trajectory(
+    trajectory: jnp.ndarray,
+    dt: float,
+) -> dict[str, float]:
+    """Extract summary statistics from an effect trajectory.
+
+    Args:
+        trajectory: (horizon_steps,) array of effects over time
+        dt: Time step in fractional days
+
+    Returns:
+        Dict with temporal summary keys
+    """
+    steps_1d = min(int(1.0 / dt), len(trajectory))
+    steps_7d = min(int(7.0 / dt), len(trajectory))
+    steps_30d = min(int(30.0 / dt), len(trajectory))
+
+    effect_1d = float(trajectory[steps_1d - 1]) if steps_1d > 0 else 0.0
+    effect_7d = float(trajectory[steps_7d - 1]) if steps_7d > 0 else 0.0
+    effect_30d = float(trajectory[steps_30d - 1]) if steps_30d > 0 else 0.0
+
+    abs_traj = jnp.abs(trajectory)
+    peak_idx = int(jnp.argmax(abs_traj))
+    peak_effect = float(trajectory[peak_idx])
+    time_to_peak_days = float((peak_idx + 1) * dt)
+
+    return {
+        "effect_1d": effect_1d,
+        "effect_7d": effect_7d,
+        "effect_30d": effect_30d,
+        "peak_effect": peak_effect,
+        "time_to_peak_days": time_to_peak_days,
+    }
+
+
 def compute_interventions(
     samples: dict[str, jnp.ndarray],
     treatments: list[str],
@@ -109,6 +205,7 @@ def compute_interventions(
     ppc_result: dict | None = None,
     manifest_names: list[str] | None = None,
     ps_result: dict | None = None,
+    times: jnp.ndarray | None = None,
 ) -> list[dict[str, Any]]:
     """Compute intervention effects for all treatments from posterior samples.
 
@@ -124,6 +221,8 @@ def compute_interventions(
         ppc_result: Optional PPC result dict for attaching per-treatment warnings.
         manifest_names: Manifest variable names (needed if ppc_result provided).
         ps_result: Optional power-scaling result dict for flagging prior-dominated effects.
+        times: Optional observation time points (fractional days). When provided,
+            forward simulation is run alongside steady-state analysis.
 
     Returns:
         List of intervention result dicts, sorted by |effect_size| descending.
@@ -166,6 +265,21 @@ def compute_interventions(
     if cint_draws is None:
         cint_draws = jnp.zeros((drift_draws.shape[0], n_latent))
 
+    # Pre-compute forward simulation parameters from times
+    dt_median: float | None = None
+    horizon_steps: int | None = None
+    if times is not None and len(times) > 1:
+        diffs = jnp.diff(times)
+        dt_median = float(jnp.median(diffs))
+        if dt_median > 0:
+            horizon_steps = int(30.0 / dt_median)  # 30-day horizon
+
+    # Lambda for manifest-level projection
+    lambda_draws = samples.get("lambda")
+    lambda_mean: jnp.ndarray | None = None
+    if lambda_draws is not None:
+        lambda_mean = jnp.mean(lambda_draws, axis=0) if lambda_draws.ndim == 3 else lambda_draws
+
     results: list[dict[str, Any]] = []
     for treatment_name in treatments:
         treat_idx = name_to_idx.get(treatment_name)
@@ -198,6 +312,34 @@ def compute_interventions(
                 entry["warning"] = f"Effect not identifiable (blocked by: {', '.join(blockers)})"
             else:
                 entry["warning"] = "Effect not identifiable (missing proxies)"
+
+        # Forward simulation for temporal effects
+        if dt_median is not None and horizon_steps is not None and horizon_steps > 0:
+            try:
+                trajectories = vmap(
+                    lambda d, c, ti=treat_idx, oi=outcome_idx: forward_simulate_intervention(
+                        d, c, ti, oi, shift_size=1.0, dt=dt_median, horizon_steps=horizon_steps
+                    )
+                )(drift_draws, cint_draws)
+                mean_traj = jnp.mean(trajectories, axis=0)
+                entry["temporal"] = _summarize_trajectory(mean_traj, dt_median)
+
+                # Manifest-level effects via lambda projection
+                # lambda_mean is (n_manifest, n_latent); column outcome_idx
+                # gives each manifest's loading on the outcome latent.
+                if lambda_mean is not None and lambda_mean.ndim == 2:
+                    m_names = manifest_names or []
+                    loadings = lambda_mean[:, outcome_idx]
+                    manifest_effects = {}
+                    for mi in range(len(loadings)):
+                        loading_val = float(loadings[mi])
+                        if abs(loading_val) > 1e-8:
+                            name = m_names[mi] if mi < len(m_names) else f"manifest_{mi}"
+                            manifest_effects[name] = loading_val * mean_effect
+                    if manifest_effects:
+                        entry["manifest_effects"] = manifest_effects
+            except Exception:
+                logger.debug("Forward simulation failed for '%s'", treatment_name, exc_info=True)
 
         results.append(entry)
 
