@@ -1,65 +1,149 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { uploadFile } from "@/lib/api/endpoints";
+import { MOCK_RUN_ID, isMockMode } from "@/lib/api/mock-provider";
+import { getDeploymentId, triggerRun } from "@/lib/api/prefect";
+import { ArrowRight, Upload } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useCallback, useRef, useState } from "react";
+
+export default function LandingPage() {
+  const router = useRouter();
+  const [question, setQuestion] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const dropped = e.dataTransfer.files[0];
+    if (dropped) setFile(dropped);
+  }, []);
+
+  const handleSubmit = async () => {
+    if (!question.trim()) {
+      setError("Please enter a research question.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      if (isMockMode()) {
+        router.push(`/analysis/${MOCK_RUN_ID}`);
+        return;
+      }
+
+      const userId = `user-${Date.now()}`;
+
+      if (file) {
+        await uploadFile(file, userId);
+      }
+
+      const deploymentId = await getDeploymentId();
+      const runId = await triggerRun(deploymentId, {
+        query: question,
+        user_id: userId,
+      });
+
+      router.push(`/analysis/${runId}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start analysis");
+      setIsSubmitting(false);
+    }
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <main className="flex min-h-screen flex-col items-center justify-center p-8">
+      <div className="w-full max-w-2xl space-y-8">
+        <div className="text-center space-y-2">
+          <h1 className="text-4xl font-bold tracking-tight">Causal Inference Pipeline</h1>
+          <p className="text-lg text-muted-foreground">
+            From research question to quantified treatment effects
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Research Question</CardTitle>
+            <CardDescription>What causal relationship do you want to investigate?</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <textarea
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring min-h-[100px] resize-y"
+              placeholder="e.g., How does my daily screen time affect my sleep quality and mood?"
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Data Upload</CardTitle>
+            <CardDescription>Upload your Google Takeout export (ZIP or JSON)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div
+              className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors ${
+                dragOver
+                  ? "border-primary bg-primary/5"
+                  : "border-muted-foreground/25 hover:border-muted-foreground/50"
+              }`}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleDrop}
+            >
+              <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+              {file ? (
+                <p className="text-sm font-medium">{file.name}</p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Drag and drop or{" "}
+                  <button
+                    type="button"
+                    className="text-primary underline"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    browse
+                  </button>
+                </p>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                accept=".zip,.json"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) setFile(f);
+                }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {error && <p className="text-sm text-destructive text-center">{error}</p>}
+
+        <Button
+          className="w-full"
+          size="lg"
+          onClick={handleSubmit}
+          disabled={isSubmitting || !question.trim()}
+        >
+          {isSubmitting ? "Starting Analysis..." : "Start Analysis"}
+          <ArrowRight className="h-4 w-4 ml-2" />
+        </Button>
+      </div>
+    </main>
   );
 }
