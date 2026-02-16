@@ -89,6 +89,14 @@ Return a JSON object with this structure:
 }
 ```
 
+## Continuous-Time Dynamics
+
+The underlying model is a **continuous-time** state-space model (CT-SSM). Time is measured in **fractional days**.
+
+- **AR coefficients** (role `ar_coefficient`) represent **discrete-time persistence** per observation interval. They are automatically converted to continuous-time drift rates internally via `drift = -ln(AR) / dt`. You do NOT need to do this conversion — just propose AR values in [0, 1].
+- **Fixed effects** (beta coefficients) are **continuous-time coupling rates per day**. A beta of 0.3 means that a 1-unit increase in the cause produces a steady-state flow of 0.3 units/day into the effect.
+- Each construct's `causal_granularity` (hourly, daily, weekly, etc.) determines the natural timescale of its AR coefficient. An AR of 0.7 at daily granularity means a different half-life than AR of 0.7 at hourly granularity — the system handles this automatically.
+
 ## Guidelines
 
 - Prefer simpler models when uncertainty is high
