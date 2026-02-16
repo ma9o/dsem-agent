@@ -5,9 +5,13 @@ Separates:
 2. MeasurementModel - observed indicators that reflect constructs (data-driven)
 """
 
+import logging
+import re
 from enum import StrEnum
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+logger = logging.getLogger(__name__)
 
 # Valid aggregation functions for indicator specifications
 # Aggregation functions applied when bucketing raw extractions to aggregation window.
@@ -37,6 +41,77 @@ VALID_AGGREGATIONS = {
     "trend",
     "n_unique",
 }
+
+
+class ObservationKind(StrEnum):
+    """Derived observation kind from aggregation + measurement_dtype.
+
+    Determines the correct measurement equation for the SSM:
+    - CUMULATIVE: y(t) = integral of Lambda * x(s) ds + epsilon
+    - WINDOW_AVERAGE/VARIABILITY: y(t) = (1/T) integral of Lambda * x(s) ds + epsilon
+    - POINT_IN_TIME: y(t) = Lambda * x(t) + epsilon
+    - FREQUENCY: y(t) = count of events in window (Poisson-like)
+    """
+
+    CUMULATIVE = "cumulative"
+    WINDOW_AVERAGE = "window_average"
+    POINT_IN_TIME = "point_in_time"
+    VARIABILITY = "variability"
+    FREQUENCY = "frequency"
+
+
+# Classification rules: (aggregation, dtype) → ObservationKind
+_CUMULATIVE_AGGS = {"sum"}
+_POINT_IN_TIME_AGGS = {"first", "last"}
+_VARIABILITY_AGGS = {"std", "var", "range", "cv", "iqr", "instability", "skew", "kurtosis"}
+_FREQUENCY_AGGS = {"count", "n_unique"}
+
+# Aggregation keywords that conflict with how_to_measure text
+_SEMANTIC_COLLISIONS: list[tuple[str, set[str], str]] = [
+    # (regex pattern in how_to_measure, conflicting aggregations, explanation)
+    (r"\bcount\b|\bnumber of\b|\bhow many\b", {"mean", "median", "std", "var"},
+     "how_to_measure implies counting but aggregation computes a statistic"),
+    (r"\baverage\b|\bmean\b", {"sum", "first", "last", "count"},
+     "how_to_measure implies averaging but aggregation is not mean/median"),
+    (r"\btotal\b|\bcumulative\b|\bsum\b", {"mean", "median", "first", "last"},
+     "how_to_measure implies summing but aggregation is not sum"),
+    (r"\blast\b|\bmost recent\b|\bcurrent\b", {"mean", "sum", "median"},
+     "how_to_measure implies point-in-time but aggregation is a window statistic"),
+]
+
+
+def derive_observation_kind(aggregation: str) -> ObservationKind:
+    """Derive observation kind from aggregation function."""
+    if aggregation in _CUMULATIVE_AGGS:
+        return ObservationKind.CUMULATIVE
+    if aggregation in _POINT_IN_TIME_AGGS:
+        return ObservationKind.POINT_IN_TIME
+    if aggregation in _VARIABILITY_AGGS:
+        return ObservationKind.VARIABILITY
+    if aggregation in _FREQUENCY_AGGS:
+        return ObservationKind.FREQUENCY
+    # Default: window average (mean, median, percentiles, entropy, trend)
+    return ObservationKind.WINDOW_AVERAGE
+
+
+def check_semantic_collisions(
+    how_to_measure: str,
+    aggregation: str,
+) -> list[str]:
+    """Check for inconsistencies between how_to_measure text and aggregation.
+
+    Returns list of warning messages (empty if no collisions found).
+    """
+    warnings = []
+    text_lower = how_to_measure.lower()
+    for pattern, conflict_aggs, explanation in _SEMANTIC_COLLISIONS:
+        if aggregation in conflict_aggs and re.search(pattern, text_lower):
+            warnings.append(
+                f"Semantic collision: {explanation}. "
+                f"how_to_measure contains '{re.search(pattern, text_lower).group()}' "
+                f"but aggregation='{aggregation}'."
+            )
+    return warnings
 
 
 class Role(StrEnum):
@@ -296,6 +371,29 @@ class Indicator(BaseModel):
                 f"Invalid measurement_dtype '{v}'. Must be one of: {', '.join(sorted(valid))}"
             )
         return v
+
+    @model_validator(mode="after")
+    def warn_semantic_collisions(self) -> "Indicator":
+        """Log warnings when how_to_measure text conflicts with aggregation."""
+        collisions = check_semantic_collisions(self.how_to_measure, self.aggregation)
+        for warning in collisions:
+            logger.warning("Indicator '%s': %s", self.name, warning)
+        return self
+
+    @property
+    def observation_kind(self) -> ObservationKind:
+        """Derived observation kind from aggregation + measurement_dtype."""
+        return derive_observation_kind(self.aggregation)
+
+    @property
+    def requires_integral_measurement(self) -> bool:
+        """Whether this indicator requires an integral measurement equation.
+
+        Cumulative observations (e.g., step count = sum over window) relate to
+        the integral of the latent process: y(t) = integral(Lambda*x(s)ds) + epsilon
+        rather than the standard instantaneous equation: y(t) = Lambda*x(t) + epsilon.
+        """
+        return self.observation_kind == ObservationKind.CUMULATIVE
 
 
 class MeasurementModel(BaseModel):

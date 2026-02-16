@@ -16,9 +16,12 @@ from causal_ssm_agent.orchestrator.schemas import (
     Indicator,
     LatentModel,
     MeasurementModel,
+    ObservationKind,
     Role,
     TemporalStatus,
+    check_semantic_collisions,
     compute_lag_hours,
+    derive_observation_kind,
 )
 
 
@@ -465,3 +468,84 @@ class TestComputeLagHours:
         """Finer to coarser also returns coarser granularity."""
         assert compute_lag_hours("hourly", "daily", lagged=True) == 24
         assert compute_lag_hours("daily", "weekly", lagged=True) == 168
+
+
+class TestDeriveObservationKind:
+    """Tests for derive_observation_kind function."""
+
+    def test_cumulative(self):
+        """Sum aggregation → cumulative."""
+        assert derive_observation_kind("sum") == ObservationKind.CUMULATIVE
+
+    def test_point_in_time(self):
+        """First/last → point_in_time."""
+        assert derive_observation_kind("first") == ObservationKind.POINT_IN_TIME
+        assert derive_observation_kind("last") == ObservationKind.POINT_IN_TIME
+
+    def test_variability(self):
+        """Variability aggregations classified correctly."""
+        for agg in ("std", "var", "range", "cv", "iqr", "instability"):
+            assert derive_observation_kind(agg) == ObservationKind.VARIABILITY
+
+    def test_frequency(self):
+        """Count/n_unique → frequency."""
+        assert derive_observation_kind("count") == ObservationKind.FREQUENCY
+        assert derive_observation_kind("n_unique") == ObservationKind.FREQUENCY
+
+    def test_window_average_default(self):
+        """Mean, median, percentiles → window_average."""
+        for agg in ("mean", "median", "p10", "p75", "entropy", "trend"):
+            assert derive_observation_kind(agg) == ObservationKind.WINDOW_AVERAGE
+
+
+class TestSemanticCollisions:
+    """Tests for check_semantic_collisions function."""
+
+    def test_count_text_mean_agg_collision(self):
+        """'count' in how_to_measure + mean aggregation → warning."""
+        warnings = check_semantic_collisions(
+            "Count the number of exercise sessions", "mean"
+        )
+        assert len(warnings) >= 1
+        assert "counting" in warnings[0].lower() or "count" in warnings[0].lower()
+
+    def test_no_collision(self):
+        """Consistent text and aggregation → no warnings."""
+        warnings = check_semantic_collisions(
+            "Average daily mood rating", "mean"
+        )
+        assert len(warnings) == 0
+
+    def test_total_text_mean_agg_collision(self):
+        """'total' in text + mean aggregation → warning."""
+        warnings = check_semantic_collisions(
+            "Total steps walked during the day", "mean"
+        )
+        assert len(warnings) >= 1
+
+    def test_last_text_sum_agg_collision(self):
+        """'most recent' in text + sum aggregation → warning."""
+        warnings = check_semantic_collisions(
+            "The most recent blood pressure reading", "sum"
+        )
+        assert len(warnings) >= 1
+
+
+class TestIndicatorObservationKind:
+    """Tests for Indicator.observation_kind property."""
+
+    def test_observation_kind_property(self, indicator_factory):
+        """Indicator.observation_kind returns derived kind."""
+        ind = indicator_factory("steps", "activity", aggregation="sum", dtype="count")
+        assert ind.observation_kind == ObservationKind.CUMULATIVE
+
+    def test_requires_integral_measurement(self, indicator_factory):
+        """Cumulative indicators require integral measurement equation."""
+        cumulative = indicator_factory("steps", "activity", aggregation="sum", dtype="count")
+        assert cumulative.requires_integral_measurement is True
+
+        average = indicator_factory("mood_rating", "mood", aggregation="mean", dtype="continuous")
+        assert average.requires_integral_measurement is False
+
+        point = indicator_factory("last_bp", "bp", aggregation="last", dtype="continuous")
+        assert point.requires_integral_measurement is False
