@@ -840,3 +840,95 @@ class TestCheckConstructCorrelations:
             i for i in result["issues"] if i["issue_type"] == "low_construct_correlation"
         ]
         assert len(corr_issues) == 0
+
+
+# ==============================================================================
+# WORKER EXTRACTION PROVENANCE
+# ==============================================================================
+
+
+class TestExtractionProvenance:
+    """Test evidence_text and confidence fields on Extraction."""
+
+    def test_extraction_with_provenance(self):
+        """Extraction accepts evidence_text and confidence."""
+        from causal_ssm_agent.workers.schemas import Extraction
+
+        ext = Extraction(
+            indicator="stress_score",
+            value=4.5,
+            timestamp="2024-01-15T10:00:00",
+            evidence_text="I felt very stressed today after the meeting",
+            confidence=0.9,
+        )
+        assert ext.evidence_text == "I felt very stressed today after the meeting"
+        assert ext.confidence == 0.9
+
+    def test_extraction_provenance_optional(self):
+        """Provenance fields default to None."""
+        from causal_ssm_agent.workers.schemas import Extraction
+
+        ext = Extraction(indicator="stress_score", value=4.5)
+        assert ext.evidence_text is None
+        assert ext.confidence is None
+
+    def test_confidence_bounds_validation(self):
+        """Confidence must be between 0 and 1."""
+        from pydantic import ValidationError
+
+        from causal_ssm_agent.workers.schemas import Extraction
+
+        with pytest.raises(ValidationError):
+            Extraction(indicator="x", value=1, confidence=1.5)
+        with pytest.raises(ValidationError):
+            Extraction(indicator="x", value=1, confidence=-0.1)
+
+    def test_to_dataframe_includes_provenance(self):
+        """WorkerOutput.to_dataframe includes provenance columns."""
+        from causal_ssm_agent.workers.schemas import Extraction, WorkerOutput
+
+        output = WorkerOutput(
+            extractions=[
+                Extraction(
+                    indicator="stress_score",
+                    value=4.5,
+                    timestamp="2024-01-15",
+                    evidence_text="felt stressed",
+                    confidence=0.8,
+                ),
+                Extraction(
+                    indicator="sleep_hours",
+                    value=7.0,
+                    timestamp="2024-01-15",
+                ),
+            ]
+        )
+        df = output.to_dataframe()
+        assert "evidence_text" in df.columns
+        assert "confidence" in df.columns
+        assert df["evidence_text"][0] == "felt stressed"
+        assert df["confidence"][0] == 0.8
+        assert df["evidence_text"][1] is None
+        assert df["confidence"][1] is None
+
+    def test_validate_worker_output_passes_provenance(self):
+        """validate_worker_output preserves provenance fields."""
+        from causal_ssm_agent.workers.schemas import validate_worker_output
+
+        causal_spec = _make_spec()
+        data = {
+            "extractions": [
+                {
+                    "indicator": "stress_score",
+                    "value": 4.5,
+                    "timestamp": "2024-01-15",
+                    "evidence_text": "source text",
+                    "confidence": 0.95,
+                }
+            ]
+        }
+        output, errors = validate_worker_output(data, causal_spec)
+        assert not errors
+        assert output is not None
+        assert output.extractions[0].evidence_text == "source text"
+        assert output.extractions[0].confidence == 0.95
