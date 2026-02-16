@@ -1,0 +1,47 @@
+{
+  "causal_spec": {
+    "latent": {
+      "constructs": [
+        { "name": "procrastination", "description": "Task avoidance behavior", "role": "endogenous", "is_outcome": true, "temporal_status": "time_varying", "causal_granularity": "daily" },
+        { "name": "stress", "description": "Perceived stress", "role": "endogenous", "is_outcome": false, "temporal_status": "time_varying", "causal_granularity": "daily" },
+        { "name": "sleep_quality", "description": "Sleep quality", "role": "endogenous", "is_outcome": false, "temporal_status": "time_varying", "causal_granularity": "daily" },
+        { "name": "digital_distraction", "description": "Non-productive media time", "role": "endogenous", "is_outcome": false, "temporal_status": "time_varying", "causal_granularity": "daily" },
+        { "name": "self_efficacy", "description": "Self-belief in task ability", "role": "endogenous", "is_outcome": false, "temporal_status": "time_varying", "causal_granularity": "weekly" },
+        { "name": "workload", "description": "External task demands", "role": "exogenous", "is_outcome": false, "temporal_status": "time_varying", "causal_granularity": "daily" }
+      ],
+      "edges": [
+        { "cause": "stress", "effect": "procrastination", "description": "Stress triggers avoidance", "lagged": false },
+        { "cause": "sleep_quality", "effect": "stress", "description": "Poor sleep increases stress", "lagged": true },
+        { "cause": "digital_distraction", "effect": "procrastination", "description": "Media displaces work", "lagged": false },
+        { "cause": "self_efficacy", "effect": "procrastination", "description": "Low efficacy leads to avoidance", "lagged": true },
+        { "cause": "workload", "effect": "stress", "description": "Workload increases stress", "lagged": false },
+        { "cause": "procrastination", "effect": "stress", "description": "Procrastination accumulates stress", "lagged": true },
+        { "cause": "stress", "effect": "sleep_quality", "description": "Stress impairs sleep", "lagged": true },
+        { "cause": "procrastination", "effect": "self_efficacy", "description": "Procrastination erodes efficacy", "lagged": true }
+      ]
+    },
+    "measurement": {
+      "indicators": [
+        { "name": "youtube_watch_time", "construct_name": "digital_distraction", "how_to_measure": "Total YouTube watch duration in minutes per day", "measurement_granularity": "daily", "measurement_dtype": "continuous", "aggregation": "sum", "ordinal_levels": null },
+        { "name": "search_count", "construct_name": "digital_distraction", "how_to_measure": "Number of non-work-related searches per day", "measurement_granularity": "daily", "measurement_dtype": "count", "aggregation": "count", "ordinal_levels": null },
+        { "name": "late_night_activity", "construct_name": "sleep_quality", "how_to_measure": "Any digital activity between 11PM-6AM (binary)", "measurement_granularity": "daily", "measurement_dtype": "binary", "aggregation": "max", "ordinal_levels": null },
+        { "name": "task_completion_rate", "construct_name": "procrastination", "how_to_measure": "Proportion of planned tasks completed (0-1)", "measurement_granularity": "daily", "measurement_dtype": "continuous", "aggregation": "mean", "ordinal_levels": null },
+        { "name": "deadline_proximity_searches", "construct_name": "stress", "how_to_measure": "Count of deadline/urgent-related searches", "measurement_granularity": "daily", "measurement_dtype": "count", "aggregation": "sum", "ordinal_levels": null },
+        { "name": "productive_hours", "construct_name": "self_efficacy", "how_to_measure": "Hours spent on work-related activities per week", "measurement_granularity": "weekly", "measurement_dtype": "continuous", "aggregation": "sum", "ordinal_levels": null },
+        { "name": "workload_events", "construct_name": "workload", "how_to_measure": "Number of calendar events and deadlines per day", "measurement_granularity": "daily", "measurement_dtype": "count", "aggregation": "count", "ordinal_levels": null }
+      ]
+    },
+    "identifiability": {
+      "identifiable_treatments": {
+        "stress": { "method": "do_calculus", "estimand": "P(procrastination | do(stress))", "marginalized_confounders": [], "instruments": [] },
+        "digital_distraction": { "method": "do_calculus", "estimand": "P(procrastination | do(digital_distraction))", "marginalized_confounders": [], "instruments": [] },
+        "sleep_quality": { "method": "do_calculus", "estimand": "P(procrastination | do(sleep_quality))", "marginalized_confounders": [], "instruments": [] },
+        "workload": { "method": "do_calculus", "estimand": "P(procrastination | do(workload))", "marginalized_confounders": [], "instruments": [] }
+      },
+      "non_identifiable_treatments": {}
+    }
+  },
+  "filtered_treatments": ["stress", "digital_distraction", "sleep_quality", "workload"],
+  "raw_completion": "[LLM trace for measurement model proposal]",
+  "context": "Stage 1b proposes indicators and checks identifiability. Assumption A7 (reflective measurement model) enables causal identification by linking latent constructs to observable data."
+}

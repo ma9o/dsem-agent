@@ -1,0 +1,74 @@
+{
+  "latent_model": {
+    "constructs": [
+      {
+        "name": "procrastination",
+        "description": "The tendency to delay or avoid tasks despite knowing it will have negative consequences",
+        "role": "endogenous",
+        "is_outcome": true,
+        "temporal_status": "time_varying",
+        "causal_granularity": "daily"
+      },
+      {
+        "name": "stress",
+        "description": "Perceived psychological stress and pressure from responsibilities",
+        "role": "endogenous",
+        "is_outcome": false,
+        "temporal_status": "time_varying",
+        "causal_granularity": "daily"
+      },
+      {
+        "name": "sleep_quality",
+        "description": "Quality and duration of sleep, affecting cognitive resources",
+        "role": "endogenous",
+        "is_outcome": false,
+        "temporal_status": "time_varying",
+        "causal_granularity": "daily"
+      },
+      {
+        "name": "digital_distraction",
+        "description": "Time spent on non-productive digital media consumption",
+        "role": "endogenous",
+        "is_outcome": false,
+        "temporal_status": "time_varying",
+        "causal_granularity": "daily"
+      },
+      {
+        "name": "self_efficacy",
+        "description": "Belief in one's ability to accomplish tasks and goals",
+        "role": "endogenous",
+        "is_outcome": false,
+        "temporal_status": "time_varying",
+        "causal_granularity": "weekly"
+      },
+      {
+        "name": "workload",
+        "description": "External task demands and deadlines",
+        "role": "exogenous",
+        "is_outcome": false,
+        "temporal_status": "time_varying",
+        "causal_granularity": "daily"
+      }
+    ],
+    "edges": [
+      { "cause": "stress", "effect": "procrastination", "description": "High stress triggers avoidance behavior", "lagged": false },
+      { "cause": "sleep_quality", "effect": "stress", "description": "Poor sleep increases next-day stress", "lagged": true },
+      { "cause": "digital_distraction", "effect": "procrastination", "description": "Media consumption displaces productive work", "lagged": false },
+      { "cause": "self_efficacy", "effect": "procrastination", "description": "Low self-efficacy leads to task avoidance", "lagged": true },
+      { "cause": "workload", "effect": "stress", "description": "Higher workload increases stress", "lagged": false },
+      { "cause": "procrastination", "effect": "stress", "description": "Procrastination increases stress from accumulating tasks", "lagged": true },
+      { "cause": "stress", "effect": "sleep_quality", "description": "Stress impairs sleep quality", "lagged": true },
+      { "cause": "procrastination", "effect": "self_efficacy", "description": "Chronic procrastination erodes self-efficacy", "lagged": true }
+    ]
+  },
+  "outcome_name": "procrastination",
+  "treatments": ["stress", "sleep_quality", "digital_distraction", "self_efficacy", "workload"],
+  "graph_properties": {
+    "is_acyclic": true,
+    "n_constructs": 6,
+    "n_edges": 8,
+    "has_single_outcome": true
+  },
+  "raw_completion": "[LLM trace would appear here - full prompt and completion text for debugging]",
+  "context": "Stage 1a proposes a latent causal model based on domain knowledge alone. The model specifies theoretical constructs and their causal relationships. Assumption A4 (acyclicity) requires the contemporaneous subgraph to be a DAG. Feedback loops are modeled as lagged effects across time steps (A3 Markov property)."
+}

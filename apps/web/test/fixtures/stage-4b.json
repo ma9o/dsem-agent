@@ -1,0 +1,26 @@
+{
+  "parametric_id": {
+    "t_rule": {
+      "satisfies": true,
+      "n_free_params": 8,
+      "n_moments": 15,
+      "param_counts": {
+        "fixed_effect": 4,
+        "ar_coefficient": 2,
+        "residual_sd": 2
+      }
+    },
+    "per_param_classification": [
+      { "name": "beta_stress_procrastination", "classification": "structurally_identified", "contraction_ratio": 0.85 },
+      { "name": "beta_distraction_procrastination", "classification": "structurally_identified", "contraction_ratio": 0.78 },
+      { "name": "beta_sleep_stress", "classification": "structurally_identified", "contraction_ratio": 0.82 },
+      { "name": "beta_workload_stress", "classification": "structurally_identified", "contraction_ratio": 0.91 },
+      { "name": "rho_procrastination", "classification": "structurally_identified", "contraction_ratio": 0.88 },
+      { "name": "rho_stress", "classification": "structurally_identified", "contraction_ratio": 0.84 },
+      { "name": "sigma_procrastination", "classification": "structurally_identified", "contraction_ratio": 0.76 },
+      { "name": "sigma_stress", "classification": "boundary", "contraction_ratio": 0.45 }
+    ],
+    "weak_params": []
+  },
+  "context": "Stage 4b checks parametric identifiability via the T-rule (free parameters vs moment conditions). Parameters are classified as structurally identified, boundary, or weak based on profile likelihood analysis."
+}

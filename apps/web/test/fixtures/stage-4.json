@@ -1,0 +1,41 @@
+{
+  "model_spec": {
+    "likelihoods": [
+      { "variable": "youtube_watch_time", "distribution": "gaussian", "link": "identity", "reasoning": "Continuous minutes with approximately normal distribution" },
+      { "variable": "search_count", "distribution": "poisson", "link": "log", "reasoning": "Count data with no upper bound" },
+      { "variable": "late_night_activity", "distribution": "bernoulli", "link": "logit", "reasoning": "Binary indicator" },
+      { "variable": "task_completion_rate", "distribution": "beta", "link": "logit", "reasoning": "Proportion bounded between 0 and 1" },
+      { "variable": "deadline_proximity_searches", "distribution": "poisson", "link": "log", "reasoning": "Count of search events" },
+      { "variable": "productive_hours", "distribution": "gaussian", "link": "identity", "reasoning": "Continuous hours, normally distributed" },
+      { "variable": "workload_events", "distribution": "poisson", "link": "log", "reasoning": "Count of calendar events" }
+    ],
+    "parameters": [
+      { "name": "beta_stress_procrastination", "role": "fixed_effect", "constraint": "none", "description": "Effect of stress on procrastination (contemporaneous)", "search_context": "stress procrastination causal effect meta-analysis" },
+      { "name": "beta_distraction_procrastination", "role": "fixed_effect", "constraint": "none", "description": "Effect of digital distraction on procrastination", "search_context": "digital distraction procrastination effect size" },
+      { "name": "beta_sleep_stress", "role": "fixed_effect", "constraint": "none", "description": "Effect of sleep quality on next-day stress", "search_context": "sleep quality stress longitudinal effect" },
+      { "name": "beta_workload_stress", "role": "fixed_effect", "constraint": "none", "description": "Effect of workload on stress", "search_context": "workload stress relationship effect size" },
+      { "name": "rho_procrastination", "role": "ar_coefficient", "constraint": "unit_interval", "description": "Autoregressive coefficient for procrastination", "search_context": "procrastination temporal stability autocorrelation" },
+      { "name": "rho_stress", "role": "ar_coefficient", "constraint": "unit_interval", "description": "Autoregressive coefficient for stress", "search_context": "daily stress autocorrelation" },
+      { "name": "sigma_procrastination", "role": "residual_sd", "constraint": "positive", "description": "Residual standard deviation for procrastination", "search_context": "procrastination variance" },
+      { "name": "sigma_stress", "role": "residual_sd", "constraint": "positive", "description": "Residual standard deviation for stress", "search_context": "daily stress variance" }
+    ],
+    "reasoning": "The model uses a continuous-time SSM with daily dynamics. Gaussian likelihoods for continuous indicators, Poisson for counts, Bernoulli for binary. AR(1) structure captures temporal persistence. Fixed effects capture cross-construct causal effects as specified in the DAG."
+  },
+  "priors": [
+    { "parameter": "beta_stress_procrastination", "distribution": "Normal", "params": { "mu": 0.3, "sigma": 0.15 }, "sources": [{ "title": "Steel (2007) - Meta-analysis of procrastination", "url": null, "snippet": "Stress-procrastination correlation r=0.35 across 216 studies", "effect_size": "r=0.35" }], "confidence": 0.7, "reasoning": "Moderate positive effect expected based on meta-analytic evidence" },
+    { "parameter": "beta_distraction_procrastination", "distribution": "Normal", "params": { "mu": 0.25, "sigma": 0.1 }, "sources": [], "confidence": 0.5, "reasoning": "Expected positive but weaker effect than stress" },
+    { "parameter": "rho_procrastination", "distribution": "Beta", "params": { "alpha": 5, "beta": 2 }, "sources": [], "confidence": 0.6, "reasoning": "Procrastination is moderately persistent day-to-day" },
+    { "parameter": "rho_stress", "distribution": "Beta", "params": { "alpha": 4, "beta": 3 }, "sources": [], "confidence": 0.6, "reasoning": "Stress shows moderate autocorrelation" },
+    { "parameter": "sigma_procrastination", "distribution": "HalfNormal", "params": { "sigma": 0.5 }, "sources": [], "confidence": 0.5, "reasoning": "Weakly informative prior on residual SD" },
+    { "parameter": "sigma_stress", "distribution": "HalfNormal", "params": { "sigma": 0.5 }, "sources": [], "confidence": 0.5, "reasoning": "Weakly informative prior on residual SD" }
+  ],
+  "validation_retries": [],
+  "ssm_equations": [
+    "dη(t) = (Aη(t) + Bx(t) + c)dt + GdW(t)",
+    "η(t) = [procrastination(t), stress(t), sleep_quality(t), digital_distraction(t), self_efficacy(t)]",
+    "y(t) = Λη(t) + ε(t)",
+    "A = diag(ρ_procrastination, ρ_stress, ρ_sleep, ρ_distraction, ρ_efficacy) + off-diagonal causal effects"
+  ],
+  "raw_completion": "[LLM trace for model specification]",
+  "context": "Stage 4 specifies the statistical model: distribution families, link functions, parameters, and priors. The SSM equations encode the continuous-time dynamics. See docs/modeling/functional_spec.md for details."
+}

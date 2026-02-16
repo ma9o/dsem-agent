@@ -1,0 +1,34 @@
+{
+  "workers": [
+    { "worker_id": 0, "status": "completed", "n_extractions": 145, "chunk_size": 100 },
+    { "worker_id": 1, "status": "completed", "n_extractions": 132, "chunk_size": 100 },
+    { "worker_id": 2, "status": "completed", "n_extractions": 158, "chunk_size": 100 },
+    { "worker_id": 3, "status": "completed", "n_extractions": 121, "chunk_size": 100 },
+    { "worker_id": 4, "status": "completed", "n_extractions": 167, "chunk_size": 100 },
+    { "worker_id": 5, "status": "completed", "n_extractions": 139, "chunk_size": 100 },
+    { "worker_id": 6, "status": "completed", "n_extractions": 148, "chunk_size": 100 },
+    { "worker_id": 7, "status": "completed", "n_extractions": 155, "chunk_size": 100 },
+    { "worker_id": 8, "status": "completed", "n_extractions": 128, "chunk_size": 100 },
+    { "worker_id": 9, "status": "completed", "n_extractions": 143, "chunk_size": 100 }
+  ],
+  "combined_extractions_sample": [
+    { "indicator": "youtube_watch_time", "value": 45.5, "timestamp": "2024-01-15T00:00:00Z" },
+    { "indicator": "search_count", "value": 12, "timestamp": "2024-01-15T00:00:00Z" },
+    { "indicator": "late_night_activity", "value": true, "timestamp": "2024-01-15T00:00:00Z" },
+    { "indicator": "task_completion_rate", "value": 0.6, "timestamp": "2024-01-15T00:00:00Z" },
+    { "indicator": "deadline_proximity_searches", "value": 3, "timestamp": "2024-01-15T00:00:00Z" },
+    { "indicator": "youtube_watch_time", "value": 30.2, "timestamp": "2024-01-16T00:00:00Z" },
+    { "indicator": "search_count", "value": 8, "timestamp": "2024-01-16T00:00:00Z" }
+  ],
+  "total_extractions": 1336,
+  "per_indicator_counts": {
+    "youtube_watch_time": 182,
+    "search_count": 182,
+    "late_night_activity": 182,
+    "task_completion_rate": 182,
+    "deadline_proximity_searches": 182,
+    "productive_hours": 26,
+    "workload_events": 200
+  },
+  "context": "Stage 2 dispatches worker LLMs to extract indicator observations from raw activity data. Each worker processes a chunk of the data independently."
+}

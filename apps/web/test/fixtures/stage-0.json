@@ -1,0 +1,26 @@
+{
+  "lines": [
+    "2024-01-15T08:30:00Z | YouTube | Watched: Morning productivity tips (12 min)",
+    "2024-01-15T09:15:00Z | Search | procrastination causes",
+    "2024-01-15T10:00:00Z | YouTube | Watched: Deep work strategies (25 min)",
+    "2024-01-15T14:30:00Z | Search | how to stop procrastinating",
+    "2024-01-15T16:00:00Z | YouTube | Watched: Task avoidance psychology (18 min)",
+    "2024-01-16T09:00:00Z | Search | pomodoro technique",
+    "2024-01-16T11:30:00Z | YouTube | Watched: ADHD and procrastination (30 min)",
+    "2024-01-16T15:00:00Z | Search | deadline anxiety",
+    "2024-01-17T08:00:00Z | YouTube | Watched: Morning routine optimization (15 min)",
+    "2024-01-17T13:00:00Z | Search | cognitive behavioral therapy procrastination"
+  ],
+  "date_range": {
+    "start": "2024-01-01",
+    "end": "2024-06-30"
+  },
+  "activity_type_counts": {
+    "YouTube": 847,
+    "Search": 1253,
+    "Maps": 156,
+    "Chrome": 2341
+  },
+  "n_records": 4597,
+  "context": "Stage 0 preprocesses raw Google Takeout data into timestamped activity lines. Each line contains a timestamp, activity type, and description extracted from the export."
+}

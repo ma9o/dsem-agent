@@ -1,0 +1,23 @@
+{
+  "validation_report": {
+    "is_valid": true,
+    "issues": [
+      { "indicator": "late_night_activity", "issue_type": "low_variance", "severity": "warning", "message": "Indicator has very low variance (0.12). May not discriminate well." },
+      { "indicator": "productive_hours", "issue_type": "sparse_data", "severity": "warning", "message": "Only 26 observations at weekly granularity. Consider if sufficient for reliable estimation." }
+    ],
+    "per_indicator_health": [
+      { "indicator": "youtube_watch_time", "n_obs": 182, "variance": 245.3, "time_coverage_ratio": 0.95, "max_gap_ratio": 0.02, "dtype_violations": 0, "duplicate_pct": 0.01, "arithmetic_sequence_detected": false },
+      { "indicator": "search_count", "n_obs": 182, "variance": 18.7, "time_coverage_ratio": 0.95, "max_gap_ratio": 0.02, "dtype_violations": 0, "duplicate_pct": 0.03, "arithmetic_sequence_detected": false },
+      { "indicator": "late_night_activity", "n_obs": 182, "variance": 0.12, "time_coverage_ratio": 0.95, "max_gap_ratio": 0.02, "dtype_violations": 0, "duplicate_pct": 0.0, "arithmetic_sequence_detected": false },
+      { "indicator": "task_completion_rate", "n_obs": 182, "variance": 0.04, "time_coverage_ratio": 0.95, "max_gap_ratio": 0.02, "dtype_violations": 0, "duplicate_pct": 0.02, "arithmetic_sequence_detected": false },
+      { "indicator": "deadline_proximity_searches", "n_obs": 182, "variance": 5.6, "time_coverage_ratio": 0.95, "max_gap_ratio": 0.02, "dtype_violations": 0, "duplicate_pct": 0.0, "arithmetic_sequence_detected": false },
+      { "indicator": "productive_hours", "n_obs": 26, "variance": 32.1, "time_coverage_ratio": 0.88, "max_gap_ratio": 0.08, "dtype_violations": 0, "duplicate_pct": 0.0, "arithmetic_sequence_detected": false },
+      { "indicator": "workload_events", "n_obs": 200, "variance": 3.2, "time_coverage_ratio": 0.98, "max_gap_ratio": 0.01, "dtype_violations": 0, "duplicate_pct": 0.05, "arithmetic_sequence_detected": false }
+    ],
+    "aggregation_summary": [
+      { "granularity": "daily", "n_indicators": 5, "row_count": 910, "aggregation_functions": ["sum", "count", "max", "mean"] },
+      { "granularity": "weekly", "n_indicators": 1, "row_count": 26, "aggregation_functions": ["sum"] }
+    ]
+  },
+  "context": "Stage 3 validates extracted data. Checks include: sample size adequacy, variance thresholds, temporal coverage, dtype compliance, hallucination detection (duplicate patterns, arithmetic sequences)."
+}
