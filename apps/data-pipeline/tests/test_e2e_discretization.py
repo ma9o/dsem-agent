@@ -1027,3 +1027,89 @@ class TestExactMatrixLogConversion:
         assert abs(Phi_reconstructed[0, 1] - beta_original) < 0.01, (
             f"Roundtrip beta: got {Phi_reconstructed[0,1]:.4f}, expected {beta_original}"
         )
+
+    def test_edge_lag_days_populated(self, two_construct_causal_spec):
+        """Builder stores edge lag metadata from causal spec during mask building."""
+        model_spec = {
+            "likelihoods": [
+                {"variable": "mood_rating", "distribution": "gaussian",
+                 "link": "identity", "reasoning": ""},
+                {"variable": "stress_self_report", "distribution": "gaussian",
+                 "link": "identity", "reasoning": ""},
+            ],
+            "parameters": [
+                {"name": "rho_mood", "role": "ar_coefficient", "constraint": "unit_interval",
+                 "description": "", "search_context": ""},
+                {"name": "rho_stress", "role": "ar_coefficient", "constraint": "unit_interval",
+                 "description": "", "search_context": ""},
+                {"name": "beta_stress_mood", "role": "fixed_effect", "constraint": "none",
+                 "description": "", "search_context": ""},
+            ],
+            "reasoning": "",
+        }
+        builder = SSMModelBuilder(
+            model_spec=model_spec,
+            priors={},
+            causal_spec=two_construct_causal_spec,
+        )
+        # Building masks populates _edge_lag_days
+        builder._build_masks_from_causal_spec(["mood", "stress"], ["mood_rating", "stress_self_report"], 2, 2)
+
+        # stress -> mood edge, both daily, lagged=True: lag = 24h = 1.0 day
+        assert len(builder._edge_lag_days) == 1
+        # effect_idx=0 (mood), cause_idx=1 (stress)
+        assert (0, 1) in builder._edge_lag_days
+        assert abs(builder._edge_lag_days[(0, 1)] - 1.0) < 0.01
+
+    def test_drift_lag_consistency_warns(self, two_construct_causal_spec, caplog):
+        """Builder warns when CT drift implies timescale far from edge lag."""
+        import logging
+
+        model_spec = {
+            "likelihoods": [
+                {"variable": "mood_rating", "distribution": "gaussian",
+                 "link": "identity", "reasoning": ""},
+                {"variable": "stress_self_report", "distribution": "gaussian",
+                 "link": "identity", "reasoning": ""},
+            ],
+            "parameters": [
+                {"name": "rho_mood", "role": "ar_coefficient", "constraint": "unit_interval",
+                 "description": "", "search_context": ""},
+                {"name": "rho_stress", "role": "ar_coefficient", "constraint": "unit_interval",
+                 "description": "", "search_context": ""},
+                {"name": "beta_stress_mood", "role": "fixed_effect", "constraint": "none",
+                 "description": "", "search_context": ""},
+            ],
+            "reasoning": "",
+        }
+        # Very large beta → CT rate implies very fast coupling (short timescale)
+        # but edge lag is 1 day → should warn about mismatch
+        priors = {
+            "rho_mood": {"distribution": "Beta", "params": {"alpha": 2.0, "beta": 2.0}},
+            "rho_stress": {"distribution": "Beta", "params": {"alpha": 2.0, "beta": 2.0}},
+            "beta_stress_mood": {
+                "distribution": "Normal", "params": {"mu": 5.0, "sigma": 1.0},
+            },
+        }
+        drift_mask = np.array([[True, True], [False, True]])
+        ssm_spec = SSMSpec(
+            n_latent=2, n_manifest=2,
+            latent_names=["mood", "stress"],
+            drift_mask=drift_mask,
+        )
+        builder = SSMModelBuilder(
+            model_spec=model_spec, priors=priors,
+            causal_spec=two_construct_causal_spec,
+        )
+        # Must build masks first to populate _edge_lag_days
+        builder._build_masks_from_causal_spec(
+            ["mood", "stress"], ["mood_rating", "stress_self_report"], 2, 2
+        )
+        with caplog.at_level(logging.WARNING, logger="causal_ssm_agent.models.ssm_builder"):
+            builder._convert_priors_to_ssm(priors, model_spec, ssm_spec=ssm_spec)
+
+        # Large beta_CT → implied timescale << 1 day, edge lag = 1 day → warning
+        lag_warnings = [r for r in caplog.records if "mismatch" in r.message.lower()]
+        assert len(lag_warnings) >= 1, (
+            f"Expected lag mismatch warning, got: {[r.message for r in caplog.records]}"
+        )

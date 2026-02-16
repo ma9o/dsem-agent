@@ -19,7 +19,7 @@ from causal_ssm_agent.models.ssm import (
     SSMSpec,
     fit,
 )
-from causal_ssm_agent.orchestrator.schemas import GRANULARITY_HOURS
+from causal_ssm_agent.orchestrator.schemas import GRANULARITY_HOURS, compute_lag_hours
 from causal_ssm_agent.orchestrator.schemas_model import (
     DistributionFamily,
     ModelSpec,
@@ -173,6 +173,7 @@ class SSMModelBuilder:
 
         self._model: SSMModel | None = None
         self._result: InferenceResult | None = None
+        self._edge_lag_days: dict[tuple[int, int], float] = {}
 
     @staticmethod
     def get_default_sampler_config() -> dict:
@@ -344,16 +345,44 @@ class SSMModelBuilder:
         # Build name-to-index maps
         latent_idx = {name: i for i, name in enumerate(latent_names)}
 
+        # Build construct lookup for lag_hours computation
+        constructs = latent_data.get("constructs", [])
+        construct_map: dict[str, dict | Any] = {}
+        for c in constructs:
+            name = c.get("name") if isinstance(c, dict) else c.name
+            construct_map[name] = c
+
         # --- Drift mask ---
         # Diagonal always True (AR effects); off-diagonal True only where
         # a CausalEdge exists between two constructs.
         drift_mask = np.eye(n_latent, dtype=bool)
+        # Store edge metadata: (effect_idx, cause_idx) → lag_days
+        self._edge_lag_days: dict[tuple[int, int], float] = {}
         for edge in edges:
             cause = edge.get("cause") if isinstance(edge, dict) else edge.cause
             effect = edge.get("effect") if isinstance(edge, dict) else edge.effect
             if cause in latent_idx and effect in latent_idx:
+                ei, ci = latent_idx[effect], latent_idx[cause]
                 # drift[effect_idx, cause_idx] = True (effect row, cause col)
-                drift_mask[latent_idx[effect], latent_idx[cause]] = True
+                drift_mask[ei, ci] = True
+
+                # Compute and store lag_hours for this edge
+                lagged = edge.get("lagged", True) if isinstance(edge, dict) else edge.lagged
+                cause_gran = None
+                effect_gran = None
+                if cause in construct_map:
+                    c = construct_map[cause]
+                    cause_gran = (
+                        c.get("temporal_scale") if isinstance(c, dict) else c.temporal_scale
+                    )
+                if effect in construct_map:
+                    c = construct_map[effect]
+                    effect_gran = (
+                        c.get("temporal_scale") if isinstance(c, dict) else c.temporal_scale
+                    )
+                lag_hours = compute_lag_hours(cause_gran, effect_gran, lagged)
+                if lag_hours > 0:
+                    self._edge_lag_days[(ei, ci)] = lag_hours / 24.0
 
         # --- Lambda mask ---
         # Build from measurement model indicators → construct mapping.
@@ -587,6 +616,10 @@ class SSMModelBuilder:
             # Diagnostic: warn when first-order approximation may be inaccurate
             self._warn_first_order_approximation(ssm_priors)
 
+        # Check consistency between CT drift rates and edge lag_hours
+        if ssm_spec:
+            self._check_drift_lag_consistency(ssm_priors, ssm_spec)
+
         return ssm_priors
 
     def _try_exact_logm_conversion(
@@ -784,6 +817,75 @@ class SSMModelBuilder:
                     min_diag,
                 )
                 break  # One warning is enough
+
+    def _check_drift_lag_consistency(
+        self,
+        ssm_priors: SSMPriors,
+        ssm_spec: SSMSpec,
+    ) -> None:
+        """Check CT drift rates against expected lag from causal edge metadata.
+
+        For each off-diagonal drift entry with a known edge lag, compares
+        the implied coupling timescale (1/|A[i,j]|) with the expected lag.
+        Logs a warning when they differ by more than 5x, suggesting the
+        literature prior may be calibrated to a different timescale than
+        the causal model expects.
+        """
+        edge_lags = getattr(self, "_edge_lag_days", {})
+        if not edge_lags:
+            return
+
+        offdiag_prior = ssm_priors.drift_offdiag
+        if offdiag_prior is None or "mu" not in offdiag_prior:
+            return
+
+        mu_arr = offdiag_prior["mu"]
+        if not isinstance(mu_arr, list):
+            return
+
+        n = ssm_spec.n_latent
+        # Build off-diagonal position map (same order as drift mask iteration)
+        offdiag_positions: list[tuple[int, int]] = []
+        if ssm_spec.drift_mask is not None:
+            for i in range(n):
+                for j in range(n):
+                    if i != j and ssm_spec.drift_mask[i, j]:
+                        offdiag_positions.append((i, j))
+
+        for flat_idx, (ei, ci) in enumerate(offdiag_positions):
+            if flat_idx >= len(mu_arr):
+                break
+            if (ei, ci) not in edge_lags:
+                continue
+
+            mu_ct = abs(float(mu_arr[flat_idx]))
+            if mu_ct < 1e-10:
+                continue
+
+            expected_lag_days = edge_lags[(ei, ci)]
+            implied_timescale_days = 1.0 / mu_ct
+
+            ratio = max(implied_timescale_days, expected_lag_days) / max(
+                min(implied_timescale_days, expected_lag_days), 1e-10
+            )
+            if ratio > 5.0:
+                cause_name = (
+                    ssm_spec.latent_names[ci] if ssm_spec.latent_names else f"latent_{ci}"
+                )
+                effect_name = (
+                    ssm_spec.latent_names[ei] if ssm_spec.latent_names else f"latent_{ei}"
+                )
+                logger.warning(
+                    "Drift rate for %s->%s implies timescale %.1f days, "
+                    "but edge lag suggests %.1f days (%.0fx mismatch). "
+                    "The literature prior may be calibrated to a different "
+                    "observation interval than the causal model expects.",
+                    cause_name,
+                    effect_name,
+                    implied_timescale_days,
+                    expected_lag_days,
+                    ratio,
+                )
 
     def _build_prior_index_maps(
         self,
