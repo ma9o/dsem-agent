@@ -43,11 +43,11 @@ Given drift `A`, diffusion covariance `Q_c = G G'`, and continuous intercept `c`
 | Discrete quantity | Formula | Implementation |
 |---|---|---|
 | Discrete drift | `A_d = exp(A * dt)` | `jax.scipy.linalg.expm(A * dt)` |
-| Asymptotic covariance | `A * Q_inf + Q_inf * A' = -Q_c` (Lyapunov equation) | `solve_lyapunov()` via Kronecker vectorization |
+| Asymptotic covariance | `A * Q_inf + Q_inf * A' = -Q_c` (Lyapunov equation) | `solve_lyapunov()` via Bartels-Stewart (Sylvester solver) |
 | Discrete process noise | `Q_d = Q_inf - A_d * Q_inf * A_d'` | `compute_discrete_diffusion()` |
 | Discrete intercept | `c_d = A^{-1} * (A_d - I) * c` | `compute_discrete_cint()` via `jla.solve` |
 
-The Lyapunov equation is solved by vectorization: `(I kron A + A kron I) vec(X) = -vec(Q_c)`, then reshaping `vec(X)` back to a matrix.
+The Lyapunov equation is solved via `jax.scipy.linalg.solve_sylvester` (Bartels-Stewart algorithm using Schur decomposition), which is O(n^3) vs O(n^6) for the Kronecker vectorization approach.
 
 ### Batched discretization
 

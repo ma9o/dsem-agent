@@ -25,12 +25,8 @@ def solve_lyapunov(A: jnp.ndarray, Q: jnp.ndarray) -> jnp.ndarray:
     For a stable system (eigenvalues of A have negative real parts),
     this gives the stationary covariance of the process.
 
-    We use the vectorization approach:
-    vec(A*X + X*A') = (I ⊗ A + A ⊗ I) * vec(X) = -vec(Q)
-
-    For numerical stability with potentially ill-conditioned systems,
-    we use the Bartels-Stewart algorithm via scipy's solve_sylvester,
-    but JAX doesn't have this, so we implement via vectorization.
+    Uses Bartels-Stewart (Schur decomposition) via JAX's Sylvester solver,
+    which is O(n^3) vs O(n^6) for the Kronecker vectorization approach.
 
     Args:
         A: n x n drift matrix (must be stable for unique solution)
@@ -39,19 +35,8 @@ def solve_lyapunov(A: jnp.ndarray, Q: jnp.ndarray) -> jnp.ndarray:
     Returns:
         X: n x n solution matrix (asymptotic covariance)
     """
-    n = A.shape[0]
-
-    # Build the coefficient matrix: (I ⊗ A + A ⊗ I)
-    # Using the identity: vec(AXB') = (B ⊗ A) * vec(X)
-    # So vec(AX + XA') = vec(AXI + IXA') = (I ⊗ A + A ⊗ I) * vec(X)
-    I_n = jnp.eye(n)
-    coef = jnp.kron(I_n, A) + jnp.kron(A, I_n)
-
-    # Solve: coef * vec(X) = -vec(Q)
-    vec_Q = Q.flatten()
-    vec_X = jla.solve(coef, -vec_Q)
-
-    return vec_X.reshape((n, n))
+    # AX + XA' = -Q is Sylvester AX + XB = C with B=A', C=-Q
+    return jla.solve_sylvester(A, A.T, -Q)
 
 
 def compute_asymptotic_diffusion(drift: jnp.ndarray, diffusion_cov: jnp.ndarray) -> jnp.ndarray:
