@@ -442,6 +442,14 @@ class SSMModelBuilder:
         # Maps SSMPriors field -> list of (array_index, normalized_dict)
         per_element: dict[str, list[tuple[int, dict]]] = {}
 
+        # Track raw DT values for exact logm conversion (Phase 2)
+        # {matrix_index: (rho_mu, rho_sigma)} for diagonal
+        dt_diag_raw: dict[int, tuple[float, float]] = {}
+        # {flat_offdiag_index: (beta_mu, beta_sigma)} for off-diagonal
+        dt_offdiag_raw: dict[int, tuple[float, float]] = {}
+        # Track dt used for each parameter (for logm: needs single dt)
+        dt_values: list[float] = []
+
         # Build index maps from masks if available
         offdiag_param_index, lambda_param_index, diag_param_index = self._build_prior_index_maps(
             ssm_spec, model_spec
@@ -471,6 +479,9 @@ class SSMModelBuilder:
                 per_element.setdefault(attr, []).append(
                     (idx, {"mu": mu_drift, "sigma": sigma_drift})
                 )
+                # Save raw DT values for exact logm
+                dt_diag_raw[idx] = (mu_ar, sigma_ar)
+                dt_values.append(dt)
                 continue
 
             # Fixed effect (beta) → apply DT-to-CT coupling rate transform
@@ -497,6 +508,9 @@ class SSMModelBuilder:
                 per_element.setdefault(attr, []).append(
                     (idx, {"mu": mu_beta / dt, "sigma": sigma_beta / dt})
                 )
+                # Save raw DT values for exact logm
+                dt_offdiag_raw[idx] = (mu_beta, sigma_beta)
+                dt_values.append(dt)
                 continue
             if param_name in lambda_param_index:
                 attr, idx = lambda_param_index[param_name]
@@ -563,10 +577,165 @@ class SSMModelBuilder:
 
             setattr(ssm_priors, attr, result)
 
-        # Diagnostic: warn when first-order approximation may be inaccurate
-        self._warn_first_order_approximation(ssm_priors)
+        # Try exact matrix logarithm DT→CT conversion (Phase 2)
+        # Falls back to first-order (already stored above) if not embeddable
+        if dt_diag_raw and ssm_spec:
+            self._try_exact_logm_conversion(
+                ssm_priors, ssm_spec, dt_diag_raw, dt_offdiag_raw, dt_values,
+            )
+        else:
+            # Diagnostic: warn when first-order approximation may be inaccurate
+            self._warn_first_order_approximation(ssm_priors)
 
         return ssm_priors
+
+    def _try_exact_logm_conversion(
+        self,
+        ssm_priors: SSMPriors,
+        ssm_spec: SSMSpec,
+        dt_diag_raw: dict[int, tuple[float, float]],
+        dt_offdiag_raw: dict[int, tuple[float, float]],
+        dt_values: list[float],
+    ) -> None:
+        """Try exact matrix logarithm DT→CT conversion, updating ssm_priors in-place.
+
+        Assembles the DT transition matrix Phi from AR (diagonal) and
+        cross-lag (off-diagonal) priors, checks embeddability, and if
+        possible replaces the first-order drift priors with exact
+        logm(Phi)/dt values.
+
+        Falls back silently to first-order (already stored in ssm_priors)
+        if embeddability check fails.
+
+        Reference: Higham (2008), Functions of Matrices, Ch. 11.
+        """
+        from scipy.linalg import logm as scipy_logm
+
+        n = ssm_spec.n_latent
+        if n < 2:
+            # For 1D, first-order is exact (scalar log)
+            return
+
+        # Need a single consistent dt for the full matrix conversion.
+        # If parameters have different observation intervals, the DT
+        # transition matrix is not self-consistent and logm cannot be applied.
+        if not dt_values:
+            return
+        dt_min, dt_max = min(dt_values), max(dt_values)
+        if dt_min <= 0:
+            return
+        if dt_max / dt_min > 1.01:  # >1% variation → mixed intervals
+            logger.info(
+                "Mixed observation intervals (%.1f–%.1f days) across parameters. "
+                "Cannot apply exact matrix logarithm; using first-order approximation.",
+                dt_min, dt_max,
+            )
+            self._warn_first_order_approximation(ssm_priors)
+            return
+        dt = float(np.mean(dt_values))
+
+        # Assemble DT transition matrix Phi from prior means
+        Phi = np.eye(n)
+        for idx, (rho_mu, _rho_sigma) in dt_diag_raw.items():
+            if idx < n:
+                Phi[idx, idx] = rho_mu
+
+        # Build off-diagonal position map from drift_mask
+        offdiag_positions: list[tuple[int, int]] = []
+        if ssm_spec.drift_mask is not None:
+            for i in range(n):
+                for j in range(n):
+                    if i != j and ssm_spec.drift_mask[i, j]:
+                        offdiag_positions.append((i, j))
+
+        for flat_idx, (beta_mu, _beta_sigma) in dt_offdiag_raw.items():
+            if flat_idx < len(offdiag_positions):
+                i, j = offdiag_positions[flat_idx]
+                Phi[i, j] = beta_mu
+
+        # Check embeddability: all eigenvalues must be real and positive
+        eigenvalues = np.linalg.eigvals(Phi)
+        if not np.all(np.isreal(eigenvalues)) or not np.all(eigenvalues.real > 0):
+            logger.info(
+                "DT transition matrix is not embeddable (eigenvalues: %s). "
+                "Using first-order DT->CT approximation.",
+                eigenvalues,
+            )
+            self._warn_first_order_approximation(ssm_priors)
+            return
+
+        # Compute exact drift matrix via matrix logarithm
+        try:
+            A_exact = scipy_logm(Phi).real / dt
+        except Exception as e:
+            logger.warning("Matrix logarithm failed: %s. Using first-order approximation.", e)
+            self._warn_first_order_approximation(ssm_priors)
+            return
+
+        # Check stability: all eigenvalues of A must have negative real parts
+        A_eigenvalues = np.linalg.eigvals(A_exact)
+        if not np.all(A_eigenvalues.real < 0):
+            logger.warning(
+                "Exact drift matrix is unstable (eigenvalues: %s). "
+                "Using first-order approximation.",
+                A_eigenvalues,
+            )
+            self._warn_first_order_approximation(ssm_priors)
+            return
+
+        # Success: overwrite drift priors with exact logm-derived values
+        # Diagonal: store as positive magnitude (model negates via -abs())
+        diag_prior = ssm_priors.drift_diag
+        if diag_prior and "mu" in diag_prior:
+            mu_arr = diag_prior["mu"]
+            sigma_arr = diag_prior.get("sigma", [0.5] * n)
+            if isinstance(mu_arr, list):
+                for idx in range(min(n, len(mu_arr))):
+                    # |A[i,i]| since model stores as positive magnitude
+                    mu_arr[idx] = abs(float(A_exact[idx, idx]))
+                    # Scale sigma by ratio of exact to first-order
+                    if idx in dt_diag_raw:
+                        rho_mu, _rho_sigma = dt_diag_raw[idx]
+                        first_order_mu = -math.log(max(0.001, min(rho_mu, 0.999))) / dt
+                        if abs(first_order_mu) > 1e-10:
+                            ratio = abs(float(A_exact[idx, idx])) / first_order_mu
+                            if isinstance(sigma_arr, list) and idx < len(sigma_arr):
+                                sigma_arr[idx] = float(sigma_arr[idx]) * ratio
+                diag_prior["mu"] = mu_arr
+                if isinstance(sigma_arr, list):
+                    diag_prior["sigma"] = sigma_arr
+
+        # Off-diagonal: direct CT coupling rate from A
+        offdiag_prior = ssm_priors.drift_offdiag
+        if offdiag_prior and "mu" in offdiag_prior:
+            mu_arr = offdiag_prior["mu"]
+            sigma_arr = offdiag_prior.get("sigma", [0.5] * len(offdiag_positions))
+            if isinstance(mu_arr, list):
+                for flat_idx, (i, j) in enumerate(offdiag_positions):
+                    if flat_idx < len(mu_arr):
+                        mu_arr[flat_idx] = float(A_exact[i, j])
+                        # Scale sigma by ratio of exact to first-order
+                        if flat_idx in dt_offdiag_raw:
+                            _beta_mu, beta_sigma = dt_offdiag_raw[flat_idx]
+                            first_order_sigma = beta_sigma / dt
+                            if abs(first_order_sigma) > 1e-10:
+                                # Use same relative uncertainty
+                                exact_mu = abs(float(A_exact[i, j]))
+                                first_order_mu_abs = abs(dt_offdiag_raw[flat_idx][0] / dt)
+                                if first_order_mu_abs > 1e-10:
+                                    ratio = exact_mu / first_order_mu_abs
+                                    if isinstance(sigma_arr, list) and flat_idx < len(sigma_arr):
+                                        sigma_arr[flat_idx] = first_order_sigma * max(ratio, 0.5)
+                offdiag_prior["mu"] = mu_arr
+                if isinstance(sigma_arr, list):
+                    offdiag_prior["sigma"] = sigma_arr
+
+        logger.info(
+            "Exact matrix logarithm DT->CT conversion succeeded for %dx%d system "
+            "(dt=%.1f days). Drift eigenvalues: %s",
+            n, n, dt,
+            [f"{ev.real:.4f}" for ev in A_eigenvalues],
+        )
 
     @staticmethod
     def _warn_first_order_approximation(ssm_priors: SSMPriors) -> None:

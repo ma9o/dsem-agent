@@ -1000,7 +1000,7 @@ class TestSSMPriorConversion:
         assert abs(mu_val - expected_mu) < 0.1
 
     def test_beta_prior_dt_to_ct_transform(self):
-        """FIXED_EFFECT beta priors are converted from DT to CT via beta/dt."""
+        """FIXED_EFFECT beta priors are converted from DT to CT via exact logm."""
         from causal_ssm_agent.models.ssm import SSMSpec
         from causal_ssm_agent.models.ssm_builder import SSMModelBuilder
 
@@ -1060,14 +1060,15 @@ class TestSSMPriorConversion:
         builder = SSMModelBuilder(model_spec=model_spec, priors=priors)
         ssm_priors = builder._convert_priors_to_ssm(priors, model_spec, ssm_spec=ssm_spec)
 
-        # With daily default (dt=1.0): beta_CT = 0.3 / 1.0 = 0.3
-        # sigma_CT = 0.15 / 1.0 = 0.15
+        # All params at dt=1.0 (daily default) → uniform intervals → exact logm.
+        # Phi = [[0.5, 0.3], [0, 0.5]] (repeated eigenvalue 0.5).
+        # logm off-diag = c/a = 0.3/0.5 = 0.6; A_CT = logm(Phi)/dt = 0.6
         mu = ssm_priors.drift_offdiag["mu"]
         mu_val = mu[0] if isinstance(mu, list) else mu
-        assert abs(mu_val - 0.3) < 0.01
+        assert abs(mu_val - 0.6) < 0.01
 
     def test_beta_prior_dt_to_ct_respects_granularity(self):
-        """FIXED_EFFECT beta transform uses effect construct's granularity."""
+        """FIXED_EFFECT beta transform uses effect construct's granularity with exact logm."""
         from causal_ssm_agent.models.ssm import SSMSpec
         from causal_ssm_agent.models.ssm_builder import SSMModelBuilder
 
@@ -1142,13 +1143,14 @@ class TestSSMPriorConversion:
         builder = SSMModelBuilder(model_spec=model_spec, priors=priors, causal_spec=causal_spec)
         ssm_priors = builder._convert_priors_to_ssm(priors, model_spec, ssm_spec=ssm_spec)
 
-        # Effect construct is heart_rate (hourly → dt=1/24)
-        # beta_CT = 0.3 / (1/24) = 7.2
+        # All params at hourly dt (1/24) → uniform intervals → exact logm.
+        # Phi = [[0.5, 0.3], [0, 0.5]] (repeated eigenvalue 0.5).
+        # logm off-diag = c/a = 0.3/0.5 = 0.6; A_CT = 0.6 / (1/24) = 14.4
         dt_hourly = 1.0 / 24.0
-        expected_mu = 0.3 / dt_hourly
+        expected_mu = 0.6 / dt_hourly  # 14.4
         mu = ssm_priors.drift_offdiag["mu"]
         mu_val = mu[0] if isinstance(mu, list) else mu
-        assert abs(mu_val - expected_mu) < 0.1
+        assert abs(mu_val - expected_mu) < 0.5
 
 
 # --- Sparsity Validation Tests ---

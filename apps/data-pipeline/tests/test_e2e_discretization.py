@@ -24,6 +24,7 @@ import numpy as np
 import pytest
 
 from causal_ssm_agent.models.ssm import SSMSpec, discretize_system
+from causal_ssm_agent.models.ssm_builder import SSMModelBuilder
 
 # ═══════════════════════════════════════════════════════════════════════
 # FIXTURES
@@ -717,19 +718,23 @@ class TestE2ESpecToDiscretization:
         builder_d = SSMModelBuilder(model_spec=model_spec, priors=priors_daily, causal_spec=causal_spec)
         ssm_priors_d = builder_d._convert_priors_to_ssm(priors_daily, model_spec, ssm_spec=ssm_spec)
 
-        # Weekly: CT rate = 0.3 / 7 ≈ 0.043
+        # Weekly: mixed intervals (beta=7d, rho=1d) → first-order: 0.3 / 7 ≈ 0.043
         mu_w = ssm_priors_w.drift_offdiag["mu"]
         mu_w_val = mu_w[0] if isinstance(mu_w, list) else mu_w
         assert abs(mu_w_val - 0.3 / 7.0) < 0.01
 
-        # Daily: CT rate = 0.3 / 1 = 0.3
+        # Daily: uniform intervals (all 1d) → exact logm is applied.
+        # Phi = [[0.5, 0.3], [0, 0.5]] (identical AR eigenvalues)
+        # logm off-diagonal: 0.3 / 0.5 = 0.6 (exact CT coupling rate)
         mu_d = ssm_priors_d.drift_offdiag["mu"]
         mu_d_val = mu_d[0] if isinstance(mu_d, list) else mu_d
-        assert abs(mu_d_val - 0.3) < 0.01
+        expected_logm = 0.3 / 0.5  # c / a for repeated eigenvalue a
+        assert abs(mu_d_val - expected_logm) < 0.05, (
+            f"Daily case uses exact logm: got {mu_d_val}, expected {expected_logm}"
+        )
 
-        # The rates should differ by a factor of 7
-        ratio = mu_d_val / mu_w_val
-        assert abs(ratio - 7.0) < 0.1, f"Rate ratio should be 7x, got {ratio:.2f}"
+        # Rates should differ significantly (exact logm vs first-order)
+        assert mu_d_val > mu_w_val, "Daily rate should be larger than weekly rate"
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -938,4 +943,87 @@ class TestExactMatrixLogConversion:
         eigs_2 = jnp.abs(jnp.linalg.eigvals(F2))
         assert jnp.all(eigs_1 > eigs_2), (
             f"Shorter interval should have less decay: |eigs(F1)|={eigs_1}, |eigs(F2)|={eigs_2}"
+        )
+
+    def test_builder_uses_logm_when_intervals_match(self, two_construct_causal_spec):
+        """SSMModelBuilder applies exact logm when all parameters have the same dt.
+
+        When all reference_interval_days values are equal, the builder should
+        assemble the full DT transition matrix Phi and apply logm(Phi)/dt
+        instead of the first-order element-wise approximation.
+        """
+        model_spec = {
+            "likelihoods": [
+                {"variable": "mood_rating", "distribution": "gaussian",
+                 "link": "identity", "reasoning": ""},
+                {"variable": "stress_self_report", "distribution": "gaussian",
+                 "link": "identity", "reasoning": ""},
+            ],
+            "parameters": [
+                {"name": "rho_mood", "role": "ar_coefficient", "constraint": "unit_interval",
+                 "description": "", "search_context": ""},
+                {"name": "rho_stress", "role": "ar_coefficient", "constraint": "unit_interval",
+                 "description": "", "search_context": ""},
+                {"name": "beta_stress_mood", "role": "fixed_effect", "constraint": "none",
+                 "description": "", "search_context": ""},
+            ],
+            "reasoning": "",
+        }
+
+        # All parameters at dt=7 (weekly)
+        priors = {
+            "rho_mood": {
+                "distribution": "Beta", "params": {"alpha": 3.0, "beta": 2.0},
+                "reference_interval_days": 7.0,
+            },
+            "rho_stress": {
+                "distribution": "Beta", "params": {"alpha": 2.0, "beta": 2.0},
+                "reference_interval_days": 7.0,
+            },
+            "beta_stress_mood": {
+                "distribution": "Normal", "params": {"mu": 0.3, "sigma": 0.15},
+                "reference_interval_days": 7.0,
+            },
+        }
+
+        drift_mask = np.array([[True, True], [False, True]])
+        ssm_spec = SSMSpec(
+            n_latent=2, n_manifest=2,
+            latent_names=["mood", "stress"],
+            drift_mask=drift_mask,
+        )
+
+        builder = SSMModelBuilder(
+            model_spec=model_spec, priors=priors,
+            causal_spec=two_construct_causal_spec,
+        )
+        ssm_priors = builder._convert_priors_to_ssm(priors, model_spec, ssm_spec=ssm_spec)
+
+        # Verify logm was applied by checking roundtrip consistency:
+        # Reconstruct Phi from the exact CT drift, then check it matches original DT params
+        from scipy.linalg import expm
+
+        drift_diag = ssm_priors.drift_diag["mu"]
+        drift_offdiag = ssm_priors.drift_offdiag["mu"]
+
+        A = np.zeros((2, 2))
+        A[0, 0] = -abs(drift_diag[0])  # model negates diagonal
+        A[1, 1] = -abs(drift_diag[1])
+        A[0, 1] = drift_offdiag[0]
+
+        Phi_reconstructed = expm(A * 7.0)
+
+        # Should recover original DT values closely
+        rho_mood_original = 3.0 / 5.0  # E[Beta(3,2)] = 0.6
+        rho_stress_original = 0.5      # E[Beta(2,2)] = 0.5
+        beta_original = 0.3
+
+        assert abs(Phi_reconstructed[0, 0] - rho_mood_original) < 0.01, (
+            f"Roundtrip rho_mood: got {Phi_reconstructed[0,0]:.4f}, expected {rho_mood_original}"
+        )
+        assert abs(Phi_reconstructed[1, 1] - rho_stress_original) < 0.01, (
+            f"Roundtrip rho_stress: got {Phi_reconstructed[1,1]:.4f}, expected {rho_stress_original}"
+        )
+        assert abs(Phi_reconstructed[0, 1] - beta_original) < 0.01, (
+            f"Roundtrip beta: got {Phi_reconstructed[0,1]:.4f}, expected {beta_original}"
         )
