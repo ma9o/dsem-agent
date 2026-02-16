@@ -10,7 +10,7 @@ from enum import StrEnum
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 # Valid aggregation functions for indicator specifications
-# Aggregation functions applied when bucketing raw extractions to measurement_granularity.
+# Aggregation functions applied when bucketing raw extractions to aggregation window.
 VALID_AGGREGATIONS = {
     "mean",
     "sum",
@@ -85,7 +85,7 @@ class Construct(BaseModel):
     temporal_status: TemporalStatus = Field(
         description="'time_varying' (changes over time) or 'time_invariant' (fixed)"
     )
-    causal_granularity: str | None = Field(
+    temporal_scale: str | None = Field(
         default=None,
         description=(
             "'hourly', 'daily', 'weekly', 'monthly', 'yearly'. Required for time-varying constructs. "
@@ -99,19 +99,19 @@ class Construct(BaseModel):
         is_time_varying = self.temporal_status == TemporalStatus.TIME_VARYING
 
         if is_time_varying:
-            if self.causal_granularity is None:
+            if self.temporal_scale is None:
                 raise ValueError(
-                    f"Time-varying construct '{self.name}' requires causal_granularity"
+                    f"Time-varying construct '{self.name}' requires temporal_scale"
                 )
-            if self.causal_granularity not in GRANULARITY_HOURS:
+            if self.temporal_scale not in GRANULARITY_HOURS:
                 raise ValueError(
-                    f"Invalid causal_granularity '{self.causal_granularity}' for '{self.name}'. "
+                    f"Invalid temporal_scale '{self.temporal_scale}' for '{self.name}'. "
                     f"Must be one of: {', '.join(sorted(GRANULARITY_HOURS.keys()))}"
                 )
         else:
-            if self.causal_granularity is not None:
+            if self.temporal_scale is not None:
                 raise ValueError(
-                    f"Time-invariant construct '{self.name}' must not have causal_granularity"
+                    f"Time-invariant construct '{self.name}' must not have temporal_scale"
                 )
 
         # Outcomes must be endogenous
@@ -176,8 +176,8 @@ class LatentModel(BaseModel):
             if effect_construct.role == Role.EXOGENOUS:
                 raise ValueError(f"Exogenous construct '{edge.effect}' cannot be an effect")
 
-            cause_gran = cause_construct.causal_granularity
-            effect_gran = effect_construct.causal_granularity
+            cause_gran = cause_construct.temporal_scale
+            effect_gran = effect_construct.temporal_scale
 
             # Contemporaneous (lagged=False) requires same timescale
             # Exception: time-invariant causes (granularity=None) can affect any timescale
@@ -186,6 +186,22 @@ class LatentModel(BaseModel):
                 raise ValueError(
                     f"Contemporaneous edge (lagged=false) requires same timescale: "
                     f"{edge.cause} ({cause_gran}) -> {edge.effect} ({effect_gran})"
+                )
+
+            # Directed lagged=False between endogenous latent constructs is
+            # not supported by the current model class (linear CT-SDE).
+            # Drift A handles directed temporal effects (lagged=True).
+            # Diffusion GG' handles symmetric shared innovation (non-directional).
+            both_endogenous = (
+                cause_construct.role == Role.ENDOGENOUS
+                and effect_construct.role == Role.ENDOGENOUS
+            )
+            if not edge.lagged and both_time_varying and both_endogenous:
+                raise ValueError(
+                    f"Directed contemporaneous edge '{edge.cause}' -> '{edge.effect}' "
+                    "between endogenous latent constructs is not supported by the current "
+                    "model class (linear CT-SDE). Use lagged=True for drift-mediated "
+                    "effects, or model shared innovation via the diffusion covariance."
                 )
 
         # Outcome must have at least one incoming edge
@@ -248,17 +264,11 @@ class Indicator(BaseModel):
     how_to_measure: str = Field(
         description="Instructions for workers on how to extract this from data"
     )
-    measurement_granularity: str = Field(
-        description=(
-            "'finest' (one datapoint per raw entry) or 'hourly', 'daily', 'weekly', 'monthly', 'yearly'. "
-            "The resolution at which aggregated observations enter the model."
-        ),
-    )
     measurement_dtype: str = Field(
         description="'continuous', 'binary', 'count', 'ordinal', 'categorical'"
     )
     aggregation: str = Field(
-        description=f"Aggregation function applied when bucketing raw extractions to measurement_granularity. Available: {', '.join(sorted(VALID_AGGREGATIONS))}",
+        description=f"Aggregation function applied when bucketing raw extractions within aggregation window. Available: {', '.join(sorted(VALID_AGGREGATIONS))}",
     )
     ordinal_levels: list[str] | None = Field(
         default=None,
@@ -275,17 +285,6 @@ class Indicator(BaseModel):
         if v not in VALID_AGGREGATIONS:
             available = ", ".join(sorted(VALID_AGGREGATIONS))
             raise ValueError(f"Unknown aggregation '{v}'. Available: {available}")
-        return v
-
-    @field_validator("measurement_granularity")
-    @classmethod
-    def validate_measurement_granularity(cls, v: str) -> str:
-        valid = {"finest"} | set(GRANULARITY_HOURS.keys())
-        if v not in valid:
-            raise ValueError(
-                f"Invalid measurement_granularity '{v}'. "
-                f"Must be 'finest' or one of: {', '.join(sorted(GRANULARITY_HOURS.keys()))}"
-            )
         return v
 
     @field_validator("measurement_dtype")
@@ -415,33 +414,6 @@ class CausalSpec(BaseModel):
                     f"Indicator '{indicator.name}' references unknown construct '{indicator.construct_name}'"
                 )
 
-            # Validate measurement_granularity vs causal_granularity
-            construct = next(
-                c for c in self.latent.constructs if c.name == indicator.construct_name
-            )
-            if construct.temporal_status == TemporalStatus.TIME_VARYING:
-                causal_gran = construct.causal_granularity
-                meas_gran = indicator.measurement_granularity
-                # measurement_granularity must be finer than or equal to causal_granularity
-                if meas_gran != "finest" and causal_gran is not None:
-                    if meas_gran not in GRANULARITY_HOURS:
-                        raise ValueError(
-                            f"Unknown measurement granularity '{meas_gran}'. "
-                            f"Valid options: {sorted(GRANULARITY_HOURS.keys())}"
-                        )
-                    if causal_gran not in GRANULARITY_HOURS:
-                        raise ValueError(
-                            f"Unknown causal granularity '{causal_gran}'. "
-                            f"Valid options: {sorted(GRANULARITY_HOURS.keys())}"
-                        )
-                    meas_hours = GRANULARITY_HOURS[meas_gran]
-                    causal_hours = GRANULARITY_HOURS[causal_gran]
-                    if meas_hours > causal_hours:
-                        raise ValueError(
-                            f"Indicator '{indicator.name}' has measurement_granularity '{meas_gran}' "
-                            f"coarser than construct '{construct.name}' causal_granularity '{causal_gran}'"
-                        )
-
         return self
 
     def get_edge_lag_hours(self, edge: CausalEdge) -> int:
@@ -450,8 +422,8 @@ class CausalSpec(BaseModel):
         cause = construct_map[edge.cause]
         effect = construct_map[edge.effect]
         return compute_lag_hours(
-            cause.causal_granularity,
-            effect.causal_granularity,
+            cause.temporal_scale,
+            effect.temporal_scale,
             edge.lagged,
         )
 
@@ -576,13 +548,27 @@ def validate_latent_model(data: dict) -> tuple[LatentModel | None, list[str]]:
             errors.append(f"{edge_label}: exogenous construct '{edge.effect}' cannot be an effect")
             continue
 
-        cause_gran = cause_construct.causal_granularity
-        effect_gran = effect_construct.causal_granularity
+        cause_gran = cause_construct.temporal_scale
+        effect_gran = effect_construct.temporal_scale
         both_time_varying = cause_gran is not None and effect_gran is not None
         if not edge.lagged and both_time_varying and cause_gran != effect_gran:
             errors.append(
                 f"{edge_label}: contemporaneous edge requires same timescale, "
                 f"got {cause_gran} -> {effect_gran}"
+            )
+            continue
+
+        # Directed lagged=False between endogenous latent constructs is not
+        # supported by the current model class (linear CT-SDE).
+        both_endogenous = (
+            cause_construct.role == Role.ENDOGENOUS
+            and effect_construct.role == Role.ENDOGENOUS
+        )
+        if not edge.lagged and both_time_varying and both_endogenous:
+            errors.append(
+                f"{edge_label}: directed contemporaneous edge between endogenous "
+                "latent constructs is not supported by the current model class "
+                "(linear CT-SDE). Use lagged=True for drift-mediated effects."
             )
             continue
 
@@ -654,7 +640,6 @@ def validate_measurement_model(
         indicators = []
 
     construct_names = {c.name for c in latent.constructs}
-    construct_map = {c.name: c for c in latent.constructs}
 
     # Validate each indicator
     valid_indicators = []
@@ -690,33 +675,6 @@ def validate_measurement_model(
                 f"indicators[{i}] ({name}): references unknown construct '{indicator.construct_name}'"
             )
             continue
-
-        # Check granularity compatibility
-        construct = construct_map[indicator.construct_name]
-        if construct.temporal_status == TemporalStatus.TIME_VARYING:
-            causal_gran = construct.causal_granularity
-            meas_gran = indicator.measurement_granularity
-            if meas_gran != "finest" and causal_gran is not None:
-                if meas_gran not in GRANULARITY_HOURS:
-                    errors.append(
-                        f"indicators[{i}] ({name}): unknown measurement granularity '{meas_gran}'. "
-                        f"Valid options: {sorted(GRANULARITY_HOURS.keys())}"
-                    )
-                    continue
-                if causal_gran not in GRANULARITY_HOURS:
-                    errors.append(
-                        f"indicators[{i}] ({name}): unknown causal granularity '{causal_gran}'. "
-                        f"Valid options: {sorted(GRANULARITY_HOURS.keys())}"
-                    )
-                    continue
-                meas_hours = GRANULARITY_HOURS[meas_gran]
-                causal_hours = GRANULARITY_HOURS[causal_gran]
-                if meas_hours > causal_hours:
-                    errors.append(
-                        f"indicators[{i}] ({name}): measurement_granularity '{meas_gran}' "
-                        f"coarser than construct '{construct.name}' causal_granularity '{causal_gran}'"
-                    )
-                    continue
 
         valid_indicators.append(indicator)
 
