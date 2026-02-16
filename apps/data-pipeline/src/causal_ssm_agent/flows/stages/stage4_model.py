@@ -384,7 +384,9 @@ async def stage4_orchestrated_flow(
         vr_objects = [
             PriorValidationResult.model_validate(r) for r in validation_result.get("results", [])
         ]
-        failed_param_names = get_failed_parameters(vr_objects, list(priors.keys()))
+        failed_param_names = get_failed_parameters(
+            vr_objects, list(priors.keys()), causal_spec=causal_spec
+        )
 
         # If validation failed but no specific parameters identified (e.g., validator
         # exception returned empty results), treat as global failure: re-elicit all.
