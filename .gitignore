@@ -33,7 +33,7 @@ scratchpad/**
 repomix-output.xml
 
 # Streamlit component artifacts
-lib/
+/lib/
 
 # Marimo session artifacts
 __marimo__/
