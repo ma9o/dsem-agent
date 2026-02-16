@@ -96,6 +96,108 @@ class TestCoreUtilities:
         assert jnp.allclose(Q_inf, expected, atol=1e-6)
 
 
+class TestDiscretizationMomentMatching:
+    """Validate discretize_system against fine-grained Euler-Maruyama simulation."""
+
+    @pytest.mark.parametrize(
+        "drift, diffusion_cov, cint, dt",
+        [
+            # 1) Diagonal drift, identity diffusion, no intercept
+            (
+                jnp.array([[-1.0, 0.0], [0.0, -2.0]]),
+                jnp.eye(2),
+                None,
+                0.5,
+            ),
+            # 2) Coupled drift, correlated diffusion, with intercept
+            (
+                jnp.array([[-1.0, 0.3], [0.2, -1.5]]),
+                jnp.array([[1.0, 0.4], [0.4, 0.8]]),
+                jnp.array([0.5, -0.3]),
+                1.0,
+            ),
+            # 3) Strongly coupled, large dt (stresses the Lyapunov approach)
+            (
+                jnp.array([[-0.5, 0.4], [0.3, -0.6]]),
+                jnp.array([[0.6, 0.1], [0.1, 0.9]]),
+                jnp.array([1.0, 0.0]),
+                2.0,
+            ),
+            # 4) 3-dimensional system
+            (
+                jnp.array([[-1.0, 0.2, 0.0], [0.1, -1.5, 0.3], [0.0, 0.1, -0.8]]),
+                jnp.array([[1.0, 0.0, 0.0], [0.0, 0.5, 0.1], [0.0, 0.1, 0.7]]),
+                jnp.array([0.2, -0.1, 0.4]),
+                0.8,
+            ),
+        ],
+        ids=["diagonal", "coupled-correlated", "large-dt", "3d"],
+    )
+    def test_moments_match_euler_maruyama(self, drift, diffusion_cov, cint, dt):
+        """Analytic (Ad, Qd, cd) must match empirical moments from EM simulation.
+
+        For the SDE  dx = (A x + c) dt + G dW,  starting from deterministic x0:
+          - E[x(dt)] = Ad @ x0 + cd
+          - Cov[x(dt)] = Qd   (process noise covariance over one step)
+
+        We validate by running many EM trajectories with a very fine sub-step
+        and comparing sample statistics against the analytic formulas.
+        """
+        from causal_ssm_agent.models.ssm.discretization import discretize_system
+
+        n = drift.shape[0]
+        n_trajectories = 50_000
+        dt_sim = 1e-4  # fine Euler-Maruyama sub-step
+        n_steps = round(dt / dt_sim)
+
+        # Cholesky factor of diffusion_cov = GG'
+        G = jnp.linalg.cholesky(diffusion_cov)
+        sqrt_dt_sim = jnp.sqrt(dt_sim)
+
+        # Deterministic starting point
+        key = random.PRNGKey(42)
+        x0 = jnp.ones(n) * 0.5
+
+        # --- Euler-Maruyama simulation ---
+        keys = random.split(key, n_steps)
+        x = jnp.broadcast_to(x0, (n_trajectories, n))  # (N, n)
+
+        for i in range(n_steps):
+            z = random.normal(keys[i], shape=(n_trajectories, n))
+            dx_det = (x @ drift.T + (cint if cint is not None else 0.0)) * dt_sim
+            dx_stoch = (z @ G.T) * sqrt_dt_sim
+            x = x + dx_det + dx_stoch
+
+        # Empirical moments
+        emp_mean = jnp.mean(x, axis=0)
+        emp_cov = jnp.cov(x.T, bias=False)
+
+        # --- Analytic moments from discretize_system ---
+        Ad, Qd, cd = discretize_system(drift, diffusion_cov, cint, dt)
+        analytic_mean = Ad @ x0 + (cd if cd is not None else 0.0)
+        analytic_cov = Qd
+
+        # --- Compare ---
+        # Mean: Monte-Carlo SE ~ sqrt(diag(Qd)/N), allow ~5 sigma
+        mc_se_mean = jnp.sqrt(jnp.diag(analytic_cov) / n_trajectories)
+        mean_tol = jnp.maximum(5.0 * mc_se_mean, 1e-3)  # floor at 1e-3
+        mean_err = jnp.abs(analytic_mean - emp_mean)
+        assert jnp.all(mean_err < mean_tol), (
+            f"Mean mismatch:\n  analytic={analytic_mean}\n  empirical={emp_mean}\n"
+            f"  error={mean_err}\n  tolerance={mean_tol}"
+        )
+
+        # Covariance: use relative tolerance for entries, absolute for near-zero
+        cov_err = jnp.abs(analytic_cov - emp_cov)
+        cov_scale = jnp.maximum(jnp.abs(analytic_cov), 1e-3)
+        # Allow ~5% relative error (Monte-Carlo variance of sample cov ~ 1/sqrt(N))
+        rel_tol = 0.05
+        assert jnp.all(cov_err < rel_tol * cov_scale + 1e-3), (
+            f"Covariance mismatch:\n  analytic=\n{analytic_cov}\n  empirical=\n{emp_cov}\n"
+            f"  error=\n{cov_err}\n  rel_scale=\n{cov_scale}"
+        )
+
+
 class TestParticleLikelihoodBackend:
     """Test particle filter likelihood backend."""
 
