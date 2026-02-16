@@ -25,23 +25,21 @@ The schema implements the two-stage pipeline (see [pipeline.md](pipeline.md)): l
 ### LatentModel Validation
 
 1. **Exogenous edges:** If `role='exogenous'`, construct cannot appear as `effect` in any edge
-2. **Contemporaneous same-scale only:** If `lagged=False`, cause and effect must have identical `causal_granularity`
+2. **Contemporaneous same-scale only:** If `lagged=False`, cause and effect must have identical `temporal_scale`
 3. **Single outcome:** Exactly one construct must have `is_outcome=True`
 4. **Outcome must be endogenous:** If `is_outcome=True`, then `role='endogenous'`
-5. **Time-varying requires granularity:** If `temporal_status='time_varying'`, then `causal_granularity` must be set
-6. **Time-invariant forbids granularity:** If `temporal_status='time_invariant'`, then `causal_granularity` must be `None`
+5. **Time-varying requires granularity:** If `temporal_status='time_varying'`, then `temporal_scale` must be set
+6. **Time-invariant forbids granularity:** If `temporal_status='time_invariant'`, then `temporal_scale` must be `None`
 
 ### MeasurementModel Validation
 
 1. **Valid construct reference:** Each indicator's `construct_name` must exist in the latent model
 2. **Valid aggregation:** `aggregation` must be a key in the aggregation registry
-3. **Valid granularity:** `measurement_granularity` must be one of: hourly, daily, weekly, monthly, yearly
 
 ### CausalSpec Validation (cross-model)
 
-1. **Measurement granularity constraint:** Indicator's `measurement_granularity` cannot be coarser than its construct's `causal_granularity`
-2. **Constructs may lack indicators:** A construct can exist without indicators. Whether the target causal effect is identifiable is checked by y0 (Pearl's ID algorithm), not the schema.
-3. **Indicator-construct consistency:** All indicators must reference valid constructs
+1. **Constructs may lack indicators:** A construct can exist without indicators. Whether the target causal effect is identifiable is checked by y0 (Pearl's ID algorithm), not the schema.
+2. **Indicator-construct consistency:** All indicators must reference valid constructs
 
 ---
 
@@ -56,7 +54,7 @@ class Construct(BaseModel):
     role: Literal["endogenous", "exogenous"]
     is_outcome: bool = False           # Target of causal query
     temporal_status: Literal["time_varying", "time_invariant"]
-    causal_granularity: str | None     # hourly, daily, weekly, monthly, yearly, or None
+    temporal_scale: str | None     # hourly, daily, weekly, monthly, yearly, or None
 ```
 
 ### Indicator
@@ -66,9 +64,8 @@ class Indicator(BaseModel):
     name: str                          # Unique identifier
     construct_name: str                # Which construct this measures
     how_to_measure: str                # Extraction instructions
-    measurement_granularity: str       # hourly, daily, weekly, monthly, yearly
     measurement_dtype: str             # continuous, binary, count, ordinal, categorical
-    aggregation: str = "mean"          # How to aggregate to causal_granularity
+    aggregation: str = "mean"          # How to aggregate to aggregation_window
 ```
 
 ### CausalEdge

@@ -112,7 +112,6 @@ def _summarize_measurement(indicators: list[dict[str, Any]]) -> dict[str, Any]:
             {
                 "name": indicator.get("name"),
                 "dtype": indicator.get("measurement_dtype"),
-                "granularity": indicator.get("measurement_granularity"),
                 "aggregation": indicator.get("aggregation"),
             }
         )

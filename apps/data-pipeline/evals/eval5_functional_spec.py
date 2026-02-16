@@ -56,10 +56,6 @@ def build_synthetic_data_summary(causal_spec: dict) -> str:
     lines.append(f"  Total indicators: {len(indicators)}")
     lines.append(f"  Total constructs: {len(constructs)}")
 
-    # Summarize granularities
-    grans = Counter(ind.get("measurement_granularity", "unknown") for ind in indicators)
-    lines.append(f"  Granularities: {dict(grans)}")
-
     # Summarize dtypes
     dtypes = Counter(ind.get("measurement_dtype", "unknown") for ind in indicators)
     lines.append(f"  Data types: {dict(dtypes)}")
@@ -69,9 +65,8 @@ def build_synthetic_data_summary(causal_spec: dict) -> str:
     for ind in indicators:
         name = ind.get("name", "?")
         dtype = ind.get("measurement_dtype", "?")
-        gran = ind.get("measurement_granularity", "?")
         construct = ind.get("construct_name", "?")
-        lines.append(f"    {name}: dtype={dtype}, granularity={gran}, construct={construct}")
+        lines.append(f"    {name}: dtype={dtype}, construct={construct}")
 
     # Construct temporal info
     tv_constructs = [
