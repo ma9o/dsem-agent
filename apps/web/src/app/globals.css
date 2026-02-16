@@ -52,6 +52,10 @@
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
   --radius: 0.625rem;
+  --edge-lagged: oklch(0.59 0.19 260);
+  --edge-contemporary: oklch(0.68 0.02 256);
+  --edge-indicator: oklch(0.65 0.16 290);
+  --edge-label: oklch(0.45 0 0);
 }
 
 .dark {
@@ -74,8 +78,68 @@
   --border: oklch(0.269 0 0);
   --input: oklch(0.269 0 0);
   --ring: oklch(0.439 0 0);
+  --edge-lagged: oklch(0.7 0.15 260);
+  --edge-contemporary: oklch(0.55 0.02 256);
+  --edge-indicator: oklch(0.72 0.12 290);
+  --edge-label: oklch(0.7 0 0);
 }
 
 body {
   font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Stage entrance animation */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.4s ease-out both;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out both;
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.3s ease-out both;
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s ease-in-out infinite;
+}
+
+/* Focus visible ring for interactive elements */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
