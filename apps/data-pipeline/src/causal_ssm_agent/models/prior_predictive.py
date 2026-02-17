@@ -504,15 +504,21 @@ def format_parameter_feedback(
 def get_failed_parameters(
     results: list[PriorValidationResult],
     parameter_names: list[str],
+    causal_spec: dict | None = None,
 ) -> list[str]:
     """Extract parameter names that contributed to validation failure.
 
     Maps validation result parameter names (which may be SSM site names like
     'drift_diag_pop' or 'scale_mood') back to ModelSpec parameter names.
 
+    When ``causal_spec`` is provided, scale mismatch failures are targeted
+    to the construct whose indicator triggered the mismatch rather than
+    re-eliciting all parameters.
+
     Args:
         results: Validation results from prior predictive check
         parameter_names: All ModelSpec parameter names
+        causal_spec: Optional CausalSpec dict for targeted re-elicitation
 
     Returns:
         List of ModelSpec parameter names that need re-elicitation
@@ -540,6 +546,15 @@ def get_failed_parameters(
         "dynamics_stability": ["rho", "ar", "sigma", "sd"],  # drift + diffusion
     }
 
+    # Build indicator→construct lookup from causal_spec
+    indicator_to_construct: dict[str, str] = {}
+    if causal_spec:
+        for ind in causal_spec.get("measurement", {}).get("indicators", []):
+            ind_name = ind.get("name") if isinstance(ind, dict) else ind.name
+            construct = ind.get("construct_name") if isinstance(ind, dict) else ind.construct_name
+            if ind_name and construct:
+                indicator_to_construct[ind_name] = construct
+
     failed_params = set()
     for r in failed_results:
         result_param = r.parameter.lower()
@@ -566,8 +581,17 @@ def get_failed_parameters(
                     if any(kw in param_name.lower() for kw in keywords):
                         failed_params.add(param_name)
 
-        # Scale mismatch (scale_<indicator>) -> all parameters affect scale
+        # Scale mismatch (scale_<indicator>) -> targeted or blanket
         if result_param.startswith("scale_"):
-            failed_params.update(parameter_names)
+            indicator_name = r.parameter.removeprefix("scale_")
+            construct = indicator_to_construct.get(indicator_name)
+            if construct:
+                # Only re-elicit parameters whose name contains the construct
+                for param_name in parameter_names:
+                    if construct in param_name.lower():
+                        failed_params.add(param_name)
+            else:
+                # No causal_spec or no match → fall back to all
+                failed_params.update(parameter_names)
 
     return list(failed_params) if failed_params else list(parameter_names)

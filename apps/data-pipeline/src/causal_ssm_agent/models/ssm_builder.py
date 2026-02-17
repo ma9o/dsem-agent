@@ -5,6 +5,7 @@ while using the NumPyro SSM implementation underneath.
 """
 
 import logging
+import math
 from typing import Any
 
 import jax.numpy as jnp
@@ -18,6 +19,7 @@ from causal_ssm_agent.models.ssm import (
     SSMSpec,
     fit,
 )
+from causal_ssm_agent.orchestrator.schemas import GRANULARITY_HOURS, compute_lag_hours
 from causal_ssm_agent.orchestrator.schemas_model import (
     DistributionFamily,
     ModelSpec,
@@ -171,6 +173,7 @@ class SSMModelBuilder:
 
         self._model: SSMModel | None = None
         self._result: InferenceResult | None = None
+        self._edge_lag_days: dict[tuple[int, int], float] = {}
 
     @staticmethod
     def get_default_sampler_config() -> dict:
@@ -178,6 +181,23 @@ class SSMModelBuilder:
         from causal_ssm_agent.utils.config import get_config
 
         return get_config().inference.to_sampler_config()
+
+    def _get_construct_dt_days(self, construct_name: str) -> float:
+        """Get the time-step size in fractional days for a construct.
+
+        Looks up ``temporal_scale`` from the causal_spec and converts
+        via ``GRANULARITY_HOURS``.  Falls back to 1.0 (daily) when no
+        spec is available or the construct is not found.
+        """
+        if self._causal_spec is None:
+            return 1.0
+        for c in self._causal_spec.get("latent", {}).get("constructs", []):
+            name = c.get("name") if isinstance(c, dict) else c.name
+            if name == construct_name:
+                gran = c.get("temporal_scale") if isinstance(c, dict) else c.temporal_scale
+                if gran and gran in GRANULARITY_HOURS:
+                    return GRANULARITY_HOURS[gran] / 24.0
+        return 1.0
 
     def _convert_spec_to_ssm(self, model_spec: ModelSpec | dict) -> SSMSpec:
         """Convert ModelSpec to SSMSpec.
@@ -325,16 +345,44 @@ class SSMModelBuilder:
         # Build name-to-index maps
         latent_idx = {name: i for i, name in enumerate(latent_names)}
 
+        # Build construct lookup for lag_hours computation
+        constructs = latent_data.get("constructs", [])
+        construct_map: dict[str, dict | Any] = {}
+        for c in constructs:
+            name = c.get("name") if isinstance(c, dict) else c.name
+            construct_map[name] = c
+
         # --- Drift mask ---
         # Diagonal always True (AR effects); off-diagonal True only where
         # a CausalEdge exists between two constructs.
         drift_mask = np.eye(n_latent, dtype=bool)
+        # Store edge metadata: (effect_idx, cause_idx) → lag_days
+        self._edge_lag_days: dict[tuple[int, int], float] = {}
         for edge in edges:
             cause = edge.get("cause") if isinstance(edge, dict) else edge.cause
             effect = edge.get("effect") if isinstance(edge, dict) else edge.effect
             if cause in latent_idx and effect in latent_idx:
+                ei, ci = latent_idx[effect], latent_idx[cause]
                 # drift[effect_idx, cause_idx] = True (effect row, cause col)
-                drift_mask[latent_idx[effect], latent_idx[cause]] = True
+                drift_mask[ei, ci] = True
+
+                # Compute and store lag_hours for this edge
+                lagged = edge.get("lagged", True) if isinstance(edge, dict) else edge.lagged
+                cause_gran = None
+                effect_gran = None
+                if cause in construct_map:
+                    c = construct_map[cause]
+                    cause_gran = (
+                        c.get("temporal_scale") if isinstance(c, dict) else c.temporal_scale
+                    )
+                if effect in construct_map:
+                    c = construct_map[effect]
+                    effect_gran = (
+                        c.get("temporal_scale") if isinstance(c, dict) else c.temporal_scale
+                    )
+                lag_hours = compute_lag_hours(cause_gran, effect_gran, lagged)
+                if lag_hours > 0:
+                    self._edge_lag_days[(ei, ci)] = lag_hours / 24.0
 
         # --- Lambda mask ---
         # Build from measurement model indicators → construct mapping.
@@ -423,8 +471,18 @@ class SSMModelBuilder:
         # Maps SSMPriors field -> list of (array_index, normalized_dict)
         per_element: dict[str, list[tuple[int, dict]]] = {}
 
+        # Track raw DT values for exact logm conversion (Phase 2)
+        # {matrix_index: (rho_mu, rho_sigma)} for diagonal
+        dt_diag_raw: dict[int, tuple[float, float]] = {}
+        # {flat_offdiag_index: (beta_mu, beta_sigma)} for off-diagonal
+        dt_offdiag_raw: dict[int, tuple[float, float]] = {}
+        # Track dt used for each parameter (for logm: needs single dt)
+        dt_values: list[float] = []
+
         # Build index maps from masks if available
-        offdiag_param_index, lambda_param_index = self._build_prior_index_maps(ssm_spec, model_spec)
+        offdiag_param_index, lambda_param_index, diag_param_index = self._build_prior_index_maps(
+            ssm_spec, model_spec
+        )
 
         for param_name, prior_spec in priors.items():
             distribution = prior_spec.get("distribution", "Normal")
@@ -433,10 +491,55 @@ class SSMModelBuilder:
             # Normalize distribution params to mu/sigma
             normalized = _normalize_prior_params(distribution, params)
 
-            # Check if this parameter maps to a specific array position
+            # AR coefficient → apply DT-to-CT drift transform
+            if param_name in diag_param_index:
+                attr, idx = diag_param_index[param_name]
+                construct_name = param_name.removeprefix("rho_").removeprefix("ar_")
+                # Precedence: reference_interval_days > temporal_scale > default 1.0
+                ref_days = prior_spec.get("reference_interval_days")
+                if ref_days is not None and ref_days > 0:
+                    dt = float(ref_days)
+                else:
+                    dt = self._get_construct_dt_days(construct_name)
+                mu_ar = max(0.001, min(normalized.get("mu", 0.5), 0.999))
+                sigma_ar = normalized.get("sigma", 0.2)
+                mu_drift = -math.log(mu_ar) / dt
+                sigma_drift = sigma_ar / (mu_ar * dt)  # delta method
+                per_element.setdefault(attr, []).append(
+                    (idx, {"mu": mu_drift, "sigma": sigma_drift})
+                )
+                # Save raw DT values for exact logm
+                dt_diag_raw[idx] = (mu_ar, sigma_ar)
+                dt_values.append(dt)
+                continue
+
+            # Fixed effect (beta) → apply DT-to-CT coupling rate transform
+            # Literature betas are discrete-time cross-lagged coefficients;
+            # the drift off-diagonal is a continuous-time rate: β_CT ≈ β_DT / dt
             if param_name in offdiag_param_index:
                 attr, idx = offdiag_param_index[param_name]
-                per_element.setdefault(attr, []).append((idx, normalized))
+                # Precedence: reference_interval_days > temporal_scale > default 1.0
+                ref_days = prior_spec.get("reference_interval_days")
+                if ref_days is not None and ref_days > 0:
+                    dt = float(ref_days)
+                else:
+                    dt = 1.0  # default daily
+                    # Parse "beta_<cause>_<effect>" to get effect construct's dt
+                    if ssm_spec and ssm_spec.latent_names:
+                        latent_set = set(ssm_spec.latent_names)
+                        compound = param_name.removeprefix("beta_")
+                        split = _split_compound_name(compound, latent_set, latent_set)
+                        if split:
+                            _cause, effect = split
+                            dt = self._get_construct_dt_days(effect)
+                mu_beta = normalized.get("mu", 0.0)
+                sigma_beta = normalized.get("sigma", 0.5)
+                per_element.setdefault(attr, []).append(
+                    (idx, {"mu": mu_beta / dt, "sigma": sigma_beta / dt})
+                )
+                # Save raw DT values for exact logm
+                dt_offdiag_raw[idx] = (mu_beta, sigma_beta)
+                dt_values.append(dt)
                 continue
             if param_name in lambda_param_index:
                 attr, idx = lambda_param_index[param_name]
@@ -503,13 +606,292 @@ class SSMModelBuilder:
 
             setattr(ssm_priors, attr, result)
 
+        # Try exact matrix logarithm DT→CT conversion (Phase 2)
+        # Falls back to first-order (already stored above) if not embeddable
+        if dt_diag_raw and ssm_spec:
+            self._try_exact_logm_conversion(
+                ssm_priors, ssm_spec, dt_diag_raw, dt_offdiag_raw, dt_values,
+            )
+        else:
+            # Diagnostic: warn when first-order approximation may be inaccurate
+            self._warn_first_order_approximation(ssm_priors)
+
+        # Check consistency between CT drift rates and edge lag_hours
+        if ssm_spec:
+            self._check_drift_lag_consistency(ssm_priors, ssm_spec)
+
         return ssm_priors
+
+    def _try_exact_logm_conversion(
+        self,
+        ssm_priors: SSMPriors,
+        ssm_spec: SSMSpec,
+        dt_diag_raw: dict[int, tuple[float, float]],
+        dt_offdiag_raw: dict[int, tuple[float, float]],
+        dt_values: list[float],
+    ) -> None:
+        """Try exact matrix logarithm DT→CT conversion, updating ssm_priors in-place.
+
+        Assembles the DT transition matrix Phi from AR (diagonal) and
+        cross-lag (off-diagonal) priors, checks embeddability, and if
+        possible replaces the first-order drift priors with exact
+        logm(Phi)/dt values.
+
+        Falls back silently to first-order (already stored in ssm_priors)
+        if embeddability check fails.
+
+        Reference: Higham (2008), Functions of Matrices, Ch. 11.
+        """
+        from scipy.linalg import logm as scipy_logm
+
+        n = ssm_spec.n_latent
+        if n < 2:
+            # For 1D, first-order is exact (scalar log)
+            return
+
+        # Need a single consistent dt for the full matrix conversion.
+        # If parameters have different observation intervals, the DT
+        # transition matrix is not self-consistent and logm cannot be applied.
+        if not dt_values:
+            return
+        dt_min, dt_max = min(dt_values), max(dt_values)
+        if dt_min <= 0:
+            return
+        if dt_max / dt_min > 1.01:  # >1% variation → mixed intervals
+            logger.info(
+                "Mixed observation intervals (%.1f–%.1f days) across parameters. "
+                "Cannot apply exact matrix logarithm; using first-order approximation.",
+                dt_min, dt_max,
+            )
+            self._warn_first_order_approximation(ssm_priors)
+            return
+        dt = float(np.mean(dt_values))
+
+        # Assemble DT transition matrix Phi from prior means
+        Phi = np.eye(n)
+        for idx, (rho_mu, _rho_sigma) in dt_diag_raw.items():
+            if idx < n:
+                Phi[idx, idx] = rho_mu
+
+        # Build off-diagonal position map from drift_mask
+        offdiag_positions: list[tuple[int, int]] = []
+        if ssm_spec.drift_mask is not None:
+            for i in range(n):
+                for j in range(n):
+                    if i != j and ssm_spec.drift_mask[i, j]:
+                        offdiag_positions.append((i, j))
+
+        for flat_idx, (beta_mu, _beta_sigma) in dt_offdiag_raw.items():
+            if flat_idx < len(offdiag_positions):
+                i, j = offdiag_positions[flat_idx]
+                Phi[i, j] = beta_mu
+
+        # Check embeddability: all eigenvalues must be real and positive
+        eigenvalues = np.linalg.eigvals(Phi)
+        if not np.all(np.isreal(eigenvalues)) or not np.all(eigenvalues.real > 0):
+            logger.info(
+                "DT transition matrix is not embeddable (eigenvalues: %s). "
+                "Using first-order DT->CT approximation.",
+                eigenvalues,
+            )
+            self._warn_first_order_approximation(ssm_priors)
+            return
+
+        # Compute exact drift matrix via matrix logarithm
+        try:
+            A_exact = scipy_logm(Phi).real / dt
+        except Exception as e:
+            logger.warning("Matrix logarithm failed: %s. Using first-order approximation.", e)
+            self._warn_first_order_approximation(ssm_priors)
+            return
+
+        # Check stability: all eigenvalues of A must have negative real parts
+        A_eigenvalues = np.linalg.eigvals(A_exact)
+        if not np.all(A_eigenvalues.real < 0):
+            logger.warning(
+                "Exact drift matrix is unstable (eigenvalues: %s). "
+                "Using first-order approximation.",
+                A_eigenvalues,
+            )
+            self._warn_first_order_approximation(ssm_priors)
+            return
+
+        # Success: overwrite drift priors with exact logm-derived values
+        # Diagonal: store as positive magnitude (model negates via -abs())
+        diag_prior = ssm_priors.drift_diag
+        if diag_prior and "mu" in diag_prior:
+            mu_arr = diag_prior["mu"]
+            sigma_arr = diag_prior.get("sigma", [0.5] * n)
+            if isinstance(mu_arr, list):
+                for idx in range(min(n, len(mu_arr))):
+                    # |A[i,i]| since model stores as positive magnitude
+                    mu_arr[idx] = abs(float(A_exact[idx, idx]))
+                    # Scale sigma by ratio of exact to first-order
+                    if idx in dt_diag_raw:
+                        rho_mu, _rho_sigma = dt_diag_raw[idx]
+                        first_order_mu = -math.log(max(0.001, min(rho_mu, 0.999))) / dt
+                        if abs(first_order_mu) > 1e-10:
+                            ratio = abs(float(A_exact[idx, idx])) / first_order_mu
+                            if isinstance(sigma_arr, list) and idx < len(sigma_arr):
+                                sigma_arr[idx] = float(sigma_arr[idx]) * ratio
+                diag_prior["mu"] = mu_arr
+                if isinstance(sigma_arr, list):
+                    diag_prior["sigma"] = sigma_arr
+
+        # Off-diagonal: direct CT coupling rate from A
+        offdiag_prior = ssm_priors.drift_offdiag
+        if offdiag_prior and "mu" in offdiag_prior:
+            mu_arr = offdiag_prior["mu"]
+            sigma_arr = offdiag_prior.get("sigma", [0.5] * len(offdiag_positions))
+            if isinstance(mu_arr, list):
+                for flat_idx, (i, j) in enumerate(offdiag_positions):
+                    if flat_idx < len(mu_arr):
+                        mu_arr[flat_idx] = float(A_exact[i, j])
+                        # Scale sigma by ratio of exact to first-order
+                        if flat_idx in dt_offdiag_raw:
+                            _beta_mu, beta_sigma = dt_offdiag_raw[flat_idx]
+                            first_order_sigma = beta_sigma / dt
+                            if abs(first_order_sigma) > 1e-10:
+                                # Use same relative uncertainty
+                                exact_mu = abs(float(A_exact[i, j]))
+                                first_order_mu_abs = abs(dt_offdiag_raw[flat_idx][0] / dt)
+                                if first_order_mu_abs > 1e-10:
+                                    ratio = exact_mu / first_order_mu_abs
+                                    if isinstance(sigma_arr, list) and flat_idx < len(sigma_arr):
+                                        sigma_arr[flat_idx] = first_order_sigma * max(ratio, 0.5)
+                offdiag_prior["mu"] = mu_arr
+                if isinstance(sigma_arr, list):
+                    offdiag_prior["sigma"] = sigma_arr
+
+        logger.info(
+            "Exact matrix logarithm DT->CT conversion succeeded for %dx%d system "
+            "(dt=%.1f days). Drift eigenvalues: %s",
+            n, n, dt,
+            [f"{ev.real:.4f}" for ev in A_eigenvalues],
+        )
+
+    @staticmethod
+    def _warn_first_order_approximation(ssm_priors: SSMPriors) -> None:
+        """Log warning when off-diagonal drift magnitudes suggest first-order error > 20%.
+
+        The first-order approximation beta_CT = beta_DT / dt has error
+        O(dt * ||A_offdiag||). When any off-diagonal magnitude exceeds 20%
+        of the corresponding diagonal magnitude, the approximation may be
+        significantly inaccurate.
+        """
+        diag_prior = ssm_priors.drift_diag
+        offdiag_prior = ssm_priors.drift_offdiag
+        if diag_prior is None or offdiag_prior is None:
+            return
+
+        diag_mu = diag_prior.get("mu")
+        offdiag_mu = offdiag_prior.get("mu")
+        if diag_mu is None or offdiag_mu is None:
+            return
+
+        # Normalize to lists
+        if isinstance(diag_mu, (int, float)):
+            diag_mu = [diag_mu]
+        if isinstance(offdiag_mu, (int, float)):
+            offdiag_mu = [offdiag_mu]
+
+        if not diag_mu or not offdiag_mu:
+            return
+
+        # Use minimum diagonal magnitude as reference
+        min_diag = min(abs(float(d)) for d in diag_mu)
+        if min_diag < 1e-10:
+            return
+
+        for i, od in enumerate(offdiag_mu):
+            ratio = abs(float(od)) / min_diag
+            if ratio > 0.2:
+                logger.warning(
+                    "First-order DT->CT approximation may be inaccurate: "
+                    "off-diagonal drift[%d] magnitude (%.3f) is %.0f%% of "
+                    "minimum diagonal magnitude (%.3f). Consider exact matrix "
+                    "logarithm conversion (Phase 2).",
+                    i,
+                    abs(float(od)),
+                    ratio * 100,
+                    min_diag,
+                )
+                break  # One warning is enough
+
+    def _check_drift_lag_consistency(
+        self,
+        ssm_priors: SSMPriors,
+        ssm_spec: SSMSpec,
+    ) -> None:
+        """Check CT drift rates against expected lag from causal edge metadata.
+
+        For each off-diagonal drift entry with a known edge lag, compares
+        the implied coupling timescale (1/|A[i,j]|) with the expected lag.
+        Logs a warning when they differ by more than 5x, suggesting the
+        literature prior may be calibrated to a different timescale than
+        the causal model expects.
+        """
+        edge_lags = getattr(self, "_edge_lag_days", {})
+        if not edge_lags:
+            return
+
+        offdiag_prior = ssm_priors.drift_offdiag
+        if offdiag_prior is None or "mu" not in offdiag_prior:
+            return
+
+        mu_arr = offdiag_prior["mu"]
+        if not isinstance(mu_arr, list):
+            return
+
+        n = ssm_spec.n_latent
+        # Build off-diagonal position map (same order as drift mask iteration)
+        offdiag_positions: list[tuple[int, int]] = []
+        if ssm_spec.drift_mask is not None:
+            for i in range(n):
+                for j in range(n):
+                    if i != j and ssm_spec.drift_mask[i, j]:
+                        offdiag_positions.append((i, j))
+
+        for flat_idx, (ei, ci) in enumerate(offdiag_positions):
+            if flat_idx >= len(mu_arr):
+                break
+            if (ei, ci) not in edge_lags:
+                continue
+
+            mu_ct = abs(float(mu_arr[flat_idx]))
+            if mu_ct < 1e-10:
+                continue
+
+            expected_lag_days = edge_lags[(ei, ci)]
+            implied_timescale_days = 1.0 / mu_ct
+
+            ratio = max(implied_timescale_days, expected_lag_days) / max(
+                min(implied_timescale_days, expected_lag_days), 1e-10
+            )
+            if ratio > 5.0:
+                cause_name = (
+                    ssm_spec.latent_names[ci] if ssm_spec.latent_names else f"latent_{ci}"
+                )
+                effect_name = (
+                    ssm_spec.latent_names[ei] if ssm_spec.latent_names else f"latent_{ei}"
+                )
+                logger.warning(
+                    "Drift rate for %s->%s implies timescale %.1f days, "
+                    "but edge lag suggests %.1f days (%.0fx mismatch). "
+                    "The literature prior may be calibrated to a different "
+                    "observation interval than the causal model expects.",
+                    cause_name,
+                    effect_name,
+                    implied_timescale_days,
+                    expected_lag_days,
+                    ratio,
+                )
 
     def _build_prior_index_maps(
         self,
         ssm_spec: SSMSpec | None,
         model_spec: ModelSpec | dict | None,
-    ) -> tuple[dict[str, tuple[str, int]], dict[str, tuple[str, int]]]:
+    ) -> tuple[dict[str, tuple[str, int]], dict[str, tuple[str, int]], dict[str, tuple[str, int]]]:
         """Build parameter name → (SSMPriors field, array index) maps.
 
         Uses drift_mask and lambda_mask to determine which array position
@@ -517,27 +899,38 @@ class SSMModelBuilder:
         the sampling order in _sample_drift/_sample_lambda.
 
         Returns:
-            (offdiag_param_index, lambda_param_index) — both are
-            {param_name: (ssm_field, index)} dicts. Empty if no masks.
+            (offdiag_param_index, lambda_param_index, diag_param_index) —
+            all are {param_name: (ssm_field, index)} dicts. Empty if no
+            spec/masks.
         """
         offdiag_index: dict[str, tuple[str, int]] = {}
         lambda_index: dict[str, tuple[str, int]] = {}
+        diag_index: dict[str, tuple[str, int]] = {}
 
         if ssm_spec is None:
-            return offdiag_index, lambda_index
+            return offdiag_index, lambda_index, diag_index
 
         # Parse model_spec for parameter names + roles
         if not model_spec:
-            return offdiag_index, lambda_index
+            return offdiag_index, lambda_index, diag_index
         if isinstance(model_spec, dict):
             spec_obj = ModelSpec.model_validate(model_spec)
         elif isinstance(model_spec, ModelSpec):
             spec_obj = model_spec
         else:
-            return offdiag_index, lambda_index
+            return offdiag_index, lambda_index, diag_index
 
         latent_names = ssm_spec.latent_names or []
         latent_idx_map = {name: i for i, name in enumerate(latent_names)}
+
+        # --- Drift diagonal index (AR coefficients) ---
+        for p in spec_obj.parameters:
+            if p.role != ParameterRole.AR_COEFFICIENT:
+                continue
+            # Convention: parameter name "rho_<construct>" or "ar_<construct>"
+            construct = p.name.removeprefix("rho_").removeprefix("ar_")
+            if construct in latent_idx_map:
+                diag_index[p.name] = ("drift_diag", latent_idx_map[construct])
 
         # --- Drift off-diagonal index ---
         if ssm_spec.drift_mask is not None:
@@ -603,7 +996,7 @@ class SSMModelBuilder:
                 if pos in positions:
                     lambda_index[p.name] = ("lambda_free", positions.index(pos))
 
-        return offdiag_index, lambda_index
+        return offdiag_index, lambda_index, diag_index
 
     def build_model(
         self,

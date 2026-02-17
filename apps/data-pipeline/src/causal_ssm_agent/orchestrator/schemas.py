@@ -5,12 +5,16 @@ Separates:
 2. MeasurementModel - observed indicators that reflect constructs (data-driven)
 """
 
+import logging
+import re
 from enum import StrEnum
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+logger = logging.getLogger(__name__)
+
 # Valid aggregation functions for indicator specifications
-# Aggregation functions applied when bucketing raw extractions to measurement_granularity.
+# Aggregation functions applied when bucketing raw extractions to aggregation window.
 VALID_AGGREGATIONS = {
     "mean",
     "sum",
@@ -37,6 +41,77 @@ VALID_AGGREGATIONS = {
     "trend",
     "n_unique",
 }
+
+
+class ObservationKind(StrEnum):
+    """Derived observation kind from aggregation + measurement_dtype.
+
+    Determines the correct measurement equation for the SSM:
+    - CUMULATIVE: y(t) = integral of Lambda * x(s) ds + epsilon
+    - WINDOW_AVERAGE/VARIABILITY: y(t) = (1/T) integral of Lambda * x(s) ds + epsilon
+    - POINT_IN_TIME: y(t) = Lambda * x(t) + epsilon
+    - FREQUENCY: y(t) = count of events in window (Poisson-like)
+    """
+
+    CUMULATIVE = "cumulative"
+    WINDOW_AVERAGE = "window_average"
+    POINT_IN_TIME = "point_in_time"
+    VARIABILITY = "variability"
+    FREQUENCY = "frequency"
+
+
+# Classification rules: (aggregation, dtype) → ObservationKind
+_CUMULATIVE_AGGS = {"sum"}
+_POINT_IN_TIME_AGGS = {"first", "last"}
+_VARIABILITY_AGGS = {"std", "var", "range", "cv", "iqr", "instability", "skew", "kurtosis"}
+_FREQUENCY_AGGS = {"count", "n_unique"}
+
+# Aggregation keywords that conflict with how_to_measure text
+_SEMANTIC_COLLISIONS: list[tuple[str, set[str], str]] = [
+    # (regex pattern in how_to_measure, conflicting aggregations, explanation)
+    (r"\bcount\b|\bnumber of\b|\bhow many\b", {"mean", "median", "std", "var"},
+     "how_to_measure implies counting but aggregation computes a statistic"),
+    (r"\baverage\b|\bmean\b", {"sum", "first", "last", "count"},
+     "how_to_measure implies averaging but aggregation is not mean/median"),
+    (r"\btotal\b|\bcumulative\b|\bsum\b", {"mean", "median", "first", "last"},
+     "how_to_measure implies summing but aggregation is not sum"),
+    (r"\blast\b|\bmost recent\b|\bcurrent\b", {"mean", "sum", "median"},
+     "how_to_measure implies point-in-time but aggregation is a window statistic"),
+]
+
+
+def derive_observation_kind(aggregation: str) -> ObservationKind:
+    """Derive observation kind from aggregation function."""
+    if aggregation in _CUMULATIVE_AGGS:
+        return ObservationKind.CUMULATIVE
+    if aggregation in _POINT_IN_TIME_AGGS:
+        return ObservationKind.POINT_IN_TIME
+    if aggregation in _VARIABILITY_AGGS:
+        return ObservationKind.VARIABILITY
+    if aggregation in _FREQUENCY_AGGS:
+        return ObservationKind.FREQUENCY
+    # Default: window average (mean, median, percentiles, entropy, trend)
+    return ObservationKind.WINDOW_AVERAGE
+
+
+def check_semantic_collisions(
+    how_to_measure: str,
+    aggregation: str,
+) -> list[str]:
+    """Check for inconsistencies between how_to_measure text and aggregation.
+
+    Returns list of warning messages (empty if no collisions found).
+    """
+    warnings = []
+    text_lower = how_to_measure.lower()
+    for pattern, conflict_aggs, explanation in _SEMANTIC_COLLISIONS:
+        if aggregation in conflict_aggs and re.search(pattern, text_lower):
+            warnings.append(
+                f"Semantic collision: {explanation}. "
+                f"how_to_measure contains '{re.search(pattern, text_lower).group()}' "
+                f"but aggregation='{aggregation}'."
+            )
+    return warnings
 
 
 class Role(StrEnum):
@@ -85,7 +160,7 @@ class Construct(BaseModel):
     temporal_status: TemporalStatus = Field(
         description="'time_varying' (changes over time) or 'time_invariant' (fixed)"
     )
-    causal_granularity: str | None = Field(
+    temporal_scale: str | None = Field(
         default=None,
         description=(
             "'hourly', 'daily', 'weekly', 'monthly', 'yearly'. Required for time-varying constructs. "
@@ -99,19 +174,19 @@ class Construct(BaseModel):
         is_time_varying = self.temporal_status == TemporalStatus.TIME_VARYING
 
         if is_time_varying:
-            if self.causal_granularity is None:
+            if self.temporal_scale is None:
                 raise ValueError(
-                    f"Time-varying construct '{self.name}' requires causal_granularity"
+                    f"Time-varying construct '{self.name}' requires temporal_scale"
                 )
-            if self.causal_granularity not in GRANULARITY_HOURS:
+            if self.temporal_scale not in GRANULARITY_HOURS:
                 raise ValueError(
-                    f"Invalid causal_granularity '{self.causal_granularity}' for '{self.name}'. "
+                    f"Invalid temporal_scale '{self.temporal_scale}' for '{self.name}'. "
                     f"Must be one of: {', '.join(sorted(GRANULARITY_HOURS.keys()))}"
                 )
         else:
-            if self.causal_granularity is not None:
+            if self.temporal_scale is not None:
                 raise ValueError(
-                    f"Time-invariant construct '{self.name}' must not have causal_granularity"
+                    f"Time-invariant construct '{self.name}' must not have temporal_scale"
                 )
 
         # Outcomes must be endogenous
@@ -176,8 +251,8 @@ class LatentModel(BaseModel):
             if effect_construct.role == Role.EXOGENOUS:
                 raise ValueError(f"Exogenous construct '{edge.effect}' cannot be an effect")
 
-            cause_gran = cause_construct.causal_granularity
-            effect_gran = effect_construct.causal_granularity
+            cause_gran = cause_construct.temporal_scale
+            effect_gran = effect_construct.temporal_scale
 
             # Contemporaneous (lagged=False) requires same timescale
             # Exception: time-invariant causes (granularity=None) can affect any timescale
@@ -186,6 +261,22 @@ class LatentModel(BaseModel):
                 raise ValueError(
                     f"Contemporaneous edge (lagged=false) requires same timescale: "
                     f"{edge.cause} ({cause_gran}) -> {edge.effect} ({effect_gran})"
+                )
+
+            # Directed lagged=False between endogenous latent constructs is
+            # not supported by the current model class (linear CT-SDE).
+            # Drift A handles directed temporal effects (lagged=True).
+            # Diffusion GG' handles symmetric shared innovation (non-directional).
+            both_endogenous = (
+                cause_construct.role == Role.ENDOGENOUS
+                and effect_construct.role == Role.ENDOGENOUS
+            )
+            if not edge.lagged and both_time_varying and both_endogenous:
+                raise ValueError(
+                    f"Directed contemporaneous edge '{edge.cause}' -> '{edge.effect}' "
+                    "between endogenous latent constructs is not supported by the current "
+                    "model class (linear CT-SDE). Use lagged=True for drift-mediated "
+                    "effects, or model shared innovation via the diffusion covariance."
                 )
 
         # Outcome must have at least one incoming edge
@@ -248,17 +339,11 @@ class Indicator(BaseModel):
     how_to_measure: str = Field(
         description="Instructions for workers on how to extract this from data"
     )
-    measurement_granularity: str = Field(
-        description=(
-            "'finest' (one datapoint per raw entry) or 'hourly', 'daily', 'weekly', 'monthly', 'yearly'. "
-            "The resolution at which aggregated observations enter the model."
-        ),
-    )
     measurement_dtype: str = Field(
         description="'continuous', 'binary', 'count', 'ordinal', 'categorical'"
     )
     aggregation: str = Field(
-        description=f"Aggregation function applied when bucketing raw extractions to measurement_granularity. Available: {', '.join(sorted(VALID_AGGREGATIONS))}",
+        description=f"Aggregation function applied when bucketing raw extractions within aggregation window. Available: {', '.join(sorted(VALID_AGGREGATIONS))}",
     )
     ordinal_levels: list[str] | None = Field(
         default=None,
@@ -277,17 +362,6 @@ class Indicator(BaseModel):
             raise ValueError(f"Unknown aggregation '{v}'. Available: {available}")
         return v
 
-    @field_validator("measurement_granularity")
-    @classmethod
-    def validate_measurement_granularity(cls, v: str) -> str:
-        valid = {"finest"} | set(GRANULARITY_HOURS.keys())
-        if v not in valid:
-            raise ValueError(
-                f"Invalid measurement_granularity '{v}'. "
-                f"Must be 'finest' or one of: {', '.join(sorted(GRANULARITY_HOURS.keys()))}"
-            )
-        return v
-
     @field_validator("measurement_dtype")
     @classmethod
     def validate_measurement_dtype(cls, v: str) -> str:
@@ -297,6 +371,29 @@ class Indicator(BaseModel):
                 f"Invalid measurement_dtype '{v}'. Must be one of: {', '.join(sorted(valid))}"
             )
         return v
+
+    @model_validator(mode="after")
+    def warn_semantic_collisions(self) -> "Indicator":
+        """Log warnings when how_to_measure text conflicts with aggregation."""
+        collisions = check_semantic_collisions(self.how_to_measure, self.aggregation)
+        for warning in collisions:
+            logger.warning("Indicator '%s': %s", self.name, warning)
+        return self
+
+    @property
+    def observation_kind(self) -> ObservationKind:
+        """Derived observation kind from aggregation + measurement_dtype."""
+        return derive_observation_kind(self.aggregation)
+
+    @property
+    def requires_integral_measurement(self) -> bool:
+        """Whether this indicator requires an integral measurement equation.
+
+        Cumulative observations (e.g., step count = sum over window) relate to
+        the integral of the latent process: y(t) = integral(Lambda*x(s)ds) + epsilon
+        rather than the standard instantaneous equation: y(t) = Lambda*x(t) + epsilon.
+        """
+        return self.observation_kind == ObservationKind.CUMULATIVE
 
 
 class MeasurementModel(BaseModel):
@@ -415,33 +512,6 @@ class CausalSpec(BaseModel):
                     f"Indicator '{indicator.name}' references unknown construct '{indicator.construct_name}'"
                 )
 
-            # Validate measurement_granularity vs causal_granularity
-            construct = next(
-                c for c in self.latent.constructs if c.name == indicator.construct_name
-            )
-            if construct.temporal_status == TemporalStatus.TIME_VARYING:
-                causal_gran = construct.causal_granularity
-                meas_gran = indicator.measurement_granularity
-                # measurement_granularity must be finer than or equal to causal_granularity
-                if meas_gran != "finest" and causal_gran is not None:
-                    if meas_gran not in GRANULARITY_HOURS:
-                        raise ValueError(
-                            f"Unknown measurement granularity '{meas_gran}'. "
-                            f"Valid options: {sorted(GRANULARITY_HOURS.keys())}"
-                        )
-                    if causal_gran not in GRANULARITY_HOURS:
-                        raise ValueError(
-                            f"Unknown causal granularity '{causal_gran}'. "
-                            f"Valid options: {sorted(GRANULARITY_HOURS.keys())}"
-                        )
-                    meas_hours = GRANULARITY_HOURS[meas_gran]
-                    causal_hours = GRANULARITY_HOURS[causal_gran]
-                    if meas_hours > causal_hours:
-                        raise ValueError(
-                            f"Indicator '{indicator.name}' has measurement_granularity '{meas_gran}' "
-                            f"coarser than construct '{construct.name}' causal_granularity '{causal_gran}'"
-                        )
-
         return self
 
     def get_edge_lag_hours(self, edge: CausalEdge) -> int:
@@ -450,8 +520,8 @@ class CausalSpec(BaseModel):
         cause = construct_map[edge.cause]
         effect = construct_map[edge.effect]
         return compute_lag_hours(
-            cause.causal_granularity,
-            effect.causal_granularity,
+            cause.temporal_scale,
+            effect.temporal_scale,
             edge.lagged,
         )
 
@@ -576,13 +646,27 @@ def validate_latent_model(data: dict) -> tuple[LatentModel | None, list[str]]:
             errors.append(f"{edge_label}: exogenous construct '{edge.effect}' cannot be an effect")
             continue
 
-        cause_gran = cause_construct.causal_granularity
-        effect_gran = effect_construct.causal_granularity
+        cause_gran = cause_construct.temporal_scale
+        effect_gran = effect_construct.temporal_scale
         both_time_varying = cause_gran is not None and effect_gran is not None
         if not edge.lagged and both_time_varying and cause_gran != effect_gran:
             errors.append(
                 f"{edge_label}: contemporaneous edge requires same timescale, "
                 f"got {cause_gran} -> {effect_gran}"
+            )
+            continue
+
+        # Directed lagged=False between endogenous latent constructs is not
+        # supported by the current model class (linear CT-SDE).
+        both_endogenous = (
+            cause_construct.role == Role.ENDOGENOUS
+            and effect_construct.role == Role.ENDOGENOUS
+        )
+        if not edge.lagged and both_time_varying and both_endogenous:
+            errors.append(
+                f"{edge_label}: directed contemporaneous edge between endogenous "
+                "latent constructs is not supported by the current model class "
+                "(linear CT-SDE). Use lagged=True for drift-mediated effects."
             )
             continue
 
@@ -654,7 +738,6 @@ def validate_measurement_model(
         indicators = []
 
     construct_names = {c.name for c in latent.constructs}
-    construct_map = {c.name: c for c in latent.constructs}
 
     # Validate each indicator
     valid_indicators = []
@@ -690,33 +773,6 @@ def validate_measurement_model(
                 f"indicators[{i}] ({name}): references unknown construct '{indicator.construct_name}'"
             )
             continue
-
-        # Check granularity compatibility
-        construct = construct_map[indicator.construct_name]
-        if construct.temporal_status == TemporalStatus.TIME_VARYING:
-            causal_gran = construct.causal_granularity
-            meas_gran = indicator.measurement_granularity
-            if meas_gran != "finest" and causal_gran is not None:
-                if meas_gran not in GRANULARITY_HOURS:
-                    errors.append(
-                        f"indicators[{i}] ({name}): unknown measurement granularity '{meas_gran}'. "
-                        f"Valid options: {sorted(GRANULARITY_HOURS.keys())}"
-                    )
-                    continue
-                if causal_gran not in GRANULARITY_HOURS:
-                    errors.append(
-                        f"indicators[{i}] ({name}): unknown causal granularity '{causal_gran}'. "
-                        f"Valid options: {sorted(GRANULARITY_HOURS.keys())}"
-                    )
-                    continue
-                meas_hours = GRANULARITY_HOURS[meas_gran]
-                causal_hours = GRANULARITY_HOURS[causal_gran]
-                if meas_hours > causal_hours:
-                    errors.append(
-                        f"indicators[{i}] ({name}): measurement_granularity '{meas_gran}' "
-                        f"coarser than construct '{construct.name}' causal_granularity '{causal_gran}'"
-                    )
-                    continue
 
         valid_indicators.append(indicator)
 

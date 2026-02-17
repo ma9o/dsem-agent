@@ -57,11 +57,18 @@ def fit_model(
         # Fit the model — returns InferenceResult (default: SVI)
         result = builder.fit(X)
 
+        # Extract times for forward simulation in interventions
+        import jax.numpy as jnp
+
+        time_col = "time" if "time" in X.columns else None
+        fit_times = jnp.array(X[time_col].to_numpy(), dtype=jnp.float32) if time_col else None
+
         return {
             "fitted": True,
             "inference_type": result.method,
             "result": result,
             "builder": builder,
+            "times": fit_times,
         }
 
     except NotImplementedError:
@@ -252,4 +259,5 @@ def run_interventions(
         ppc_result=ppc_result,
         manifest_names=manifest_names,
         ps_result=ps_result,
+        times=fitted_model.get("times"),
     )

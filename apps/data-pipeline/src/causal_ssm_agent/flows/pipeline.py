@@ -181,7 +181,7 @@ async def causal_inference_pipeline(
     n_unique_indicators = raw_data_result["indicator"].n_unique() if n_observations > 0 else 0
     print(f"  Combined {n_observations} observations across {n_unique_indicators} indicators")
 
-    # Aggregate to measurement_granularity
+    # Aggregate to pipeline-level aggregation window
     aggregated = aggregate_measurements(causal_spec, worker_results)
     aggregated_result = aggregated.result() if hasattr(aggregated, "result") else aggregated
     if aggregated_result:

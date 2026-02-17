@@ -17,6 +17,16 @@ class Extraction(BaseModel):
         default=None,
         description="ISO timestamp if identifiable",
     )
+    evidence_text: str | None = Field(
+        default=None,
+        description="Supporting text snippet from the source that justifies this extraction",
+    )
+    confidence: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Extraction confidence (0=low, 1=high). Null if not assessed.",
+    )
 
 
 class WorkerOutput(BaseModel):
@@ -31,15 +41,21 @@ class WorkerOutput(BaseModel):
         """Convert extractions to a Polars DataFrame.
 
         Returns:
-            DataFrame with columns: indicator (Utf8), value (Utf8), timestamp (Utf8).
-            All values are stored as strings. Downstream _encode_non_continuous()
+            DataFrame with columns: indicator (Utf8), value (Utf8), timestamp (Utf8),
+            evidence_text (Utf8), confidence (Float64).
+            Value column is stored as string. Downstream _encode_non_continuous()
             handles binary/ordinal/categorical encoding, then the final Float64
             cast happens in aggregate_worker_measurements().
         """
+        schema = {
+            "indicator": pl.Utf8,
+            "value": pl.Utf8,
+            "timestamp": pl.Utf8,
+            "evidence_text": pl.Utf8,
+            "confidence": pl.Float64,
+        }
         if not self.extractions:
-            return pl.DataFrame(
-                schema={"indicator": pl.Utf8, "value": pl.Utf8, "timestamp": pl.Utf8}
-            )
+            return pl.DataFrame(schema=schema)
 
         rows = []
         for e in self.extractions:
@@ -57,13 +73,12 @@ class WorkerOutput(BaseModel):
                     "indicator": e.indicator,
                     "value": str_val,
                     "timestamp": e.timestamp,
+                    "evidence_text": e.evidence_text,
+                    "confidence": e.confidence,
                 }
             )
 
-        return pl.DataFrame(
-            rows,
-            schema={"indicator": pl.Utf8, "value": pl.Utf8, "timestamp": pl.Utf8},
-        )
+        return pl.DataFrame(rows, schema=schema)
 
 
 def _check_dtype_match(value: Any, expected_dtype: str) -> bool:
@@ -164,11 +179,13 @@ def validate_worker_output(
             )
             continue
 
-        # Normalize to "indicator" key
+        # Normalize to "indicator" key, pass through provenance fields
         normalized = {
             "indicator": ind_name,
             "value": value,
             "timestamp": ext_data.get("timestamp"),
+            "evidence_text": ext_data.get("evidence_text"),
+            "confidence": ext_data.get("confidence"),
         }
 
         # Validate via Pydantic

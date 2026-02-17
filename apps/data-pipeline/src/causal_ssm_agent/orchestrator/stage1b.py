@@ -140,7 +140,6 @@ def _merge_proxies(measurement: dict, proxy_response: dict | None) -> dict:
                         f"Proxy for {proxy['construct']}: {ind['how_to_measure']}"
                     )
                 # Fill in defaults for any missing required fields
-                ind.setdefault("measurement_granularity", "finest")
                 ind.setdefault("measurement_dtype", "continuous")
                 ind.setdefault("aggregation", "mean")
                 result["indicators"].append(ind)
@@ -152,7 +151,6 @@ def _merge_proxies(measurement: dict, proxy_response: dict | None) -> dict:
                         "name": indicator,
                         "construct_name": proxy["construct"],
                         "how_to_measure": f"Proxy for {proxy['construct']}: {proxy.get('justification', '')}",
-                        "measurement_granularity": "finest",
                         "measurement_dtype": "continuous",
                         "aggregation": "mean",
                     }

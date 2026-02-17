@@ -16,9 +16,12 @@ from causal_ssm_agent.orchestrator.schemas import (
     Indicator,
     LatentModel,
     MeasurementModel,
+    ObservationKind,
     Role,
     TemporalStatus,
+    check_semantic_collisions,
     compute_lag_hours,
+    derive_observation_kind,
 )
 
 
@@ -32,11 +35,11 @@ class TestConstruct:
             description="Daily mood state",
             role=Role.ENDOGENOUS,
             temporal_status=TemporalStatus.TIME_VARYING,
-            causal_granularity="daily",
+            temporal_scale="daily",
         )
         assert c.role == Role.ENDOGENOUS
         assert c.temporal_status == TemporalStatus.TIME_VARYING
-        assert c.causal_granularity == "daily"
+        assert c.temporal_scale == "daily"
 
     def test_exogenous_time_varying(self):
         """Exogenous, time-varying construct (classic input)."""
@@ -45,7 +48,7 @@ class TestConstruct:
             description="Daily temperature",
             role=Role.EXOGENOUS,
             temporal_status=TemporalStatus.TIME_VARYING,
-            causal_granularity="daily",
+            temporal_scale="daily",
         )
         assert c.role == Role.EXOGENOUS
         assert c.temporal_status == TemporalStatus.TIME_VARYING
@@ -60,12 +63,12 @@ class TestConstruct:
         )
         assert c.role == Role.EXOGENOUS
         assert c.temporal_status == TemporalStatus.TIME_INVARIANT
-        assert c.causal_granularity is None
+        assert c.temporal_scale is None
 
-    def test_time_varying_requires_causal_granularity(self):
-        """Time-varying construct requires causal_granularity."""
+    def test_time_varying_requires_temporal_scale(self):
+        """Time-varying construct requires temporal_scale."""
         with pytest.raises(
-            ValueError, match=r"Time-varying construct .* requires causal_granularity"
+            ValueError, match=r"Time-varying construct .* requires temporal_scale"
         ):
             Construct(
                 name="mood",
@@ -74,17 +77,17 @@ class TestConstruct:
                 temporal_status=TemporalStatus.TIME_VARYING,
             )
 
-    def test_time_invariant_forbids_causal_granularity(self):
-        """Time-invariant construct must not have causal_granularity."""
+    def test_time_invariant_forbids_temporal_scale(self):
+        """Time-invariant construct must not have temporal_scale."""
         with pytest.raises(
-            ValueError, match=r"Time-invariant construct .* must not have causal_granularity"
+            ValueError, match=r"Time-invariant construct .* must not have temporal_scale"
         ):
             Construct(
                 name="age",
                 description="Invalid",
                 role=Role.EXOGENOUS,
                 temporal_status=TemporalStatus.TIME_INVARIANT,
-                causal_granularity="daily",
+                temporal_scale="daily",
             )
 
     def test_exogenous_cannot_be_outcome(self):
@@ -96,7 +99,7 @@ class TestConstruct:
                 role=Role.EXOGENOUS,
                 is_outcome=True,
                 temporal_status=TemporalStatus.TIME_VARYING,
-                causal_granularity="daily",
+                temporal_scale="daily",
             )
 
 
@@ -250,7 +253,6 @@ class TestIndicator:
             name="mood_rating",
             construct_name="mood",
             how_to_measure="Extract mood ratings (1-10 scale)",
-            measurement_granularity="daily",
             measurement_dtype="continuous",
             aggregation="mean",
         )
@@ -264,21 +266,8 @@ class TestIndicator:
                 name="mood_rating",
                 construct_name="mood",
                 how_to_measure="Extract mood",
-                measurement_granularity="daily",
                 measurement_dtype="continuous",
                 aggregation="invalid_agg",
-            )
-
-    def test_invalid_measurement_granularity(self):
-        """Invalid measurement_granularity is rejected."""
-        with pytest.raises(ValueError, match="Invalid measurement_granularity"):
-            Indicator(
-                name="mood_rating",
-                construct_name="mood",
-                how_to_measure="Extract mood",
-                measurement_granularity="invalid_value",
-                measurement_dtype="continuous",
-                aggregation="mean",
             )
 
     def test_invalid_measurement_dtype(self):
@@ -288,7 +277,6 @@ class TestIndicator:
                 name="mood_rating",
                 construct_name="mood",
                 how_to_measure="Extract mood",
-                measurement_granularity="daily",
                 measurement_dtype="invalid_type",
                 aggregation="mean",
             )
@@ -305,7 +293,6 @@ class TestMeasurementModel:
                     name="mood_rating",
                     construct_name="mood",
                     how_to_measure="Extract mood ratings",
-                    measurement_granularity="daily",
                     measurement_dtype="continuous",
                     aggregation="mean",
                 ),
@@ -313,7 +300,6 @@ class TestMeasurementModel:
                     name="mood_text",
                     construct_name="mood",
                     how_to_measure="Extract mood from text",
-                    measurement_granularity="daily",
                     measurement_dtype="ordinal",
                     aggregation="mean",
                 ),
@@ -321,7 +307,6 @@ class TestMeasurementModel:
                     name="stress_level",
                     construct_name="stress",
                     how_to_measure="Extract stress ratings",
-                    measurement_granularity="daily",
                     measurement_dtype="continuous",
                     aggregation="mean",
                 ),
@@ -395,27 +380,6 @@ class TestCausalSpec:
         causal_spec = CausalSpec(latent=latent, measurement=measurement)
         assert len(causal_spec.latent.constructs) == 2
         assert len(causal_spec.measurement.indicators) == 1
-
-    def test_invalid_measurement_granularity_coarser_than_causal(
-        self, construct_factory, indicator_factory
-    ):
-        """Indicator measurement_granularity must be finer than construct's causal_granularity."""
-        latent = LatentModel(
-            constructs=[
-                construct_factory("stress", "daily", Role.EXOGENOUS),
-                construct_factory("mood", "daily", Role.ENDOGENOUS, is_outcome=True),
-            ],
-            edges=[CausalEdge(cause="stress", effect="mood", description="Test")],
-        )
-        measurement = MeasurementModel(
-            indicators=[
-                indicator_factory(
-                    "mood_rating", "mood", granularity="weekly"
-                ),  # coarser than daily
-            ]
-        )
-        with pytest.raises(ValueError, match="coarser than construct"):
-            CausalSpec(latent=latent, measurement=measurement)
 
     def test_to_networkx_includes_loading_edges(self, construct_factory, indicator_factory):
         """CausalSpec.to_networkx includes construct→indicator loading edges."""
@@ -504,3 +468,84 @@ class TestComputeLagHours:
         """Finer to coarser also returns coarser granularity."""
         assert compute_lag_hours("hourly", "daily", lagged=True) == 24
         assert compute_lag_hours("daily", "weekly", lagged=True) == 168
+
+
+class TestDeriveObservationKind:
+    """Tests for derive_observation_kind function."""
+
+    def test_cumulative(self):
+        """Sum aggregation → cumulative."""
+        assert derive_observation_kind("sum") == ObservationKind.CUMULATIVE
+
+    def test_point_in_time(self):
+        """First/last → point_in_time."""
+        assert derive_observation_kind("first") == ObservationKind.POINT_IN_TIME
+        assert derive_observation_kind("last") == ObservationKind.POINT_IN_TIME
+
+    def test_variability(self):
+        """Variability aggregations classified correctly."""
+        for agg in ("std", "var", "range", "cv", "iqr", "instability"):
+            assert derive_observation_kind(agg) == ObservationKind.VARIABILITY
+
+    def test_frequency(self):
+        """Count/n_unique → frequency."""
+        assert derive_observation_kind("count") == ObservationKind.FREQUENCY
+        assert derive_observation_kind("n_unique") == ObservationKind.FREQUENCY
+
+    def test_window_average_default(self):
+        """Mean, median, percentiles → window_average."""
+        for agg in ("mean", "median", "p10", "p75", "entropy", "trend"):
+            assert derive_observation_kind(agg) == ObservationKind.WINDOW_AVERAGE
+
+
+class TestSemanticCollisions:
+    """Tests for check_semantic_collisions function."""
+
+    def test_count_text_mean_agg_collision(self):
+        """'count' in how_to_measure + mean aggregation → warning."""
+        warnings = check_semantic_collisions(
+            "Count the number of exercise sessions", "mean"
+        )
+        assert len(warnings) >= 1
+        assert "counting" in warnings[0].lower() or "count" in warnings[0].lower()
+
+    def test_no_collision(self):
+        """Consistent text and aggregation → no warnings."""
+        warnings = check_semantic_collisions(
+            "Average daily mood rating", "mean"
+        )
+        assert len(warnings) == 0
+
+    def test_total_text_mean_agg_collision(self):
+        """'total' in text + mean aggregation → warning."""
+        warnings = check_semantic_collisions(
+            "Total steps walked during the day", "mean"
+        )
+        assert len(warnings) >= 1
+
+    def test_last_text_sum_agg_collision(self):
+        """'most recent' in text + sum aggregation → warning."""
+        warnings = check_semantic_collisions(
+            "The most recent blood pressure reading", "sum"
+        )
+        assert len(warnings) >= 1
+
+
+class TestIndicatorObservationKind:
+    """Tests for Indicator.observation_kind property."""
+
+    def test_observation_kind_property(self, indicator_factory):
+        """Indicator.observation_kind returns derived kind."""
+        ind = indicator_factory("steps", "activity", aggregation="sum", dtype="count")
+        assert ind.observation_kind == ObservationKind.CUMULATIVE
+
+    def test_requires_integral_measurement(self, indicator_factory):
+        """Cumulative indicators require integral measurement equation."""
+        cumulative = indicator_factory("steps", "activity", aggregation="sum", dtype="count")
+        assert cumulative.requires_integral_measurement is True
+
+        average = indicator_factory("mood_rating", "mood", aggregation="mean", dtype="continuous")
+        assert average.requires_integral_measurement is False
+
+        point = indicator_factory("last_bp", "bp", aggregation="last", dtype="continuous")
+        assert point.requires_integral_measurement is False

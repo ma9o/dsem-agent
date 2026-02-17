@@ -186,8 +186,8 @@ def _(causal_spec, mo):
 
             _is_unmeasured = _name not in _measured
             _label = _name
-            if _c.get("causal_granularity"):
-                _label += f"\n({_c['causal_granularity']})"
+            if _c.get("temporal_scale"):
+                _label += f"\n({_c['temporal_scale']})"
 
             _shape = "ellipse" if _is_unmeasured else "box"
 
@@ -240,7 +240,7 @@ def _(causal_spec, mo):
                 "Name": _c["name"],
                 "Role": _c.get("role", "?"),
                 "Temporal": _c.get("temporal_status", "?"),
-                "Granularity": _c.get("causal_granularity") or "\u2014",
+                "Granularity": _c.get("temporal_scale") or "\u2014",
                 "Measured": "yes" if _c["name"] in _measured else "no",
                 "Outcome": "yes" if _c.get("is_outcome") else "",
             }

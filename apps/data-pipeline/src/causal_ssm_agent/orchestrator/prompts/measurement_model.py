@@ -36,17 +36,8 @@ Each indicator needs:
 | **name** | Indicator name (e.g., 'hrv', 'self_reported_stress') |
 | **construct** | Which construct this measures (must match a construct name) |
 | **how_to_measure** | Instructions for workers to extract this from data |
-| **measurement_granularity** | 'finest' or 'hourly'/'daily'/'weekly'/'monthly'/'yearly' |
 | **measurement_dtype** | 'continuous', 'binary', 'count', 'ordinal', 'categorical' |
-| **aggregation** | How to collapse to causal_granularity |
-
-### measurement_granularity
-
-The resolution at which workers extract raw measurements:
-- **finest**: One datapoint per raw data entry (use sparingly - expensive)
-- **hourly/daily/etc.**: Aggregate at this resolution during extraction
-
-Must be finer than or equal to the construct's causal_granularity.
+| **aggregation** | How to collapse within aggregation window |
 
 ### measurement_dtype
 
@@ -60,7 +51,7 @@ Must be finer than or equal to the construct's causal_granularity.
 
 ### aggregation
 
-How to collapse measurements to the construct's causal_granularity.
+How to collapse measurements to the construct's temporal_scale.
 
 **Standard:** mean, sum, min, max, std, var, first, last, count
 **Distributional:** median, p10, p25, p75, p90, p99, skew, kurtosis, iqr
@@ -95,8 +86,7 @@ Implication: Do NOT propose indicators with their own temporal momentum independ
 
 1. Every **time-varying** construct MUST have at least one indicator—constructs without indicators are unobserved, and causal effects through them may not be identifiable
 2. Indicators can only reference constructs from the latent model
-3. measurement_granularity must be ≤ construct's causal_granularity
-4. You CANNOT add new causal edges—only operationalize existing constructs
+3. You CANNOT add new causal edges—only operationalize existing constructs
 5. No direct causal edges between indicators (pure indicators assumption)
 
 ## Output Schema
@@ -108,7 +98,6 @@ Implication: Do NOT propose indicators with their own temporal momentum independ
       "name": "indicator_name",
       "construct_name": "which_construct_this_measures",
       "how_to_measure": "worker instructions for extraction",
-      "measurement_granularity": "finest" | "hourly" | "daily" | "weekly" | "monthly" | "yearly",
       "measurement_dtype": "continuous" | "binary" | "count" | "ordinal" | "categorical",
       "aggregation": "<aggregation_function>",
       "ordinal_levels": ["low", "medium", "high"]  // required when measurement_dtype is "ordinal", ordered low→high
@@ -145,7 +134,7 @@ Propose indicators to operationalize each construct. Remember:
 - Every time-varying construct needs at least one indicator
 - Multiple indicators per construct improve reliability
 - Be specific in how_to_measure instructions
-- Match measurement_granularity to data resolution
+- Choose appropriate aggregation functions for each indicator
 
 Think very hard.
 """
@@ -161,8 +150,7 @@ Review your proposed measurement model for operationalization coherence.
    - entropy, n_unique → requires categorical
    - sum, count → typically binary or count
    - mean, median → typically ordinal or continuous
-4. **Granularity appropriateness**: Is measurement_granularity achievable from the data?
-5. **Redundancy**: Are there indicators that are essentially duplicates?
+4. **Redundancy**: Are there indicators that are essentially duplicates?
 6. **Local independence**: Would any two indicators of the same construct remain correlated after conditioning on the construct? If so, they violate pure indicators.
 7. **Temporal independence (A8)**: Do any indicators have their own temporal dynamics beyond the construct?
 

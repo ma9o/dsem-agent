@@ -164,8 +164,8 @@ def create_agraph_elements(
             color = COLORS["endogenous"]
 
         label = name
-        if construct.get("causal_granularity"):
-            label += f"\n({construct['causal_granularity']})"
+        if construct.get("temporal_scale"):
+            label += f"\n({construct['temporal_scale']})"
 
         # A construct is "unmeasured" if it has no indicators
         is_unmeasured = name not in measured_constructs
@@ -285,7 +285,7 @@ def render_construct_info(
             </div>
             <div class="info-row">
                 <span class="info-label">Granularity</span>
-                <span class="info-value">{construct.get("causal_granularity", "—")}</span>
+                <span class="info-value">{construct.get("temporal_scale", "—")}</span>
             </div>
         </div>
         """,
@@ -319,7 +319,6 @@ def render_indicator_info(indicator: dict):
     """Render indicator info as formatted HTML."""
     construct = indicator.get("construct_name", "—")
     dtype = indicator.get("measurement_dtype", "—")
-    granularity = indicator.get("measurement_granularity", "—")
     aggregation = indicator.get("aggregation", "—")
     how_to_measure = indicator.get("how_to_measure", "—")
 
@@ -328,7 +327,7 @@ def render_indicator_info(indicator: dict):
         <div class="indicator-box">
             <div class="indicator-name">{indicator.get("name", "unnamed")}</div>
             <div class="indicator-detail"><strong>Construct:</strong> {construct}</div>
-            <div class="indicator-detail"><strong>Type:</strong> {dtype} @ {granularity}</div>
+            <div class="indicator-detail"><strong>Type:</strong> {dtype}</div>
             <div class="indicator-detail"><strong>Aggregation:</strong> {aggregation}</div>
             <div class="indicator-detail"><strong>How to measure:</strong> {how_to_measure}</div>
         </div>

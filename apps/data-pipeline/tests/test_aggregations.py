@@ -1,8 +1,8 @@
 """Tests for aggregate_worker_measurements().
 
 Tests the post-extraction aggregation step that buckets raw worker
-extractions to measurement_granularity using each indicator's aggregation
-function.
+extractions to the specified aggregation_window using each indicator's
+aggregation function.
 """
 
 import polars as pl
@@ -56,7 +56,6 @@ class TestBasicAggregation:
             [
                 {
                     "name": "stress",
-                    "measurement_granularity": "daily",
                     "aggregation": "mean",
                 }
             ]
@@ -84,7 +83,6 @@ class TestBasicAggregation:
             [
                 {
                     "name": "mood",
-                    "measurement_granularity": "daily",
                     "aggregation": "mean",
                 }
             ]
@@ -117,14 +115,14 @@ class TestMultipleAggregations:
 
     def test_sum_aggregation(self, hourly_data):
         model = _make_causal_spec(
-            [{"name": "steps", "measurement_granularity": "daily", "aggregation": "sum"}]
+            [{"name": "steps", "aggregation": "sum"}]
         )
         result = aggregate_worker_measurements([hourly_data], model)
         assert result["daily"]["value"][0] == pytest.approx(1900.0)
 
     def test_max_aggregation(self, hourly_data):
         model = _make_causal_spec(
-            [{"name": "steps", "measurement_granularity": "daily", "aggregation": "max"}]
+            [{"name": "steps", "aggregation": "max"}]
         )
         result = aggregate_worker_measurements([hourly_data], model)
         assert result["daily"]["value"][0] == pytest.approx(800.0)
@@ -132,7 +130,7 @@ class TestMultipleAggregations:
     def test_last_aggregation(self, hourly_data):
         """last should return the chronologically last value."""
         model = _make_causal_spec(
-            [{"name": "steps", "measurement_granularity": "daily", "aggregation": "last"}]
+            [{"name": "steps", "aggregation": "last"}]
         )
         result = aggregate_worker_measurements([hourly_data], model)
         assert result["daily"]["value"][0] == pytest.approx(300.0)
@@ -140,28 +138,28 @@ class TestMultipleAggregations:
     def test_first_aggregation(self, hourly_data):
         """first should return the chronologically first value."""
         model = _make_causal_spec(
-            [{"name": "steps", "measurement_granularity": "daily", "aggregation": "first"}]
+            [{"name": "steps", "aggregation": "first"}]
         )
         result = aggregate_worker_measurements([hourly_data], model)
         assert result["daily"]["value"][0] == pytest.approx(100.0)
 
     def test_median_aggregation(self, hourly_data):
         model = _make_causal_spec(
-            [{"name": "steps", "measurement_granularity": "daily", "aggregation": "median"}]
+            [{"name": "steps", "aggregation": "median"}]
         )
         result = aggregate_worker_measurements([hourly_data], model)
         assert result["daily"]["value"][0] == pytest.approx(300.0)
 
     def test_range_aggregation(self, hourly_data):
         model = _make_causal_spec(
-            [{"name": "steps", "measurement_granularity": "daily", "aggregation": "range"}]
+            [{"name": "steps", "aggregation": "range"}]
         )
         result = aggregate_worker_measurements([hourly_data], model)
         assert result["daily"]["value"][0] == pytest.approx(700.0)  # 800 - 100
 
     def test_count_aggregation(self, hourly_data):
         model = _make_causal_spec(
-            [{"name": "steps", "measurement_granularity": "daily", "aggregation": "count"}]
+            [{"name": "steps", "aggregation": "count"}]
         )
         result = aggregate_worker_measurements([hourly_data], model)
         assert result["daily"]["value"][0] == 5
@@ -184,10 +182,10 @@ class TestFinestGranularity:
         ]
         df = _make_df(records)
         model = _make_causal_spec(
-            [{"name": "hr", "measurement_granularity": "finest", "aggregation": "mean"}]
+            [{"name": "hr", "aggregation": "mean"}]
         )
 
-        result = aggregate_worker_measurements([df], model)
+        result = aggregate_worker_measurements([df], model, aggregation_window="finest")
         assert "finest" in result
         assert len(result["finest"]) == 2
 
@@ -199,10 +197,10 @@ class TestFinestGranularity:
         ]
         df = _make_df(records)
         model = _make_causal_spec(
-            [{"name": "hr", "measurement_granularity": "finest", "aggregation": "mean"}]
+            [{"name": "hr", "aggregation": "mean"}]
         )
 
-        result = aggregate_worker_measurements([df], model)
+        result = aggregate_worker_measurements([df], model, aggregation_window="finest")
         assert len(result["finest"]) == 2
 
 
@@ -211,38 +209,65 @@ class TestFinestGranularity:
 # ==============================================================================
 
 
-class TestMixedGranularities:
-    """Indicators at hourly + daily + finest produce separate keys."""
+class TestAggregationWindows:
+    """All indicators share the same aggregation_window parameter."""
 
-    def test_separate_keys_per_granularity(self):
+    def test_hourly_window(self):
+        """All indicators aggregated to hourly buckets."""
+        records = [
+            {"indicator": "hr", "value": 72.0, "timestamp": "2024-01-01T08:00:00"},
+            {"indicator": "hr", "value": 80.0, "timestamp": "2024-01-01T08:30:00"},
+            {"indicator": "hr", "value": 90.0, "timestamp": "2024-01-01T09:00:00"},
+            {"indicator": "stress", "value": 5.0, "timestamp": "2024-01-01T08:15:00"},
+            {"indicator": "stress", "value": 7.0, "timestamp": "2024-01-01T08:45:00"},
+        ]
+        df = _make_df(records)
+        model = _make_causal_spec(
+            [
+                {"name": "hr", "aggregation": "mean"},
+                {"name": "stress", "aggregation": "mean"},
+            ]
+        )
+
+        result = aggregate_worker_measurements([df], model, aggregation_window="hourly")
+        assert "hourly" in result
+
+        hourly = result["hourly"]
+        # hr has readings in hours 08 and 09
+        hr_rows = hourly.filter(pl.col("indicator") == "hr")
+        assert len(hr_rows) == 2
+        # stress has readings only in hour 08
+        stress_rows = hourly.filter(pl.col("indicator") == "stress")
+        assert len(stress_rows) == 1
+        assert stress_rows["value"][0] == pytest.approx(6.0)
+
+    def test_daily_window_multiple_indicators(self):
+        """Multiple indicators aggregated to daily buckets (default)."""
         records = [
             {"indicator": "hr", "value": 72.0, "timestamp": "2024-01-01T08:00:00"},
             {"indicator": "hr", "value": 80.0, "timestamp": "2024-01-01T09:00:00"},
             {"indicator": "stress", "value": 5.0, "timestamp": "2024-01-01T10:00:00"},
             {"indicator": "stress", "value": 7.0, "timestamp": "2024-01-01T14:00:00"},
-            {"indicator": "event", "value": 1.0, "timestamp": "2024-01-01T08:30:00"},
         ]
         df = _make_df(records)
         model = _make_causal_spec(
             [
-                {"name": "hr", "measurement_granularity": "hourly", "aggregation": "mean"},
-                {"name": "stress", "measurement_granularity": "daily", "aggregation": "mean"},
-                {"name": "event", "measurement_granularity": "finest", "aggregation": "count"},
+                {"name": "hr", "aggregation": "mean"},
+                {"name": "stress", "aggregation": "mean"},
             ]
         )
 
         result = aggregate_worker_measurements([df], model)
-        assert "hourly" in result
         assert "daily" in result
-        assert "finest" in result
-
-        # hr: 2 hourly buckets
-        assert len(result["hourly"]) == 2
-        # stress: 1 daily bucket
-        assert len(result["daily"]) == 1
-        assert result["daily"]["value"][0] == pytest.approx(6.0)
-        # event: 1 raw entry
-        assert len(result["finest"]) == 1
+        daily = result["daily"]
+        # hr: 1 daily bucket, mean(72, 80) = 76
+        hr_rows = daily.filter(pl.col("indicator") == "hr")
+        assert len(hr_rows) == 1
+        assert hr_rows["value"][0] == pytest.approx(76.0)
+        # stress: 1 daily bucket, mean(5, 7) = 6
+        stress_rows = daily.filter(pl.col("indicator") == "stress")
+        assert len(stress_rows) == 1
+        assert stress_rows["value"][0] == pytest.approx(6.0)
 
 
 # ==============================================================================
@@ -255,14 +280,14 @@ class TestEdgeCases:
 
     def test_empty_list(self):
         model = _make_causal_spec(
-            [{"name": "x", "measurement_granularity": "daily", "aggregation": "mean"}]
+            [{"name": "x", "aggregation": "mean"}]
         )
         result = aggregate_worker_measurements([], model)
         assert result == {}
 
     def test_none_dataframes(self):
         model = _make_causal_spec(
-            [{"name": "x", "measurement_granularity": "daily", "aggregation": "mean"}]
+            [{"name": "x", "aggregation": "mean"}]
         )
         result = aggregate_worker_measurements([None, None], model)
         assert result == {}
@@ -275,7 +300,7 @@ class TestEdgeCases:
         ]
         df = _make_df(records)
         model = _make_causal_spec(
-            [{"name": "x", "measurement_granularity": "daily", "aggregation": "mean"}]
+            [{"name": "x", "aggregation": "mean"}]
         )
 
         result = aggregate_worker_measurements([df], model)
@@ -289,7 +314,7 @@ class TestEdgeCases:
         ]
         df = _make_df(records)
         model = _make_causal_spec(
-            [{"name": "x", "measurement_granularity": "daily", "aggregation": "mean"}]
+            [{"name": "x", "aggregation": "mean"}]
         )
 
         result = aggregate_worker_measurements([df], model)
@@ -303,7 +328,7 @@ class TestEdgeCases:
         ]
         df = _make_df(records)
         model = _make_causal_spec(
-            [{"name": "known", "measurement_granularity": "daily", "aggregation": "mean"}]
+            [{"name": "known", "aggregation": "mean"}]
         )
 
         result = aggregate_worker_measurements([df], model)
@@ -320,7 +345,7 @@ class TestEdgeCases:
         ]
         df = _make_df(records)
         model = _make_causal_spec(
-            [{"name": "x", "measurement_granularity": "daily", "aggregation": "mean"}]
+            [{"name": "x", "aggregation": "mean"}]
         )
 
         result = aggregate_worker_measurements([df], model)
@@ -350,7 +375,7 @@ class TestOverlappingWorkers:
             ]
         )
         model = _make_causal_spec(
-            [{"name": "stress", "measurement_granularity": "daily", "aggregation": "mean"}]
+            [{"name": "stress", "aggregation": "mean"}]
         )
 
         result = aggregate_worker_measurements([df1, df2], model)
@@ -369,7 +394,7 @@ class TestOverlappingWorkers:
             ]
         )
         model = _make_causal_spec(
-            [{"name": "stress", "measurement_granularity": "daily", "aggregation": "mean"}]
+            [{"name": "stress", "aggregation": "mean"}]
         )
 
         # For non-finest, duplicates are kept (both contribute to aggregate)
@@ -390,10 +415,10 @@ class TestOverlappingWorkers:
             ]
         )
         model = _make_causal_spec(
-            [{"name": "hr", "measurement_granularity": "finest", "aggregation": "mean"}]
+            [{"name": "hr", "aggregation": "mean"}]
         )
 
-        result = aggregate_worker_measurements([df1, df2], model)
+        result = aggregate_worker_measurements([df1, df2], model, aggregation_window="finest")
         assert len(result["finest"]) == 1
 
 
@@ -463,7 +488,7 @@ class TestNewAggregations:
         ]
         df = _make_df(records)
         model = _make_causal_spec(
-            [{"name": "x", "measurement_granularity": "daily", "aggregation": "skew"}]
+            [{"name": "x", "aggregation": "skew"}]
         )
         result = aggregate_worker_measurements([df], model)
         assert "daily" in result
@@ -479,7 +504,7 @@ class TestNewAggregations:
         ]
         df = _make_df(records)
         model = _make_causal_spec(
-            [{"name": "x", "measurement_granularity": "daily", "aggregation": "kurtosis"}]
+            [{"name": "x", "aggregation": "kurtosis"}]
         )
         result = aggregate_worker_measurements([df], model)
         assert "daily" in result
@@ -498,7 +523,7 @@ class TestNewAggregations:
             for h, v in enumerate([5, 5, 5, 5, 5])
         ]
         model = _make_causal_spec(
-            [{"name": "x", "measurement_granularity": "daily", "aggregation": "entropy"}]
+            [{"name": "x", "aggregation": "entropy"}]
         )
         r_uniform = aggregate_worker_measurements([_make_df(uniform_records)], model)
         r_concentrated = aggregate_worker_measurements([_make_df(concentrated_records)], model)
@@ -518,7 +543,7 @@ class TestNewAggregations:
         ]
         df = _make_df(records)
         model = _make_causal_spec(
-            [{"name": "x", "measurement_granularity": "daily", "aggregation": "instability"}]
+            [{"name": "x", "aggregation": "instability"}]
         )
         result = aggregate_worker_measurements([df], model)
         assert "daily" in result
@@ -533,7 +558,7 @@ class TestNewAggregations:
         ]
         df = _make_df(records)
         model = _make_causal_spec(
-            [{"name": "x", "measurement_granularity": "daily", "aggregation": "trend"}]
+            [{"name": "x", "aggregation": "trend"}]
         )
         result = aggregate_worker_measurements([df], model)
         assert "daily" in result
@@ -547,7 +572,7 @@ class TestNewAggregations:
         ]
         df = _make_df(records)
         model = _make_causal_spec(
-            [{"name": "x", "measurement_granularity": "daily", "aggregation": "trend"}]
+            [{"name": "x", "aggregation": "trend"}]
         )
         result = aggregate_worker_measurements([df], model)
         assert "daily" in result
@@ -561,7 +586,7 @@ class TestNewAggregations:
         ]
         df = _make_df(records)
         model = _make_causal_spec(
-            [{"name": "x", "measurement_granularity": "daily", "aggregation": "trend"}]
+            [{"name": "x", "aggregation": "trend"}]
         )
         result = aggregate_worker_measurements([df], model)
         assert "daily" in result
@@ -574,7 +599,7 @@ class TestNewAggregations:
         ]
         df = _make_df(records)
         model = _make_causal_spec(
-            [{"name": "x", "measurement_granularity": "daily", "aggregation": "trend"}]
+            [{"name": "x", "aggregation": "trend"}]
         )
         result = aggregate_worker_measurements([df], model)
         assert "daily" in result
