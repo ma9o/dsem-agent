@@ -127,7 +127,7 @@ export default function LandingPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <textarea
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring min-h-[100px] resize-y"
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground min-h-[100px] resize-y"
               placeholder="e.g., How does my daily screen time affect my sleep quality and mood?"
               value={question}
               onChange={(e) => {

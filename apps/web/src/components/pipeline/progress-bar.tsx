@@ -24,14 +24,7 @@ export function PipelineProgressBar({ progress }: { progress: PipelineProgress |
             <span className="text-xs font-medium text-destructive">Failed</span>
           )}
         </div>
-        <div
-          className="flex items-center gap-1.5"
-          role="progressbar"
-          aria-valuenow={completed}
-          aria-valuemin={0}
-          aria-valuemax={STAGES.length}
-          aria-label={`Pipeline progress: ${completed} of ${STAGES.length} stages completed`}
-        >
+        <div className="flex items-center gap-1.5">
           {STAGES.map((stage) => {
             const status = progress.stages[stage.id];
             const isClickable = status !== "pending";
@@ -53,7 +46,6 @@ export function PipelineProgressBar({ progress }: { progress: PipelineProgress |
                 <button
                   type="button"
                   disabled={!isClickable}
-                  aria-label={`Stage ${stage.number}: ${stage.label} — ${status}`}
                   className="group relative flex-1"
                   onClick={() => {
                     if (!isClickable) return;

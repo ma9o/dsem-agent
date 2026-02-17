@@ -48,8 +48,6 @@ export function Tooltip({
       className="relative inline-flex"
       onMouseEnter={handleEnter}
       onMouseLeave={handleLeave}
-      onFocus={handleEnter}
-      onBlur={handleLeave}
     >
       {children}
       {show &&
@@ -58,7 +56,6 @@ export function Tooltip({
         createPortal(
           <div
             ref={tooltipRef}
-            role="tooltip"
             className={cn(
               "fixed z-[100] -translate-x-1/2 -translate-y-full rounded-md bg-popover px-3 py-1.5 text-sm text-popover-foreground shadow-md border animate-fade-in pointer-events-none",
               className,

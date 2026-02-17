@@ -21,11 +21,7 @@ export function AnalysisFeed({
 }) {
   if (!progress) {
     return (
-      <div
-        className="flex flex-col items-center justify-center gap-4 py-20"
-        role="status"
-        aria-live="polite"
-      >
+      <div className="flex flex-col items-center justify-center gap-4 py-20">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         <div className="text-center space-y-1">
           <p className="text-sm font-medium text-muted-foreground">

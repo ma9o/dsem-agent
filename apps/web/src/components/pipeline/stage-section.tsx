@@ -70,19 +70,6 @@ export function StageSection({
       <div
         className={isCollapsible ? "flex items-center cursor-pointer" : ""}
         onClick={isCollapsible ? () => setCollapsed((c) => !c) : undefined}
-        onKeyDown={
-          isCollapsible
-            ? (e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setCollapsed((c) => !c);
-                }
-              }
-            : undefined
-        }
-        role={isCollapsible ? "button" : undefined}
-        tabIndex={isCollapsible ? 0 : undefined}
-        aria-expanded={isCollapsible ? !collapsed : undefined}
       >
         <div className="flex-1">
           <StageHeader number={number} title={title} status={status} hasGate={hasGate} />
