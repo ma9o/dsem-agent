@@ -2,6 +2,7 @@
 
 import { Skeleton } from "@/components/ui/skeleton";
 import type { StageRunStatus } from "@/lib/hooks/use-run-events";
+import { Badge } from "@/components/ui/badge";
 import { AlertCircle, ChevronDown } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { StageHeader } from "./stage-header";
@@ -55,14 +56,15 @@ export function StageSection({
       className="animate-fade-in-up scroll-mt-28 rounded-lg border bg-card p-4 shadow-sm sm:p-6"
     >
       <div
-        className={isCollapsible ? "flex items-center cursor-pointer" : ""}
+        className={isCollapsible ? "flex items-start gap-3 cursor-pointer" : ""}
         onClick={isCollapsible ? () => setCollapsed((c) => !c) : undefined}
       >
-        <div className="flex-1">
-          <StageHeader number={number} title={title} status={status} hasGate={hasGate} context={context} />
+        <div className="flex-1 min-w-0">
+          <StageHeader number={number} title={title} status={status} hasGate={hasGate} context={context} hideBadge={isCollapsible} />
         </div>
         {isCollapsible && (
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2 pt-1">
+            <Badge variant="success">Complete</Badge>
             {elapsedMs !== undefined && (
               <span className="text-xs text-muted-foreground/60 font-mono">
                 {formatElapsed(elapsedMs)}

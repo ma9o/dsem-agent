@@ -27,12 +27,14 @@ export function StageHeader({
   status,
   hasGate = false,
   context,
+  hideBadge = false,
 }: {
   number: string;
   title: string;
   status: StageRunStatus;
   hasGate?: boolean;
   context?: string;
+  hideBadge?: boolean;
 }) {
   return (
     <div className="flex items-center gap-3">
@@ -63,9 +65,11 @@ export function StageHeader({
           <p className="mt-0.5 text-sm text-muted-foreground">{context}</p>
         )}
       </div>
-      <Badge variant={statusVariant[status]} className="ml-auto shrink-0">
-        {statusLabel[status]}
-      </Badge>
+      {!hideBadge && (
+        <Badge variant={statusVariant[status]} className="ml-auto shrink-0">
+          {statusLabel[status]}
+        </Badge>
+      )}
     </div>
   );
 }
