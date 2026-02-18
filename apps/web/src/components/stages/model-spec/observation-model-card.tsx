@@ -78,13 +78,13 @@ function betaPdf(x: number, a: number, b: number): number {
   return Math.exp((a - 1) * Math.log(x) + (b - 1) * Math.log(1 - x) - logB);
 }
 
-/** Fit distribution to data via method of moments & return overlay points. */
-function fittedOverlay(
+/** MoM fit: fit distribution to data via method of moments. */
+function momOverlay(
   dist: string,
   values: number[],
   bins: Array<{ binCenter: number }>,
   n: number,
-): Array<{ binCenter: number; fitted: number }> {
+): Array<{ binCenter: number; mom: number }> {
   if (values.length < 2) return [];
 
   const mean = values.reduce((s, v) => s + v, 0) / values.length;
@@ -93,29 +93,25 @@ function fittedOverlay(
 
   switch (dist) {
     case "gaussian": {
-      // For continuous: scale PDF to match histogram counts
       const binWidth = bins.length > 1 ? bins[1].binCenter - bins[0].binCenter : 1;
       return bins.map((b) => ({
         binCenter: b.binCenter,
-        fitted: normalPdf(b.binCenter, mean, std) * n * binWidth,
+        mom: normalPdf(b.binCenter, mean, std) * n * binWidth,
       }));
     }
     case "poisson": {
-      const lambda = mean;
       return bins.map((b) => ({
         binCenter: b.binCenter,
-        fitted: poissonPmf(b.binCenter, lambda) * n,
+        mom: poissonPmf(b.binCenter, mean) * n,
       }));
     }
     case "bernoulli": {
-      const p = mean;
       return [
-        { binCenter: 0, fitted: (1 - p) * n },
-        { binCenter: 1, fitted: p * n },
+        { binCenter: 0, mom: (1 - mean) * n },
+        { binCenter: 1, mom: mean * n },
       ];
     }
     case "beta": {
-      // Method of moments for Beta
       const m = Math.max(0.01, Math.min(0.99, mean));
       const v = Math.min(variance, m * (1 - m) - 0.001);
       const alpha = m * ((m * (1 - m)) / Math.max(v, 0.001) - 1);
@@ -123,7 +119,7 @@ function fittedOverlay(
       const binWidth = bins.length > 1 ? bins[1].binCenter - bins[0].binCenter : 0.1;
       return bins.map((b) => ({
         binCenter: b.binCenter,
-        fitted: betaPdf(b.binCenter, Math.max(alpha, 0.1), Math.max(beta, 0.1)) * n * binWidth,
+        mom: betaPdf(b.binCenter, Math.max(alpha, 0.1), Math.max(beta, 0.1)) * n * binWidth,
       }));
     }
     default:
@@ -161,12 +157,11 @@ export function ObservationModelCard({ likelihood, extractions }: ObservationMod
     ? buildCountFrequency(numericValues)
     : buildHistogram(numericValues, Math.min(15, Math.ceil(Math.sqrt(numericValues.length))));
 
-  const overlay = fittedOverlay(likelihood.distribution, numericValues, bins, numericValues.length);
+  const mom = momOverlay(likelihood.distribution, numericValues, bins, numericValues.length);
 
-  // Merge bins and overlay
   const chartData = bins.map((b) => {
-    const fit = overlay.find((o) => o.binCenter === b.binCenter);
-    return { ...b, fitted: fit?.fitted ?? 0 };
+    const m = mom.find((o) => o.binCenter === b.binCenter);
+    return { ...b, mom: m?.mom ?? 0 };
   });
 
   const mean = numericValues.reduce((s, v) => s + v, 0) / numericValues.length;
@@ -203,9 +198,9 @@ export function ObservationModelCard({ likelihood, extractions }: ObservationMod
               />
               <Line
                 type="monotone"
-                dataKey="fitted"
+                dataKey="mom"
                 stroke="var(--primary)"
-                strokeWidth={2}
+                strokeWidth={1.5}
                 dot={false}
               />
             </ComposedChart>
@@ -215,9 +210,12 @@ export function ObservationModelCard({ likelihood, extractions }: ObservationMod
           <span>
             n={numericValues.length} &middot; mean={formatNumber(mean, 2)}
           </span>
-          <span className="inline-flex items-center gap-1">
-            MoM fit
-            <StatTooltip explanation="The curve shows the chosen distribution family fitted to the observed data via method of moments. This helps verify the distribution choice — if the curve doesn't match the histogram shape, the family may be inappropriate." />
+          <span className="inline-flex items-center gap-2">
+            <span className="inline-flex items-center gap-1">
+              <span className="inline-block h-0.5 w-3 bg-primary" />
+              MoM fit
+            </span>
+            <StatTooltip explanation="Method of moments fit: best-fit distribution of the chosen family to the observed data. Shows whether the distribution family is a good match for the data shape." />
           </span>
         </div>
       </CardContent>
