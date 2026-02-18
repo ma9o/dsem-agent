@@ -6,13 +6,14 @@ import {
   Background,
   BackgroundVariant,
   Controls,
+  type NodeChange,
   type NodeTypes,
   Panel,
   ReactFlow,
+  applyNodeChanges,
 } from "@xyflow/react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConstructNode } from "./construct-node";
-import { IndicatorNode } from "./indicator-node";
 
 interface CausalDagProps {
   constructs: Construct[];
@@ -24,7 +25,6 @@ interface CausalDagProps {
 
 const nodeTypes: NodeTypes = {
   construct: ConstructNode,
-  indicator: IndicatorNode,
 };
 
 function EdgeLegend({ hasLagged, hasContemporaneous }: { hasLagged: boolean; hasContemporaneous: boolean }) {
@@ -63,13 +63,29 @@ export function CausalDag({
 }: CausalDagProps) {
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
 
-  const { nodes, edges: flowEdges, isLayouting } = useElkLayout(constructs, edges, indicators);
+  const { nodes: layoutNodes, edges: flowEdges, isLayouting } = useElkLayout(constructs, edges, indicators);
+
+  // Local node state so dragging works (React Flow controlled mode needs onNodesChange)
+  const [localNodes, setLocalNodes] = useState(layoutNodes);
+  const layoutKeyRef = useRef<string>("");
+
+  useEffect(() => {
+    const key = JSON.stringify(layoutNodes.map((n) => n.id));
+    if (key !== layoutKeyRef.current) {
+      layoutKeyRef.current = key;
+      setLocalNodes(layoutNodes);
+    }
+  }, [layoutNodes]);
+
+  const onNodesChange = useCallback((changes: NodeChange[]) => {
+    setLocalNodes((nds) => applyNodeChanges(changes, nds));
+  }, []);
 
   const hasLagged = edges.some((e) => e.lagged);
   const hasContemporaneous = edges.some((e) => !e.lagged);
 
   const styledNodes = useMemo(() => {
-    if (!selectedNode) return nodes;
+    if (!selectedNode) return localNodes;
     const connectedIds = new Set<string>([selectedNode]);
     for (const e of flowEdges) {
       if (e.source === selectedNode || e.target === selectedNode) {
@@ -77,11 +93,11 @@ export function CausalDag({
         connectedIds.add(e.target);
       }
     }
-    return nodes.map((n) => ({
+    return localNodes.map((n) => ({
       ...n,
       style: connectedIds.has(n.id) ? {} : { opacity: 0.3 },
     }));
-  }, [nodes, flowEdges, selectedNode]);
+  }, [localNodes, flowEdges, selectedNode]);
 
   const styledEdges = useMemo(() => {
     if (!selectedNode) return flowEdges;
@@ -108,7 +124,7 @@ export function CausalDag({
     setSelectedNode(null);
   }, []);
 
-  if (isLayouting && nodes.length === 0) {
+  if (isLayouting && localNodes.length === 0) {
     return <div className="w-full rounded-lg border bg-card" style={{ height }} />;
   }
 
@@ -118,11 +134,12 @@ export function CausalDag({
         nodes={styledNodes}
         edges={styledEdges}
         nodeTypes={nodeTypes}
+        onNodesChange={onNodesChange}
         onNodeClick={handleNodeClick}
         onPaneClick={handlePaneClick}
         fitView
         fitViewOptions={{ padding: 0.25 }}
-        nodesDraggable={false}
+        nodesDraggable
         nodesConnectable={false}
         proOptions={{ hideAttribution: true }}
         defaultEdgeOptions={{
@@ -131,7 +148,7 @@ export function CausalDag({
       >
         <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
         <Controls showInteractive={false} />
-        <Panel position="bottom-left">
+        <Panel position="top-right">
           <EdgeLegend hasLagged={hasLagged} hasContemporaneous={hasContemporaneous} />
         </Panel>
       </ReactFlow>

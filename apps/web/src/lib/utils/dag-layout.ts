@@ -10,9 +10,10 @@ export interface LayoutResult {
 const elk = new ELK();
 
 const CONSTRUCT_WIDTH = 200;
-const CONSTRUCT_HEIGHT = 60;
-const INDICATOR_WIDTH = 160;
-const INDICATOR_HEIGHT = 40;
+const CONSTRUCT_BASE_HEIGHT = 60;
+const INDICATOR_ROW_HEIGHT = 22;
+const INDICATOR_SECTION_PADDING = 12;
+const CONSTRUCT_WITH_INDICATORS_WIDTH = 240;
 
 const ELK_OPTIONS: Record<string, string> = {
   "elk.algorithm": "layered",
@@ -26,11 +27,29 @@ const ELK_OPTIONS: Record<string, string> = {
   "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF",
 };
 
+function computeNodeHeight(indicatorCount: number): number {
+  if (indicatorCount === 0) return CONSTRUCT_BASE_HEIGHT;
+  return CONSTRUCT_BASE_HEIGHT + INDICATOR_SECTION_PADDING + indicatorCount * INDICATOR_ROW_HEIGHT;
+}
+
 export async function layoutDag(
   constructs: Construct[],
   causalEdges: CausalEdge[],
   indicators?: Indicator[],
 ): Promise<LayoutResult> {
+  // Group indicators by construct
+  const indicatorsByConstruct = new Map<string, Indicator[]>();
+  if (indicators) {
+    for (const ind of indicators) {
+      const list = indicatorsByConstruct.get(ind.construct_name) ?? [];
+      list.push(ind);
+      indicatorsByConstruct.set(ind.construct_name, list);
+    }
+  }
+
+  const hasIndicators = indicatorsByConstruct.size > 0;
+  const nodeWidth = hasIndicators ? CONSTRUCT_WITH_INDICATORS_WIDTH : CONSTRUCT_WIDTH;
+
   const children: ElkNode[] = [];
   const elkEdges: Array<{ id: string; sources: string[]; targets: string[] }> = [];
 
@@ -38,22 +57,15 @@ export async function layoutDag(
   // Lagged edges (temporal feedback) are overlaid after layout so they
   // don't distort the layering with back-edges.
   const contemporaneousEdges = causalEdges.filter((e) => !e.lagged);
-  const laggedEdges = causalEdges.filter((e) => e.lagged);
 
   for (const c of constructs) {
-    children.push({ id: c.name, width: CONSTRUCT_WIDTH, height: CONSTRUCT_HEIGHT });
+    const indCount = indicatorsByConstruct.get(c.name)?.length ?? 0;
+    children.push({ id: c.name, width: nodeWidth, height: computeNodeHeight(indCount) });
   }
 
   for (let i = 0; i < contemporaneousEdges.length; i++) {
     const e = contemporaneousEdges[i];
     elkEdges.push({ id: `causal-contemp-${i}`, sources: [e.cause], targets: [e.effect] });
-  }
-
-  if (indicators) {
-    for (const ind of indicators) {
-      children.push({ id: ind.name, width: INDICATOR_WIDTH, height: INDICATOR_HEIGHT });
-      elkEdges.push({ id: `loading-${ind.name}`, sources: [ind.construct_name], targets: [ind.name] });
-    }
   }
 
   const graph: ElkNode = {
@@ -75,15 +87,13 @@ export async function layoutDag(
   for (const c of constructs) {
     const pos = posMap.get(c.name);
     if (!pos) continue;
-    nodes.push({ id: c.name, type: "construct", position: pos, data: { ...c } });
-  }
-
-  if (indicators) {
-    for (const ind of indicators) {
-      const pos = posMap.get(ind.name);
-      if (!pos) continue;
-      nodes.push({ id: ind.name, type: "indicator", position: pos, data: { ...ind } });
-    }
+    const constructIndicators = indicatorsByConstruct.get(c.name) ?? [];
+    nodes.push({
+      id: c.name,
+      type: "construct",
+      position: pos,
+      data: { ...c, indicators: constructIndicators },
+    });
   }
 
   // Build edges — contemporaneous edges use smoothstep (orthogonal feel),
@@ -111,24 +121,6 @@ export async function layoutDag(
         height: 14,
       },
     });
-  }
-
-  if (indicators) {
-    for (const ind of indicators) {
-      edges.push({
-        id: `loading-${ind.name}`,
-        source: ind.construct_name,
-        target: ind.name,
-        type: "smoothstep",
-        style: { stroke: "var(--edge-indicator)", strokeWidth: 1.5, strokeDasharray: "3,3" },
-        markerEnd: {
-          type: "arrowclosed" as const,
-          color: "var(--edge-indicator)",
-          width: 12,
-          height: 12,
-        },
-      });
-    }
   }
 
   return { nodes, edges };
