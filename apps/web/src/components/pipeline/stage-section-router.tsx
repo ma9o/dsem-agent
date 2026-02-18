@@ -1,8 +1,8 @@
 "use client";
 
-import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { LLMTraceAccordion } from "@/components/ui/custom/llm-trace-accordion";
-import type { StageTiming, StageRunStatus } from "@/lib/hooks/use-run-events";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
+import type { StageRunStatus, StageTiming } from "@/lib/hooks/use-run-events";
 import { useStageData } from "@/lib/hooks/use-stage-data";
 import type {
   Stage0Data,
@@ -132,10 +132,11 @@ function Stage3Wrapper({ runId }: { runId: string }) {
 
 function Stage4Wrapper({ runId }: { runId: string }) {
   const { data } = useStageData<Stage4Data>(runId, "stage-4", true);
+  const { data: stage2 } = useStageData<Stage2Data>(runId, "stage-2", true);
   if (!data) return null;
   return (
     <>
-      <Stage4Content data={data} />
+      <Stage4Content data={data} extractions={stage2?.combined_extractions_sample} />
       {data.raw_completion && <LLMTraceAccordion rawCompletion={data.raw_completion} />}
     </>
   );
