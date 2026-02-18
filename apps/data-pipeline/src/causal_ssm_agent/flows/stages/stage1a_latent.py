@@ -22,9 +22,14 @@ async def propose_latent_model(question: str) -> dict:
         question: The causal research question
 
     Returns:
-        LatentModel as a dictionary with 'constructs' and 'edges'
+        LatentModel as a dictionary with 'constructs', 'edges', and 'llm_trace'
     """
     model = get_model(get_config().stage1_structure_proposal.model)
-    generate = make_orchestrator_generate_fn(model)
+    trace_capture: dict = {}
+    generate = make_orchestrator_generate_fn(model, trace_capture=trace_capture)
     result = await run_stage1a(question=question, generate=generate)
-    return result.latent_model
+    out = result.latent_model
+    trace = trace_capture.get("trace")
+    if trace is not None:
+        out["llm_trace"] = trace.to_dict()
+    return out

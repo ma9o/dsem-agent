@@ -91,7 +91,8 @@ async def propose_model_task(
 
     config = get_config()
     model = get_model(config.stage4_prior_elicitation.model)
-    generate = make_orchestrator_generate_fn(model)
+    trace_capture: dict = {}
+    generate = make_orchestrator_generate_fn(model, trace_capture=trace_capture)
 
     data_summary = build_raw_data_summary(raw_data)
 
@@ -102,7 +103,11 @@ async def propose_model_task(
         generate=generate,
     )
 
-    return result.model_spec.model_dump()
+    out = result.model_spec.model_dump()
+    trace = trace_capture.get("trace")
+    if trace is not None:
+        out["llm_trace"] = trace.to_dict()
+    return out
 
 
 @task(retries=2, retry_delay_seconds=5, task_run_name="search-literature-{parameter_spec[name]}")
@@ -226,7 +231,11 @@ def validate_priors_task(
                 )
                 from causal_ssm_agent.orchestrator.schemas_model import ModelSpec
 
-                spec = ModelSpec.model_validate(model_spec) if isinstance(model_spec, dict) else model_spec
+                spec = (
+                    ModelSpec.model_validate(model_spec)
+                    if isinstance(model_spec, dict)
+                    else model_spec
+                )
                 manifest_names = [lik.variable for lik in spec.likelihoods]
                 manifest_dists = [lik.distribution.value for lik in spec.likelihoods]
 
@@ -360,6 +369,7 @@ async def stage4_orchestrated_flow(
 
     # 1. Orchestrator proposes model specification
     model_spec = await propose_model_task(causal_spec, question, raw_data)
+    llm_trace = model_spec.pop("llm_trace", None)
     parameter_specs = model_spec.get("parameters", [])
 
     # Build a lookup from parameter name -> spec dict
@@ -474,7 +484,7 @@ async def stage4_orchestrated_flow(
     model_info = build_model_task(model_spec, priors, raw_data, causal_spec=causal_spec)
     model_result = model_info.result() if hasattr(model_info, "result") else model_info
 
-    return {
+    result = {
         "model_spec": model_spec,
         "priors": priors,
         "validation": validation_result,
@@ -483,3 +493,6 @@ async def stage4_orchestrated_flow(
         "causal_spec": causal_spec,
         "prior_predictive_samples": validation_result.get("prior_predictive_samples", {}),
     }
+    if llm_trace is not None:
+        result["llm_trace"] = llm_trace
+    return result

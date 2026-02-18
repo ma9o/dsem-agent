@@ -50,7 +50,8 @@ async def propose_measurement_with_identifiability_fix(
         Dict with 'measurement_model' and 'identifiability_status'
     """
     model = get_model(get_config().stage1_structure_proposal.model)
-    generate = make_orchestrator_generate_fn(model)
+    trace_capture: dict = {}
+    generate = make_orchestrator_generate_fn(model, trace_capture=trace_capture)
     result = await run_stage1b(
         question=question,
         latent_model=latent_model,
@@ -58,7 +59,11 @@ async def propose_measurement_with_identifiability_fix(
         generate=generate,
         dataset_summary=dataset_summary,
     )
-    return {
+    out = {
         "measurement_model": result.measurement_model,
         "identifiability_status": result.identifiability_status,
     }
+    trace = trace_capture.get("trace")
+    if trace is not None:
+        out["llm_trace"] = trace.to_dict()
+    return out

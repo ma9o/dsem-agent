@@ -1,15 +1,19 @@
 """Shared LLM utilities for multi-turn generation."""
 
+import dataclasses
 import json
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
 from inspect_ai.model import (
     ChatMessageAssistant,
     ChatMessageSystem,
+    ChatMessageTool,
     ChatMessageUser,
     GenerateConfig,
     Model,
+    ModelOutput,
 )
 from inspect_ai.tool import Tool, tool
 
@@ -17,6 +21,116 @@ if TYPE_CHECKING:
     from inspect_ai.model import ChatMessage
 
     from causal_ssm_agent.orchestrator.schemas import LatentModel
+
+
+# ---------------------------------------------------------------------------
+# Trace dataclasses
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class TraceMessage:
+    """A single message in an LLM trace."""
+
+    role: str
+    content: str
+    reasoning: str | None = None
+    tool_calls: list[dict[str, Any]] | None = None
+    tool_name: str | None = None
+    tool_result: str | None = None
+    tool_is_error: bool = False
+
+
+@dataclass
+class TraceUsage:
+    """Token usage for an LLM trace."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    reasoning_tokens: int | None = None
+
+
+@dataclass
+class LLMTrace:
+    """Full trace of an LLM multi-turn conversation."""
+
+    messages: list[TraceMessage] = field(default_factory=list)
+    model: str = ""
+    total_time_seconds: float = 0.0
+    usage: TraceUsage = field(default_factory=TraceUsage)
+
+    def to_dict(self) -> dict:
+        return dataclasses.asdict(self)
+
+
+def _chat_message_to_trace(msg: "ChatMessage") -> TraceMessage:
+    """Convert an inspect_ai ChatMessage to a TraceMessage."""
+    from inspect_ai._util.content import ContentReasoning, ContentText
+
+    role = msg.role
+    content_text = ""
+    reasoning_text = None
+    tool_calls_list = None
+    tool_name = None
+    tool_result = None
+    tool_is_error = False
+
+    # Extract text and reasoning from content
+    if isinstance(msg.content, str):
+        content_text = msg.content
+    elif isinstance(msg.content, list):
+        text_parts = []
+        reasoning_parts = []
+        for part in msg.content:
+            if isinstance(part, ContentText):
+                text_parts.append(part.text)
+            elif isinstance(part, ContentReasoning):
+                reasoning_parts.append(part.reasoning)
+        content_text = "\n".join(text_parts)
+        if reasoning_parts:
+            reasoning_text = "\n".join(reasoning_parts)
+
+    # Extract tool calls from assistant messages
+    if isinstance(msg, ChatMessageAssistant) and msg.tool_calls:
+        tool_calls_list = [
+            {"name": tc.function, "arguments": tc.arguments} for tc in msg.tool_calls
+        ]
+
+    # Extract tool results from tool messages
+    if isinstance(msg, ChatMessageTool):
+        tool_name = msg.function
+        tool_result = content_text
+        tool_is_error = msg.error is not None
+
+    return TraceMessage(
+        role=role,
+        content=content_text,
+        reasoning=reasoning_text,
+        tool_calls=tool_calls_list,
+        tool_name=tool_name,
+        tool_result=tool_result,
+        tool_is_error=tool_is_error,
+    )
+
+
+def _build_trace(all_messages: list["ChatMessage"], output: ModelOutput) -> LLMTrace:
+    """Build an LLMTrace from a final message list and ModelOutput."""
+    messages = [_chat_message_to_trace(m) for m in all_messages]
+    usage = TraceUsage()
+    if output.usage:
+        usage = TraceUsage(
+            input_tokens=output.usage.input_tokens,
+            output_tokens=output.usage.output_tokens,
+            total_tokens=output.usage.total_tokens,
+            reasoning_tokens=output.usage.reasoning_tokens,
+        )
+    return LLMTrace(
+        messages=messages,
+        model=output.model or "",
+        total_time_seconds=output.time or 0.0,
+        usage=usage,
+    )
 
 
 # Type aliases for generate functions
@@ -66,7 +180,9 @@ def dict_messages_to_chat(messages: list[dict]) -> list["ChatMessage"]:
 
 
 def make_orchestrator_generate_fn(
-    model: Model, config: GenerateConfig | None = None
+    model: Model,
+    config: GenerateConfig | None = None,
+    trace_capture: dict | None = None,
 ) -> OrchestratorGenerateFn:
     """Create a generate function for orchestrator stages (1a, 1b).
 
@@ -75,6 +191,7 @@ def make_orchestrator_generate_fn(
     Args:
         model: The model to use for generation
         config: Optional generation config (uses get_generate_config() if None)
+        trace_capture: Optional dict for capturing the LLM trace
 
     Returns:
         An async function that handles multi-turn generation with tools and follow-ups
@@ -92,6 +209,7 @@ def make_orchestrator_generate_fn(
                 follow_ups=follow_ups,
                 tools=tools or [],
                 config=config,
+                trace_capture=trace_capture,
             )
         else:
             response = await model.generate(chat_messages, config=config)
@@ -100,7 +218,11 @@ def make_orchestrator_generate_fn(
     return generate
 
 
-def make_worker_generate_fn(model: Model, config: GenerateConfig | None = None) -> WorkerGenerateFn:
+def make_worker_generate_fn(
+    model: Model,
+    config: GenerateConfig | None = None,
+    trace_capture: dict | None = None,
+) -> WorkerGenerateFn:
     """Create a generate function for worker extraction.
 
     The returned function has signature: (messages, tools) -> str
@@ -108,6 +230,7 @@ def make_worker_generate_fn(model: Model, config: GenerateConfig | None = None) 
     Args:
         model: The model to use for generation
         config: Optional generation config (uses get_generate_config() if None)
+        trace_capture: Optional dict for capturing the LLM trace
 
     Returns:
         An async function that handles multi-turn generation with tools
@@ -122,6 +245,7 @@ def make_worker_generate_fn(model: Model, config: GenerateConfig | None = None) 
             model=model,
             tools=tools or [],
             config=config,
+            trace_capture=trace_capture,
         )
 
     return generate
@@ -411,6 +535,7 @@ async def multi_turn_generate(
     tools: list[Tool] | None = None,
     follow_up_tools: list[Tool] | None = None,
     config: GenerateConfig | None = None,
+    trace_capture: dict | None = None,
 ) -> str:
     """
     Run a multi-turn conversation with optional tool use.
@@ -425,6 +550,8 @@ async def multi_turn_generate(
             This prevents the LLM from re-invoking validation tools during self-review
             and potentially overwriting a previously captured valid model.
         config: Optional generation config
+        trace_capture: Optional dict; when provided, the full LLMTrace is stored
+            under ``trace_capture["trace"]`` before returning.
 
     Returns:
         The final completion string
@@ -456,6 +583,9 @@ async def multi_turn_generate(
                 messages.append(ChatMessageAssistant(content=response.completion))
                 output = response
 
+        if trace_capture is not None:
+            trace_capture["trace"] = _build_trace(messages, output)
+
         return output.completion
     else:
         # Simple generation without tools
@@ -466,5 +596,8 @@ async def multi_turn_generate(
             messages.append(ChatMessageUser(content=prompt))
             response = await model.generate(messages, config=config)
             messages.append(ChatMessageAssistant(content=response.completion))
+
+        if trace_capture is not None:
+            trace_capture["trace"] = _build_trace(messages, response)
 
         return response.completion
