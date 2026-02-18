@@ -8,10 +8,10 @@ function IndicatorNodeInner({ data }: NodeProps) {
   const indicator = data as unknown as Indicator;
 
   return (
-    <div className="rounded-md border border-node-indicator bg-node-indicator-soft px-3 py-1.5 shadow-sm">
+    <div className="rounded-md border border-muted-foreground bg-muted px-3 py-1.5 shadow-sm">
       <Handle type="target" position={Position.Top} className="!bg-muted-foreground" />
 
-      <span className="text-xs font-medium text-node-indicator">
+      <span className="text-xs font-medium text-muted-foreground">
         {indicator.name}
       </span>
 

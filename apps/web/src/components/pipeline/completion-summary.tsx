@@ -41,7 +41,7 @@ export function CompletionSummary({ runId }: { runId: string }) {
   const sensitiveCount = results.filter((r) => r.sensitivity_flag).length;
 
   return (
-    <Card className="animate-fade-in-up border-success/30 bg-success-soft/50">
+    <Card className="animate-fade-in-up border-success/30 bg-success/5">
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-base">

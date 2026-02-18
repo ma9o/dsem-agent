@@ -20,8 +20,8 @@ export function ValidationSummaryBanner({ report }: { report: ValidationReport }
       className={cn(
         "flex items-center justify-between rounded-lg border p-4",
         report.is_valid
-          ? "border-success/30 bg-success-soft"
-          : "border-destructive/30 bg-destructive-soft",
+          ? "border-success/30 bg-success/10"
+          : "border-destructive/30 bg-destructive/10",
       )}
     >
       <div className="flex items-center gap-3">

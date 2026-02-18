@@ -53,14 +53,14 @@ function ConstructNodeInner({ data, selected }: NodeProps) {
         "rounded-lg border-2 shadow-sm transition-all duration-200 cursor-pointer",
         "hover:shadow-md hover:-translate-y-0.5",
         construct.identificationStatus === "identified"
-          ? "bg-node-identified"
+          ? "bg-success/5"
           : construct.identificationStatus === "non_identified"
-            ? "bg-node-non-identified"
+            ? "bg-destructive/5"
             : "bg-card",
         construct.role === "endogenous"
-          ? "border-node-endogenous"
-          : "border-node-exogenous",
-        construct.is_outcome && "ring-2 ring-outcome ring-offset-1",
+          ? "border-foreground/65"
+          : "border-foreground/35",
+        construct.is_outcome && "ring-2 ring-foreground/75 ring-offset-1",
         selected && "shadow-lg ring-2 ring-primary ring-offset-2",
       )}
     >
@@ -70,7 +70,7 @@ function ConstructNodeInner({ data, selected }: NodeProps) {
         <div className="flex items-center gap-1.5">
           <span className="text-sm font-semibold leading-tight">{construct.name}</span>
           {construct.is_outcome && (
-            <Star className="h-3.5 w-3.5 shrink-0 fill-outcome text-outcome" />
+            <Star className="h-3.5 w-3.5 shrink-0 fill-foreground/75 text-foreground/75" />
           )}
         </div>
 

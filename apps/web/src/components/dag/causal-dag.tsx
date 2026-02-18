@@ -61,13 +61,13 @@ function IdLegend({ hasIdentified, hasNonIdentified }: { hasIdentified: boolean;
       <div className="flex items-center gap-4">
         {hasIdentified && (
           <div className="flex items-center gap-2">
-            <span className="inline-block h-3 w-3 rounded-sm border border-border bg-node-identified shrink-0" />
+            <span className="inline-block h-3 w-3 rounded-sm border border-border bg-success/5 shrink-0" />
             <span className="text-muted-foreground">identified</span>
           </div>
         )}
         {hasNonIdentified && (
           <div className="flex items-center gap-2">
-            <span className="inline-block h-3 w-3 rounded-sm border border-border bg-node-non-identified shrink-0" />
+            <span className="inline-block h-3 w-3 rounded-sm border border-border bg-destructive/5 shrink-0" />
             <span className="text-muted-foreground">non-identified</span>
           </div>
         )}

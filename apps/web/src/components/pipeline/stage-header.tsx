@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils/cn";
+import { linkifyDocRefs } from "@/lib/utils/linkify-docs";
 import type { StageRunStatus } from "@/lib/hooks/use-run-events";
 import { ShieldCheck } from "lucide-react";
 
@@ -57,12 +58,12 @@ export function StageHeader({
           <h2 className="text-base font-semibold sm:text-lg">{title}</h2>
           {hasGate && (
             <Tooltip content="This stage can halt the pipeline if checks fail">
-              <ShieldCheck className="h-4 w-4 text-outcome" />
+              <ShieldCheck className="h-4 w-4 text-foreground/75" />
             </Tooltip>
           )}
         </div>
         {context && (
-          <p className="mt-0.5 text-sm text-muted-foreground">{context}</p>
+          <p className="mt-0.5 text-sm text-muted-foreground">{linkifyDocRefs(context)}</p>
         )}
       </div>
       {!hideBadge && (
