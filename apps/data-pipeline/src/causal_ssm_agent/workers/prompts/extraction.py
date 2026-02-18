@@ -24,8 +24,7 @@ You have access to `validate_extractions` tool. Use it to validate your JSON bef
     {
       "indicator": "name",
       "value": < value of the correct datatype >,
-      "timestamp": "ISO timestamp of when the observation occurred, or null",
-      "evidence_text": "The exact text snippet from the data chunk that supports this extraction, or null"
+      "timestamp": "ISO timestamp of when the observation occurred, or null"
     }
   ]
 }

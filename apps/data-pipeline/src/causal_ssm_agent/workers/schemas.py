@@ -17,10 +17,6 @@ class Extraction(BaseModel):
         default=None,
         description="ISO timestamp if identifiable",
     )
-    evidence_text: str | None = Field(
-        default=None,
-        description="Supporting text snippet from the source that justifies this extraction",
-    )
 
 
 class WorkerOutput(BaseModel):
@@ -35,8 +31,7 @@ class WorkerOutput(BaseModel):
         """Convert extractions to a Polars DataFrame.
 
         Returns:
-            DataFrame with columns: indicator (Utf8), value (Utf8), timestamp (Utf8),
-            evidence_text (Utf8).
+            DataFrame with columns: indicator (Utf8), value (Utf8), timestamp (Utf8).
             Value column is stored as string. Downstream _encode_non_continuous()
             handles binary/ordinal/categorical encoding, then the final Float64
             cast happens in aggregate_worker_measurements().
@@ -45,7 +40,6 @@ class WorkerOutput(BaseModel):
             "indicator": pl.Utf8,
             "value": pl.Utf8,
             "timestamp": pl.Utf8,
-            "evidence_text": pl.Utf8,
         }
         if not self.extractions:
             return pl.DataFrame(schema=schema)
@@ -66,7 +60,6 @@ class WorkerOutput(BaseModel):
                     "indicator": e.indicator,
                     "value": str_val,
                     "timestamp": e.timestamp,
-                    "evidence_text": e.evidence_text,
                 }
             )
 
@@ -171,12 +164,10 @@ def validate_worker_output(
             )
             continue
 
-        # Normalize to "indicator" key, pass through provenance fields
         normalized = {
             "indicator": ind_name,
             "value": value,
             "timestamp": ext_data.get("timestamp"),
-            "evidence_text": ext_data.get("evidence_text"),
         }
 
         # Validate via Pydantic
