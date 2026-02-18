@@ -1,5 +1,4 @@
-import { AggregationSummary } from "@/components/stages/validation/aggregation-summary";
-import { IndicatorHealthCard } from "@/components/stages/validation/indicator-health-card";
+import { IndicatorHealthTable } from "@/components/stages/validation/indicator-health-table";
 import { IssueTable } from "@/components/stages/validation/issue-table";
 import { ValidationSummaryBanner } from "@/components/stages/validation/validation-summary-banner";
 import { HardGateAlert } from "@/components/ui/custom/hard-gate-alert";
@@ -22,15 +21,8 @@ export default function Stage3Content({ data }: { data: Stage3Data }) {
       {report.per_indicator_health.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-sm font-semibold">Indicator Health</h3>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {report.per_indicator_health.map((h) => (
-              <IndicatorHealthCard key={h.indicator} health={h} />
-            ))}
-          </div>
+          <IndicatorHealthTable rows={report.per_indicator_health} />
         </div>
-      )}
-      {report.aggregation_summary.length > 0 && (
-        <AggregationSummary summary={report.aggregation_summary} />
       )}
     </div>
   );
