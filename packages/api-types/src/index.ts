@@ -62,6 +62,8 @@ export type {
   ParameterIdentification,
 } from "./models/parametric-id";
 
+export type { TraceMessage, TraceUsage, LLMTrace } from "./models/llm-trace";
+
 export type {
   TreatmentEffect,
   PowerScalingResult,
@@ -90,7 +92,6 @@ export interface StageData<T = unknown> {
   stage: string;
   data: T;
   context: string;
-  raw_completion?: string;
 }
 
 export interface Stage0Data {
@@ -111,13 +112,13 @@ export interface Stage1aData {
     n_edges: number;
     has_single_outcome: boolean;
   };
-  raw_completion: string;
+  llm_trace?: import("./models/llm-trace").LLMTrace;
 }
 
 export interface Stage1bData {
   causal_spec: import("./models/causal-spec").CausalSpec;
   filtered_treatments: string[];
-  raw_completion: string;
+  llm_trace?: import("./models/llm-trace").LLMTrace;
 }
 
 export interface Stage2Data {
@@ -140,7 +141,7 @@ export interface Stage4Data {
     feedback: string;
   }>;
   ssm_equations: string[];
-  raw_completion: string;
+  llm_trace?: import("./models/llm-trace").LLMTrace;
   prior_predictive_samples?: Record<string, number[]>;
 }
 

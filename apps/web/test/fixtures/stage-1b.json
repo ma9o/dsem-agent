@@ -44,6 +44,17 @@
     }
   },
   "filtered_treatments": ["stress", "digital_distraction", "sleep_quality", "workload", "self_efficacy"],
-  "raw_completion": "[LLM trace for measurement model proposal]",
+  "llm_trace": {
+    "messages": [
+      { "role": "system", "content": "You are an expert in psychometrics and measurement theory...", "reasoning": null, "tool_calls": null, "tool_name": null, "tool_result": null, "tool_is_error": false },
+      { "role": "user", "content": "Given the latent model with constructs [procrastination, stress, sleep_quality, digital_distraction, self_efficacy, workload], propose observable indicators from the user's digital activity data.", "reasoning": null, "tool_calls": null, "tool_name": null, "tool_result": null, "tool_is_error": false },
+      { "role": "assistant", "content": "I'll propose indicators that can be measured from digital activity traces. Let me validate the measurement model.", "reasoning": "For each latent construct, I need at least one reflective indicator measurable from browser/device data. YouTube watch time maps to digital_distraction, late_night_activity to sleep_quality, task_completion_rate to procrastination, etc.", "tool_calls": [{ "name": "validate_measurement_model", "arguments": { "measurement_json": "{\"indicators\": [...]}" } }], "tool_name": null, "tool_result": null, "tool_is_error": false },
+      { "role": "tool", "content": "VALID", "reasoning": null, "tool_calls": null, "tool_name": "validate_measurement_model", "tool_result": "VALID", "tool_is_error": false },
+      { "role": "assistant", "content": "The measurement model maps 7 indicators to 6 latent constructs. Each indicator uses an appropriate measurement dtype (continuous, count, or binary) with suitable aggregation functions.", "reasoning": null, "tool_calls": null, "tool_name": null, "tool_result": null, "tool_is_error": false }
+    ],
+    "model": "claude-sonnet-4-20250514",
+    "total_time_seconds": 18.7,
+    "usage": { "input_tokens": 3200, "output_tokens": 2890, "total_tokens": 6090, "reasoning_tokens": 520 }
+  },
   "context": "Stage 1b proposes indicators and checks nonparametric identification via do-calculus (Pearl/Shpitser-Pearl ID algorithm). Assumption A7 (reflective measurement model) enables causal identification by linking latent constructs to observable data."
 }

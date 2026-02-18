@@ -36,7 +36,20 @@
     "y(t) = Λη(t) + ε(t)",
     "A = diag(ρ_procrastination, ρ_stress, ρ_sleep, ρ_distraction, ρ_efficacy) + off-diagonal causal effects"
   ],
-  "raw_completion": "[LLM trace for model specification]",
+  "llm_trace": {
+    "messages": [
+      { "role": "system", "content": "You are a Bayesian statistician specializing in state space models...", "reasoning": null, "tool_calls": null, "tool_name": null, "tool_result": null, "tool_is_error": false },
+      { "role": "user", "content": "Specify the statistical model for the causal SSM. Choose distribution families, link functions, and define parameters with their roles and constraints.", "reasoning": null, "tool_calls": null, "tool_name": null, "tool_result": null, "tool_is_error": false },
+      { "role": "assistant", "content": "I'll specify a continuous-time SSM with appropriate likelihoods. Let me validate the model specification.", "reasoning": "For this causal SSM: Gaussian for continuous indicators (youtube_watch_time, productive_hours), Poisson for counts (search_count, deadline_proximity_searches, workload_events), Bernoulli for binary (late_night_activity), Beta for proportions (task_completion_rate). AR(1) coefficients need unit_interval constraint for stationarity.", "tool_calls": [{ "name": "validate_model_spec", "arguments": { "model_spec_json": "{\"likelihoods\": [...], \"parameters\": [...]}" } }], "tool_name": null, "tool_result": null, "tool_is_error": false },
+      { "role": "tool", "content": "VALIDATION ERRORS:\n- Parameter beta_sleep_stress: missing constraint specification", "reasoning": null, "tool_calls": null, "tool_name": "validate_model_spec", "tool_result": "VALIDATION ERRORS:\n- Parameter beta_sleep_stress: missing constraint specification", "tool_is_error": false },
+      { "role": "assistant", "content": "Let me fix the constraint and revalidate.", "reasoning": "The beta_sleep_stress parameter should have constraint 'none' since it's a fixed effect that can be positive or negative.", "tool_calls": [{ "name": "validate_model_spec", "arguments": { "model_spec_json": "{\"likelihoods\": [...], \"parameters\": [...]}" } }], "tool_name": null, "tool_result": null, "tool_is_error": false },
+      { "role": "tool", "content": "VALID", "reasoning": null, "tool_calls": null, "tool_name": "validate_model_spec", "tool_result": "VALID", "tool_is_error": false },
+      { "role": "assistant", "content": "The model specification is valid. It defines 7 likelihoods and 8 parameters covering fixed effects, AR coefficients, and residual standard deviations.", "reasoning": null, "tool_calls": null, "tool_name": null, "tool_result": null, "tool_is_error": false }
+    ],
+    "model": "claude-sonnet-4-20250514",
+    "total_time_seconds": 24.1,
+    "usage": { "input_tokens": 4500, "output_tokens": 3200, "total_tokens": 7700, "reasoning_tokens": 890 }
+  },
   "prior_predictive_samples": {
     "youtube_watch_time": [47.1,46.5,47.8,64.0,47.4,20.1,56.6,44.7,45.7,52.3,54.6,73.3,63.1,52.2,35.2,29.7,54.9,76.2,50.8,47.9,60.6,20.9,43.8,59.8,67.5,45.2,57.5,55.0,65.6,27.7,61.4,19.7,-2.4,37.9,31.7,67.5,63.3,25.6,66.9,30.0,48.3,44.1,52.3,66.4,62.8,57.0,63.0,59.6,37.5,35.7,40.6,60.0,45.0,96.7,33.6,28.0,65.4,78.4,60.1,66.7,78.5,48.1,21.5,39.4,69.1,21.1,50.7,55.1,43.7,64.5,61.6,96.4,62.4,37.8,38.8,33.4,69.0,38.7,48.6,65.0,35.5,44.1,13.2,28.4,38.6,58.3,73.9,49.6,55.2,53.4,71.7,67.9,55.5,29.8,68.1,57.6,74.5,49.4,89.1,42.8,81.9,52.3,39.7,27.4,47.0,78.5,66.3,63.8,2.5,64.2,61.1,39.0,37.5,50.0,84.5,28.9,41.4,77.2,41.1,42.7,52.0,25.2,54.4,25.8,67.7,50.1,95.7,55.6,77.3,23.9,47.6,56.5,84.9,16.4,69.8,61.8,80.7,64.2,51.0,39.6,25.0,53.9,46.2,90.4,37.8,56.4,18.6,42.1,55.2,66.5,79.0,49.1,27.7,59.2,60.3,59.8,36.0,72.7,51.8,64.0,75.5,62.2,55.7,93.1,54.9,44.1,52.2,79.7,52.4,60.4,73.9,39.7,15.5,56.0,54.6,37.8,67.4,62.2,30.1,60.4,46.1,20.3,59.1,49.1,35.1,60.5,59.8,38.4,58.0,70.3,35.7,57.6,50.1,95.3,12.8,63.9,43.9,48.0,88.0,49.8],
     "search_count": [5,5,2,8,10,6,8,8,8,6,6,8,6,3,6,0,5,7,9,6,8,5,2,1,3,1,7,5,7,6,9,9,4,5,4,1,8,9,5,4,9,0,6,6,4,10,8,5,5,4,4,2,10,9,8,2,12,11,6,3,3,7,3,5,9,1,12,10,2,1,5,2,5,0,5,11,2,5,1,7,5,11,6,4,7,4,1,6,5,6,7,4,7,11,2,11,5,3,13,6,10,8,0,6,4,1,0,6,7,7,5,3,3,4,2,5,5,3,5,3,5,7,6,7,1,4,6,7,1,6,9,5,5,7,6,8,6,6,3,5,9,5,5,4,8,3,8,3,2,6,6,6,9,4,7,3,9,7,7,6,3,5,7,5,6,1,6,3,2,5,0,8,8,5,3,3,5,0,6,7,5,4,6,7,9,6,3,4,6,10,5,2,3,0,6,1,2,0,2,7],
