@@ -17,13 +17,13 @@ export function IdentifiabilityPanel({
       {identified.length > 0 && (
         <div className="space-y-3">
           <h3 className="flex items-center gap-2 text-sm font-medium">
-            <CheckCircle className="h-4 w-4 text-emerald-600" />
+            <CheckCircle className="h-4 w-4 text-success" />
             Identified Treatments
             <StatTooltip explanation="Treatments whose causal effects can be uniquely estimated from observational data, given the DAG and available instruments." />
           </h3>
           <div className="grid gap-3 sm:grid-cols-2">
             {identified.map(([name, status]) => (
-              <Card key={name} className="border-emerald-200 dark:border-emerald-800">
+              <Card key={name} className="border-success/30">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">{name}</CardTitle>
                 </CardHeader>
@@ -64,7 +64,7 @@ export function IdentifiabilityPanel({
           </h3>
           <div className="grid gap-3 sm:grid-cols-2">
             {nonIdentifiable.map(([name, status]) => (
-              <Card key={name} className="border-red-200 dark:border-red-800">
+              <Card key={name} className="border-destructive/30">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">{name}</CardTitle>
                 </CardHeader>

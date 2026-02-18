@@ -78,7 +78,7 @@ export function TreatmentRankingTable({ results }: TreatmentRankingTableProps) {
             </TableCell>
             <TableCell>
               {r.identifiable ? (
-                <Check className="h-4 w-4 text-emerald-600" />
+                <Check className="h-4 w-4 text-success" />
               ) : (
                 <X className="h-4 w-4 text-destructive" />
               )}

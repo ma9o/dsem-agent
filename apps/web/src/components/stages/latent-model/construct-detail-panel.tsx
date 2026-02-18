@@ -13,7 +13,7 @@ export function ConstructDetailPanel({ construct }: ConstructDetailPanelProps) {
       <CardHeader>
         <div className="flex items-center gap-2">
           <CardTitle className="text-base">{construct.name}</CardTitle>
-          {construct.is_outcome && <Star className="h-4 w-4 fill-amber-400 text-amber-400" />}
+          {construct.is_outcome && <Star className="h-4 w-4 fill-outcome text-outcome" />}
         </div>
       </CardHeader>
       <CardContent className="space-y-3">

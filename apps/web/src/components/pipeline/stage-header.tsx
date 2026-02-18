@@ -40,7 +40,7 @@ export function StageHeader({
         className={cn(
           "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-colors",
           status === "completed"
-            ? "bg-emerald-500 text-white"
+            ? "bg-success text-success-foreground"
             : status === "failed"
               ? "bg-destructive text-white"
               : status === "running"
@@ -55,7 +55,7 @@ export function StageHeader({
           <h2 className="text-base font-semibold sm:text-lg">{title}</h2>
           {hasGate && (
             <Tooltip content="This stage can halt the pipeline if checks fail">
-              <ShieldCheck className="h-4 w-4 text-amber-500" />
+              <ShieldCheck className="h-4 w-4 text-outcome" />
             </Tooltip>
           )}
         </div>

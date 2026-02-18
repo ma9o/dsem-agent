@@ -142,7 +142,7 @@ export function DiagnosticsAccordion({ powerScaling, ppc }: DiagnosticsAccordion
                   </TableCell>
                   <TableCell>
                     {w.passed ? (
-                      <Check className="h-4 w-4 text-emerald-600" />
+                      <Check className="h-4 w-4 text-success" />
                     ) : (
                       <X className="h-4 w-4 text-destructive" />
                     )}

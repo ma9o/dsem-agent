@@ -14,7 +14,7 @@ export function SiteHeader() {
           Causal Inference Pipeline
         </Link>
         {isMockMode() && (
-          <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+          <span className="rounded-full border border-warning/50 bg-warning-soft px-2 py-0.5 text-[10px] font-medium text-warning-soft-foreground">
             Mock Mode
           </span>
         )}

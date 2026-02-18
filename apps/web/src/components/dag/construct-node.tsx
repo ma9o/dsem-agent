@@ -21,9 +21,9 @@ function ConstructNodeInner({ data, selected }: NodeProps) {
         "rounded-lg border-2 bg-card shadow-sm transition-all duration-200 cursor-pointer",
         "hover:shadow-md hover:-translate-y-0.5",
         construct.role === "endogenous"
-          ? "border-blue-400 dark:border-blue-600"
-          : "border-slate-300 dark:border-slate-600",
-        construct.is_outcome && "ring-2 ring-amber-400 ring-offset-1 dark:ring-amber-500",
+          ? "border-node-endogenous"
+          : "border-node-exogenous",
+        construct.is_outcome && "ring-2 ring-outcome ring-offset-1",
         selected && "shadow-lg ring-2 ring-primary ring-offset-2",
       )}
     >
@@ -33,7 +33,7 @@ function ConstructNodeInner({ data, selected }: NodeProps) {
         <div className="flex items-center gap-1.5">
           <span className="text-sm font-semibold leading-tight">{construct.name}</span>
           {construct.is_outcome && (
-            <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-400" />
+            <Star className="h-3.5 w-3.5 shrink-0 fill-outcome text-outcome" />
           )}
         </div>
 
@@ -56,7 +56,7 @@ function ConstructNodeInner({ data, selected }: NodeProps) {
       </div>
 
       {indicators.length > 0 && (
-        <div className="border-t border-dashed border-slate-200 dark:border-slate-600 px-3 py-1.5">
+        <div className="border-t border-dashed border-border px-3 py-1.5">
           {indicators.map((ind) => (
             <div key={ind.name} className="flex items-center justify-between gap-2 py-0.5">
               <span className="text-[11px] text-muted-foreground truncate">

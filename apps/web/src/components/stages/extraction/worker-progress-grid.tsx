@@ -21,8 +21,8 @@ export function WorkerProgressGrid({ workers }: { workers: WorkerStatus[] }) {
         <Card
           key={w.worker_id}
           className={cn(
-            w.status === "failed" && "border-red-200 dark:border-red-800",
-            w.status === "completed" && "border-emerald-200 dark:border-emerald-800",
+            w.status === "failed" && "border-destructive/30",
+            w.status === "completed" && "border-success/30",
           )}
         >
           <CardHeader className="pb-2">

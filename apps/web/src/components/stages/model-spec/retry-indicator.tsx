@@ -30,7 +30,7 @@ export function RetryIndicator({ retries }: RetryIndicatorProps) {
             <div
               className={cn(
                 "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2",
-                "border-amber-500 bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
+                "border-warning bg-warning-soft text-warning-soft-foreground",
               )}
             >
               <AlertCircle className="h-4 w-4" />

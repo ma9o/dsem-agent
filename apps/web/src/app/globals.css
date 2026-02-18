@@ -18,6 +18,24 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-destructive-soft-foreground: var(--destructive-soft-foreground);
+
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-soft: var(--success-soft);
+  --color-success-soft-foreground: var(--success-soft-foreground);
+
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-soft-foreground: var(--warning-soft-foreground);
+
+  --color-node-endogenous: var(--node-endogenous);
+  --color-node-exogenous: var(--node-exogenous);
+  --color-node-indicator: var(--node-indicator);
+  --color-node-indicator-soft: var(--node-indicator-soft);
+  --color-outcome: var(--outcome);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -50,9 +68,28 @@
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
   --radius: 0.625rem;
-  --edge-lagged: oklch(0.55 0.18 260);
-  --edge-contemporary: oklch(0.45 0.12 160);
-  --edge-indicator: oklch(0.65 0.16 290);
+  --success: oklch(0.55 0.17 150);
+  --success-foreground: oklch(0.98 0 0);
+  --success-soft: oklch(0.96 0.03 150);
+  --success-soft-foreground: oklch(0.30 0.10 150);
+
+  --warning: oklch(0.75 0.15 75);
+  --warning-foreground: oklch(0.25 0.06 75);
+  --warning-soft: oklch(0.97 0.03 75);
+  --warning-soft-foreground: oklch(0.42 0.10 75);
+
+  --destructive-soft: oklch(0.96 0.03 25);
+  --destructive-soft-foreground: oklch(0.40 0.15 25);
+
+  --node-endogenous: oklch(0.45 0 0);
+  --node-exogenous: oklch(0.68 0 0);
+  --node-indicator: oklch(0.55 0 0);
+  --node-indicator-soft: oklch(0.96 0 0);
+  --outcome: oklch(0.35 0 0);
+
+  --edge-lagged: oklch(0.55 0 0);
+  --edge-contemporary: oklch(0.40 0 0);
+  --edge-indicator: oklch(0.65 0 0);
   --edge-label: oklch(0.45 0 0);
 }
 

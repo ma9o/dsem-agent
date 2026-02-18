@@ -16,7 +16,7 @@ export function PipelineProgressBar({ progress }: { progress: PipelineProgress |
             {completed}/{STAGES.length} stages
           </span>
           {progress.isComplete && (
-            <span className="animate-fade-in text-xs font-medium text-emerald-600">
+            <span className="animate-fade-in text-xs font-medium text-success">
               Complete
             </span>
           )}
@@ -34,7 +34,7 @@ export function PipelineProgressBar({ progress }: { progress: PipelineProgress |
                 key={stage.id}
                 content={
                   <div className="flex items-center gap-1.5 text-xs whitespace-nowrap">
-                    {status === "completed" && <Check className="h-3 w-3 text-emerald-500" />}
+                    {status === "completed" && <Check className="h-3 w-3 text-success" />}
                     {status === "running" && <Loader2 className="h-3 w-3 animate-spin" />}
                     {status === "failed" && <X className="h-3 w-3 text-destructive" />}
                     <span>
@@ -57,7 +57,7 @@ export function PipelineProgressBar({ progress }: { progress: PipelineProgress |
                   <div
                     className={`h-2 rounded-full transition-all duration-500 ${
                       status === "completed"
-                        ? "bg-emerald-500"
+                        ? "bg-success"
                         : status === "running"
                           ? "bg-primary animate-pulse-subtle"
                           : status === "failed"

@@ -41,11 +41,11 @@ export function CompletionSummary({ runId }: { runId: string }) {
   const sensitiveCount = results.filter((r) => r.sensitivity_flag).length;
 
   return (
-    <Card className="animate-fade-in-up border-emerald-200 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-950/20">
+    <Card className="animate-fade-in-up border-success/30 bg-success-soft/50">
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-base">
-            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+            <CheckCircle2 className="h-5 w-5 text-success" />
             Analysis Complete
           </CardTitle>
           <Button variant="outline" size="sm" onClick={handleExport}>

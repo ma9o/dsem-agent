@@ -20,15 +20,15 @@ export function ValidationSummaryBanner({ report }: { report: ValidationReport }
       className={cn(
         "flex items-center justify-between rounded-lg border p-4",
         report.is_valid
-          ? "border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950"
-          : "border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950",
+          ? "border-success/30 bg-success-soft"
+          : "border-destructive/30 bg-destructive-soft",
       )}
     >
       <div className="flex items-center gap-3">
         {report.is_valid ? (
-          <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+          <CheckCircle className="h-5 w-5 text-success" />
         ) : (
-          <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+          <XCircle className="h-5 w-5 text-destructive" />
         )}
         <span className="font-medium">
           {report.is_valid ? "Validation Passed" : "Validation Failed"}
