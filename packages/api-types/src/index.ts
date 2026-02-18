@@ -82,10 +82,11 @@ export interface StageData<T = unknown> {
 }
 
 export interface Stage0Data {
-  lines: string[];
-  date_range: { start: string; end: string };
-  activity_type_counts: Record<string, number>;
+  source_type: string;
+  source_label: string;
   n_records: number;
+  date_range: { start: string; end: string };
+  sample: Array<{ timestamp: string; content: string }>;
 }
 
 export interface Stage1aData {

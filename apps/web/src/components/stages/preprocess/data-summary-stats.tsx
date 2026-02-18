@@ -4,18 +4,12 @@ import { formatDate } from "@/lib/utils/format";
 import { Calendar, Database } from "lucide-react";
 
 interface DataSummaryStatsProps {
+  sourceLabel: string;
   nRecords: number;
   dateRange: { start: string; end: string };
-  activityTypeCounts: Record<string, number>;
 }
 
-export function DataSummaryStats({
-  nRecords,
-  dateRange,
-  activityTypeCounts,
-}: DataSummaryStatsProps) {
-  const sortedTypes = Object.entries(activityTypeCounts).sort(([, a], [, b]) => b - a);
-
+export function DataSummaryStats({ sourceLabel, nRecords, dateRange }: DataSummaryStatsProps) {
   return (
     <Card>
       <CardHeader>
@@ -23,6 +17,7 @@ export function DataSummaryStats({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-center gap-4">
+          <Badge variant="outline">{sourceLabel}</Badge>
           <div className="flex items-center gap-2 text-sm">
             <Database className="h-4 w-4 text-muted-foreground" />
             <span className="font-medium">{nRecords.toLocaleString()}</span>
@@ -33,18 +28,6 @@ export function DataSummaryStats({
             <span className="text-muted-foreground">
               {formatDate(dateRange.start)} &ndash; {formatDate(dateRange.end)}
             </span>
-          </div>
-        </div>
-
-        <div>
-          <p className="mb-2 text-sm font-medium text-muted-foreground">Activity types</p>
-          <div className="flex flex-wrap gap-2">
-            {sortedTypes.map(([type, count]) => (
-              <Badge key={type} variant="secondary">
-                {type}
-                <span className="ml-1.5 text-muted-foreground">{count.toLocaleString()}</span>
-              </Badge>
-            ))}
           </div>
         </div>
       </CardContent>

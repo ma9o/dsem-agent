@@ -1,13 +1,14 @@
 """Stage 0: Preprocess raw input data.
 
 Reads raw Google Takeout MyActivity JSON from data/raw/<user_id>/,
-parses and sorts entries, and returns text lines for downstream chunking.
+parses and sorts entries, and returns text lines + metadata for downstream use.
 """
 
 import json
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import TypedDict
 from zipfile import ZipFile, is_zipfile
 
 from prefect import task
@@ -16,6 +17,20 @@ from prefect.cache_policies import INPUTS
 from causal_ssm_agent.utils.data import RAW_DIR
 
 TAKEOUT_ZIP_PATH = "Takeout/My Activity/Search/MyActivity.json"
+
+
+class SampleEntry(TypedDict):
+    timestamp: str
+    content: str
+
+
+class PreprocessResult(TypedDict):
+    lines: list[str]
+    source_type: str
+    source_label: str
+    n_records: int
+    date_range: dict[str, str]
+    sample: list[SampleEntry]
 
 
 def _extract_location(entry: dict) -> str | None:
@@ -81,6 +96,34 @@ def _records_to_lines(records: list[dict]) -> list[str]:
     return lines
 
 
+def _sample_records(records: list[dict], n: int = 15) -> list[SampleEntry]:
+    """Pick ~n evenly-spaced records by index."""
+    if not records:
+        return []
+    if len(records) <= n:
+        indices = range(len(records))
+    else:
+        step = (len(records) - 1) / (n - 1)
+        indices = [round(i * step) for i in range(n)]
+    return [
+        SampleEntry(
+            timestamp=records[i]["datetime"].isoformat(),
+            content=records[i]["content"],
+        )
+        for i in indices
+    ]
+
+
+def _compute_date_range(records: list[dict]) -> dict[str, str]:
+    """Return {"start": ..., "end": ...} from sorted records."""
+    if not records:
+        return {"start": "", "end": ""}
+    return {
+        "start": records[0]["datetime"].strftime("%Y-%m-%d"),
+        "end": records[-1]["datetime"].strftime("%Y-%m-%d"),
+    }
+
+
 def _parse_json(json_path: Path) -> list[dict]:
     """Parse a standalone MyActivity.json file."""
     raw_data = json.loads(json_path.read_text())
@@ -125,17 +168,18 @@ def _find_raw_input(user_id: str) -> Path:
 
 
 @task(cache_policy=INPUTS, result_serializer="json")
-def preprocess_raw_input(user_id: str = "test_user") -> list[str]:
-    """Preprocess raw input data into text lines.
+def preprocess_raw_input(user_id: str = "test_user") -> PreprocessResult:
+    """Preprocess raw input data into text lines plus metadata.
 
     Finds the most recent .json or .zip in data/raw/<user_id>/,
-    parses it, and returns sorted text lines ready for chunking.
+    parses it, and returns lines for chunking along with source
+    metadata, date range, and a representative sample.
 
     Args:
         user_id: User subdirectory under data/raw/
 
     Returns:
-        List of preprocessed text lines, one per activity record
+        PreprocessResult with lines, source info, date range, and sample
     """
     raw_path = _find_raw_input(user_id)
     print(f"Preprocessing {raw_path.name} from {raw_path.parent.name}/")
@@ -147,4 +191,12 @@ def preprocess_raw_input(user_id: str = "test_user") -> list[str]:
 
     lines = _records_to_lines(records)
     print(f"Preprocessed {len(lines)} activity records")
-    return lines
+
+    return PreprocessResult(
+        lines=lines,
+        source_type="google-takeout-my-activity",
+        source_label="Google Takeout \u2014 My Activity",
+        n_records=len(records),
+        date_range=_compute_date_range(records),
+        sample=_sample_records(records),
+    )

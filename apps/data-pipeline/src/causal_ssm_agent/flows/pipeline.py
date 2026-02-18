@@ -82,7 +82,8 @@ async def causal_inference_pipeline(
     print(f"Question: {question[:100]}..." if len(question) > 100 else f"Question: {question}")
 
     print(f"\n=== Stage 0: Preprocess (user: {user_id}) ===")
-    lines = preprocess_raw_input(user_id)
+    preprocess_result = preprocess_raw_input(user_id)
+    lines = preprocess_result["lines"]
 
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 1a: Propose latent model (theory only, no data)

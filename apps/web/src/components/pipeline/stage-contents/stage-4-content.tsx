@@ -8,7 +8,11 @@ import type { Stage4Data } from "@causal-ssm/api-types";
 export default function Stage4Content({ data }: { data: Stage4Data }) {
   return (
     <div className="space-y-4">
-      {data.ssm_equations.length > 0 && <SSMEquationDisplay equations={data.ssm_equations} />}
+      <SSMEquationDisplay
+        likelihoods={data.model_spec.likelihoods}
+        parameters={data.model_spec.parameters}
+        priors={data.priors}
+      />
       <LikelihoodTable likelihoods={data.model_spec.likelihoods} />
       <ParameterTable parameters={data.model_spec.parameters} />
       {data.priors.length > 0 && (
