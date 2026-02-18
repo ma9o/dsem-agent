@@ -9,8 +9,13 @@ const AccordionContext = createContext<{
   toggle: (value: string) => void;
 }>({ openItems: new Set(), toggle: () => {} });
 
-export function Accordion({ children, className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  const [openItems, setOpenItems] = useState<Set<string>>(new Set());
+export function Accordion({
+  children,
+  className,
+  defaultOpen,
+  ...props
+}: HTMLAttributes<HTMLDivElement> & { defaultOpen?: string[] }) {
+  const [openItems, setOpenItems] = useState<Set<string>>(new Set(defaultOpen));
   const toggle = (value: string) => {
     setOpenItems((prev) => {
       const next = new Set(prev);

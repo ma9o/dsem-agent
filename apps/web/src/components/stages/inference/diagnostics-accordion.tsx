@@ -39,7 +39,7 @@ const diagnosisLabel: Record<string, string> = {
 
 export function DiagnosticsAccordion({ powerScaling, ppc }: DiagnosticsAccordionProps) {
   return (
-    <Accordion>
+    <Accordion defaultOpen={["power-scaling", "ppc"]}>
       {/* Power Scaling Section */}
       <AccordionItem value="power-scaling">
         <AccordionTrigger value="power-scaling" className="text-sm">
