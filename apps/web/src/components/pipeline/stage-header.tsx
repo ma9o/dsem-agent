@@ -26,11 +26,13 @@ export function StageHeader({
   title,
   status,
   hasGate = false,
+  context,
 }: {
   number: string;
   title: string;
   status: StageRunStatus;
   hasGate?: boolean;
+  context?: string;
 }) {
   return (
     <div className="flex items-center gap-3">
@@ -48,12 +50,19 @@ export function StageHeader({
       >
         {number}
       </div>
-      <h2 className="text-base font-semibold sm:text-lg">{title}</h2>
-      {hasGate && (
-        <Tooltip content="This stage can halt the pipeline if checks fail">
-          <ShieldCheck className="h-4 w-4 text-amber-500" />
-        </Tooltip>
-      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-3">
+          <h2 className="text-base font-semibold sm:text-lg">{title}</h2>
+          {hasGate && (
+            <Tooltip content="This stage can halt the pipeline if checks fail">
+              <ShieldCheck className="h-4 w-4 text-amber-500" />
+            </Tooltip>
+          )}
+        </div>
+        {context && (
+          <p className="mt-0.5 text-sm text-muted-foreground">{context}</p>
+        )}
+      </div>
       <Badge variant={statusVariant[status]} className="ml-auto shrink-0">
         {statusLabel[status]}
       </Badge>

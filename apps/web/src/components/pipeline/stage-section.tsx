@@ -1,6 +1,5 @@
 "use client";
 
-import { Annotation } from "@/components/ui/custom/annotation";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { StageRunStatus } from "@/lib/hooks/use-run-events";
 import { AlertCircle, ChevronDown } from "lucide-react";
@@ -72,7 +71,7 @@ export function StageSection({
         onClick={isCollapsible ? () => setCollapsed((c) => !c) : undefined}
       >
         <div className="flex-1">
-          <StageHeader number={number} title={title} status={status} hasGate={hasGate} />
+          <StageHeader number={number} title={title} status={status} hasGate={hasGate} context={context} />
         </div>
         {isCollapsible && (
           <div className="flex items-center gap-2">
@@ -100,7 +99,6 @@ export function StageSection({
       {status === "completed" && !collapsed && (
         <div className="animate-fade-in mt-4 space-y-4">
           {children}
-          {context && <Annotation content={context} />}
         </div>
       )}
       {status === "failed" && (
