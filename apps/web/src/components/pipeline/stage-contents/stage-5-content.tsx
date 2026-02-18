@@ -17,7 +17,12 @@ export default function Stage5Content({ data }: { data: Stage5Data }) {
     <div className="space-y-4">
       <TreatmentRankingTable results={data.intervention_results} />
       <ForestPlotPanel results={data.intervention_results} />
-      <DiagnosticsAccordion powerScaling={data.power_scaling} ppc={data.ppc} />
+      <DiagnosticsAccordion
+        powerScaling={data.power_scaling}
+        ppc={data.ppc}
+        mcmcDiagnostics={data.mcmc_diagnostics}
+        sviDiagnostics={data.svi_diagnostics}
+      />
       <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
         Inference: {data.inference_metadata.method} | {data.inference_metadata.n_samples} samples |{" "}
         {data.inference_metadata.duration_seconds.toFixed(1)}s
