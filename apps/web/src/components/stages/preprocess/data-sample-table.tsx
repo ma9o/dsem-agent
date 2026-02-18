@@ -7,14 +7,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatDate } from "@/lib/utils/format";
 
 interface DataSampleTableProps {
-  sample: Array<{ timestamp: string; content: string }>;
+  sample: Array<Record<string, string | null>>;
 }
 
 export function DataSampleTable({ sample }: DataSampleTableProps) {
   if (sample.length === 0) return null;
+
+  // Discover columns from keys present in the data, preserving insertion order.
+  // Drop columns that are null/empty in every row.
+  const allKeys = Object.keys(sample[0]);
+  const columns = allKeys.filter((key) => sample.some((row) => row[key] != null));
 
   return (
     <Card>
@@ -22,29 +26,38 @@ export function DataSampleTable({ sample }: DataSampleTableProps) {
         <CardTitle className="text-base">Data Sample</CardTitle>
       </CardHeader>
       <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[160px]">Timestamp</TableHead>
-              <TableHead>Content</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sample.map((entry, i) => (
-              <TableRow
-                key={`sample-${
-                  // biome-ignore lint/suspicious/noArrayIndexKey: stable ordered list
-                  i
-                }`}
-              >
-                <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
-                  {formatDate(entry.timestamp)}
-                </TableCell>
-                <TableCell className="text-sm">{entry.content}</TableCell>
+        <div className="max-h-64 overflow-y-auto rounded-md border">
+          <Table>
+            <TableHeader className="sticky top-0 bg-background">
+              <TableRow>
+                {columns.map((col) => (
+                  <TableHead key={col} className="text-xs capitalize">
+                    {col.replace(/_/g, " ")}
+                  </TableHead>
+                ))}
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {sample.map((row, i) => (
+                <TableRow
+                  key={`sample-${
+                    // biome-ignore lint/suspicious/noArrayIndexKey: stable ordered list
+                    i
+                  }`}
+                >
+                  {columns.map((col) => (
+                    <TableCell
+                      key={col}
+                      className="py-2 text-xs text-muted-foreground"
+                    >
+                      {row[col] ?? ""}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </CardContent>
     </Card>
   );

@@ -7,21 +7,21 @@
     "end": "2024-06-30"
   },
   "sample": [
-    { "timestamp": "2024-01-01T08:12:00+00:00", "content": "morning routine optimization" },
-    { "timestamp": "2024-01-13T14:05:00+00:00", "content": "how to stop procrastinating" },
-    { "timestamp": "2024-01-25T09:30:00+00:00", "content": "Deep work strategies (25 min)" },
-    { "timestamp": "2024-02-06T11:45:00+00:00", "content": "pomodoro technique review" },
-    { "timestamp": "2024-02-18T16:20:00+00:00", "content": "ADHD and procrastination (30 min)" },
-    { "timestamp": "2024-03-02T08:00:00+00:00", "content": "cognitive behavioral therapy procrastination" },
-    { "timestamp": "2024-03-14T13:30:00+00:00", "content": "task avoidance psychology (18 min)" },
-    { "timestamp": "2024-03-26T10:15:00+00:00", "content": "deadline anxiety coping strategies" },
-    { "timestamp": "2024-04-07T15:00:00+00:00", "content": "focus music for studying" },
-    { "timestamp": "2024-04-19T09:45:00+00:00", "content": "time blocking method" },
-    { "timestamp": "2024-05-01T12:00:00+00:00", "content": "habit stacking techniques" },
-    { "timestamp": "2024-05-13T14:30:00+00:00", "content": "morning productivity tips (12 min)" },
-    { "timestamp": "2024-05-25T08:20:00+00:00", "content": "procrastination causes neurological" },
-    { "timestamp": "2024-06-06T11:00:00+00:00", "content": "getting things done methodology" },
-    { "timestamp": "2024-06-30T16:45:00+00:00", "content": "weekly review template" }
+    { "datetime": "2024-01-01T08:12:00+00:00", "activity_type": "search", "content": "morning routine optimization", "location": null },
+    { "datetime": "2024-01-13T14:05:00+00:00", "activity_type": "search", "content": "how to stop procrastinating", "location": null },
+    { "datetime": "2024-01-25T09:30:00+00:00", "activity_type": "view", "content": "Deep work strategies (25 min)", "location": null },
+    { "datetime": "2024-02-06T11:45:00+00:00", "activity_type": "search", "content": "pomodoro technique review", "location": null },
+    { "datetime": "2024-02-18T16:20:00+00:00", "activity_type": "view", "content": "ADHD and procrastination (30 min)", "location": null },
+    { "datetime": "2024-03-02T08:00:00+00:00", "activity_type": "search", "content": "cognitive behavioral therapy procrastination", "location": null },
+    { "datetime": "2024-03-14T13:30:00+00:00", "activity_type": "view", "content": "task avoidance psychology (18 min)", "location": null },
+    { "datetime": "2024-03-26T10:15:00+00:00", "activity_type": "search", "content": "deadline anxiety coping strategies", "location": "37.7749,-122.4194" },
+    { "datetime": "2024-04-07T15:00:00+00:00", "activity_type": "search", "content": "focus music for studying", "location": null },
+    { "datetime": "2024-04-19T09:45:00+00:00", "activity_type": "search", "content": "time blocking method", "location": null },
+    { "datetime": "2024-05-01T12:00:00+00:00", "activity_type": "visit", "content": "habit stacking techniques", "location": null },
+    { "datetime": "2024-05-13T14:30:00+00:00", "activity_type": "view", "content": "morning productivity tips (12 min)", "location": null },
+    { "datetime": "2024-05-25T08:20:00+00:00", "activity_type": "search", "content": "procrastination causes neurological", "location": null },
+    { "datetime": "2024-06-06T11:00:00+00:00", "activity_type": "search", "content": "getting things done methodology", "location": null },
+    { "datetime": "2024-06-30T16:45:00+00:00", "activity_type": "other", "content": "weekly review template", "location": null }
   ],
   "context": "Stage 0 preprocesses raw data into timestamped records. The sample shows 15 evenly-spaced entries across the full date range."
 }

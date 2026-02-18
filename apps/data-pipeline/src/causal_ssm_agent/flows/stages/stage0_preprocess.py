@@ -19,18 +19,13 @@ from causal_ssm_agent.utils.data import RAW_DIR
 TAKEOUT_ZIP_PATH = "Takeout/My Activity/Search/MyActivity.json"
 
 
-class SampleEntry(TypedDict):
-    timestamp: str
-    content: str
-
-
 class PreprocessResult(TypedDict):
     lines: list[str]
     source_type: str
     source_label: str
     n_records: int
     date_range: dict[str, str]
-    sample: list[SampleEntry]
+    sample: list[dict[str, str | None]]
 
 
 def _extract_location(entry: dict) -> str | None:
@@ -96,8 +91,12 @@ def _records_to_lines(records: list[dict]) -> list[str]:
     return lines
 
 
-def _sample_records(records: list[dict], n: int = 15) -> list[SampleEntry]:
-    """Pick ~n evenly-spaced records by index."""
+def _sample_records(records: list[dict], n: int = 15) -> list[dict[str, str | None]]:
+    """Pick ~n evenly-spaced records by index.
+
+    Serialises each record into a flat string-valued dict suitable for
+    display — the caller doesn't need to know which columns exist.
+    """
     if not records:
         return []
     if len(records) <= n:
@@ -106,10 +105,10 @@ def _sample_records(records: list[dict], n: int = 15) -> list[SampleEntry]:
         step = (len(records) - 1) / (n - 1)
         indices = [round(i * step) for i in range(n)]
     return [
-        SampleEntry(
-            timestamp=records[i]["datetime"].isoformat(),
-            content=records[i]["content"],
-        )
+        {
+            k: (v.isoformat() if hasattr(v, "isoformat") else str(v) if v is not None else None)
+            for k, v in records[i].items()
+        }
         for i in indices
     ]
 

@@ -86,7 +86,7 @@ export interface Stage0Data {
   source_label: string;
   n_records: number;
   date_range: { start: string; end: string };
-  sample: Array<{ timestamp: string; content: string }>;
+  sample: Array<Record<string, string | null>>;
 }
 
 export interface Stage1aData {

@@ -79,20 +79,26 @@ class TestSampleRecords:
     def test_empty_records(self):
         assert _sample_records([]) == []
 
-    def test_sample_has_correct_keys(self):
+    def test_sample_preserves_all_record_keys(self):
         records = _process_activity(_make_raw_entries(20))
         sample = _sample_records(records, n=5)
         for entry in sample:
-            assert "timestamp" in entry
-            assert "content" in entry
+            assert set(entry.keys()) == set(records[0].keys())
+
+    def test_sample_values_are_strings_or_none(self):
+        records = _process_activity(_make_raw_entries(20))
+        sample = _sample_records(records, n=5)
+        for entry in sample:
+            for v in entry.values():
+                assert v is None or isinstance(v, str)
 
     def test_evenly_spaced(self):
         records = _process_activity(_make_raw_entries(100))
         sample = _sample_records(records, n=3)
         assert len(sample) == 3
         # First should be from the beginning, last from the end
-        assert sample[0]["timestamp"] == records[0]["datetime"].isoformat()
-        assert sample[-1]["timestamp"] == records[-1]["datetime"].isoformat()
+        assert sample[0]["datetime"] == records[0]["datetime"].isoformat()
+        assert sample[-1]["datetime"] == records[-1]["datetime"].isoformat()
 
 
 class TestComputeDateRange:
