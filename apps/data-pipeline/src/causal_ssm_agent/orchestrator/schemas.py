@@ -49,8 +49,9 @@ class ObservationKind(StrEnum):
     Determines the correct measurement equation for the SSM:
     - CUMULATIVE: y(t) = integral of Lambda * x(s) ds + epsilon
     - WINDOW_AVERAGE/VARIABILITY: y(t) = (1/T) integral of Lambda * x(s) ds + epsilon
-    - POINT_IN_TIME: y(t) = Lambda * x(t) + epsilon
+    - POINT_IN_TIME: y(t) = Lambda * x(t) + epsilon  (includes min/max extremals)
     - FREQUENCY: y(t) = count of events in window (Poisson-like)
+    - ORDINAL: y(t) = k iff tau_{k-1} < Lambda * x(t) < tau_k  (threshold/probit)
     """
 
     CUMULATIVE = "cumulative"
@@ -58,11 +59,12 @@ class ObservationKind(StrEnum):
     POINT_IN_TIME = "point_in_time"
     VARIABILITY = "variability"
     FREQUENCY = "frequency"
+    ORDINAL = "ordinal"
 
 
 # Classification rules: (aggregation, dtype) → ObservationKind
 _CUMULATIVE_AGGS = {"sum"}
-_POINT_IN_TIME_AGGS = {"first", "last"}
+_POINT_IN_TIME_AGGS = {"first", "last", "min", "max"}
 _VARIABILITY_AGGS = {"std", "var", "range", "cv", "iqr", "instability", "skew", "kurtosis"}
 _FREQUENCY_AGGS = {"count", "n_unique"}
 
@@ -80,8 +82,16 @@ _SEMANTIC_COLLISIONS: list[tuple[str, set[str], str]] = [
 ]
 
 
-def derive_observation_kind(aggregation: str) -> ObservationKind:
-    """Derive observation kind from aggregation function."""
+def derive_observation_kind(
+    aggregation: str, measurement_dtype: str = "continuous"
+) -> ObservationKind:
+    """Derive observation kind from aggregation function and measurement dtype.
+
+    Ordinal dtype takes precedence: regardless of aggregation, ordinal
+    indicators use a threshold measurement equation.
+    """
+    if measurement_dtype == "ordinal":
+        return ObservationKind.ORDINAL
     if aggregation in _CUMULATIVE_AGGS:
         return ObservationKind.CUMULATIVE
     if aggregation in _POINT_IN_TIME_AGGS:
@@ -383,7 +393,7 @@ class Indicator(BaseModel):
     @property
     def observation_kind(self) -> ObservationKind:
         """Derived observation kind from aggregation + measurement_dtype."""
-        return derive_observation_kind(self.aggregation)
+        return derive_observation_kind(self.aggregation, self.measurement_dtype)
 
     @property
     def requires_integral_measurement(self) -> bool:

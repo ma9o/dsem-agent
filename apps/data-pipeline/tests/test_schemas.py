@@ -478,9 +478,11 @@ class TestDeriveObservationKind:
         assert derive_observation_kind("sum") == ObservationKind.CUMULATIVE
 
     def test_point_in_time(self):
-        """First/last → point_in_time."""
+        """First/last/min/max → point_in_time."""
         assert derive_observation_kind("first") == ObservationKind.POINT_IN_TIME
         assert derive_observation_kind("last") == ObservationKind.POINT_IN_TIME
+        assert derive_observation_kind("min") == ObservationKind.POINT_IN_TIME
+        assert derive_observation_kind("max") == ObservationKind.POINT_IN_TIME
 
     def test_variability(self):
         """Variability aggregations classified correctly."""
@@ -496,6 +498,12 @@ class TestDeriveObservationKind:
         """Mean, median, percentiles → window_average."""
         for agg in ("mean", "median", "p10", "p75", "entropy", "trend"):
             assert derive_observation_kind(agg) == ObservationKind.WINDOW_AVERAGE
+
+    def test_ordinal_overrides_aggregation(self):
+        """Ordinal dtype → ordinal, regardless of aggregation."""
+        assert derive_observation_kind("mean", "ordinal") == ObservationKind.ORDINAL
+        assert derive_observation_kind("last", "ordinal") == ObservationKind.ORDINAL
+        assert derive_observation_kind("median", "ordinal") == ObservationKind.ORDINAL
 
 
 class TestSemanticCollisions:
@@ -549,3 +557,16 @@ class TestIndicatorObservationKind:
 
         point = indicator_factory("last_bp", "bp", aggregation="last", dtype="continuous")
         assert point.requires_integral_measurement is False
+
+    def test_ordinal_indicator(self, indicator_factory):
+        """Ordinal dtype → ordinal observation kind."""
+        ind = indicator_factory("pain_level", "pain", aggregation="median", dtype="ordinal")
+        assert ind.observation_kind == ObservationKind.ORDINAL
+        assert ind.requires_integral_measurement is False
+
+    def test_min_max_are_point_in_time(self, indicator_factory):
+        """Min/max are instantaneous extremals, not window averages."""
+        ind_min = indicator_factory("min_hr", "hr", aggregation="min", dtype="continuous")
+        ind_max = indicator_factory("max_hr", "hr", aggregation="max", dtype="continuous")
+        assert ind_min.observation_kind == ObservationKind.POINT_IN_TIME
+        assert ind_max.observation_kind == ObservationKind.POINT_IN_TIME
