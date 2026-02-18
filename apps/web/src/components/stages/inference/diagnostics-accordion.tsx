@@ -8,14 +8,6 @@ import {
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { StatTooltip } from "@/components/ui/stat-tooltip";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { formatNumber } from "@/lib/utils/format";
 import type {
   LOODiagnostics,
@@ -26,7 +18,6 @@ import type {
   PowerScalingResult,
   SVIDiagnostics,
 } from "@causal-ssm/api-types";
-import { Check, X } from "lucide-react";
 import { ELBOLossChart } from "@/components/charts/elbo-loss-chart";
 import { EnergyChart } from "@/components/charts/energy-chart";
 import { LOOPITChart } from "@/components/charts/loo-pit-chart";
@@ -39,6 +30,8 @@ import { PosteriorPairsChart } from "@/components/charts/posterior-pairs-chart";
 import { PowerScalingScatter } from "@/components/charts/power-scaling-scatter";
 import { RankHistogram } from "@/components/charts/rank-histogram";
 import { TracePlot } from "@/components/charts/trace-plot";
+import { PowerScalingTable } from "./power-scaling-table";
+import { PPCWarningsTable } from "./ppc-warnings-table";
 
 interface DiagnosticsAccordionProps {
   powerScaling: PowerScalingResult[];
@@ -49,18 +42,6 @@ interface DiagnosticsAccordionProps {
   posteriorMarginals?: PosteriorMarginal[] | null;
   posteriorPairs?: PosteriorPair[] | null;
 }
-
-const diagnosisBadgeVariant: Record<string, "success" | "warning" | "destructive"> = {
-  well_identified: "success",
-  prior_dominated: "warning",
-  prior_data_conflict: "destructive",
-};
-
-const diagnosisLabel: Record<string, string> = {
-  well_identified: "Well Identified",
-  prior_dominated: "Prior Dominated",
-  prior_data_conflict: "Prior-Data Conflict",
-};
 
 export function DiagnosticsAccordion({
   powerScaling,
@@ -286,70 +267,7 @@ export function DiagnosticsAccordion({
         <AccordionContent value="power-scaling">
           <div className="space-y-4">
             {powerScaling.length >= 2 && <PowerScalingScatter results={powerScaling} />}
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Parameter</TableHead>
-                  <TableHead>
-                    <span className="inline-flex items-center gap-1">
-                      Diagnosis
-                      <StatTooltip explanation="'Well Identified' = data-driven. 'Prior Dominated' = prior choice matters too much. 'Prior-Data Conflict' = prior and data disagree." />
-                    </span>
-                  </TableHead>
-                  <TableHead className="text-right">
-                    <span className="inline-flex items-center gap-1">
-                      Prior Sens.
-                      <StatTooltip explanation="How much the posterior changes when the prior is scaled. Low values (<0.05) are good." />
-                    </span>
-                  </TableHead>
-                  <TableHead className="text-right">
-                    <span className="inline-flex items-center gap-1">
-                      Lik. Sens.
-                      <StatTooltip explanation="How much the posterior changes when the likelihood is scaled. High values indicate the data is informative." />
-                    </span>
-                  </TableHead>
-                  {powerScaling.some((p) => p.psis_k_hat != null) && (
-                    <TableHead className="text-right">
-                      <span className="inline-flex items-center gap-1">
-                        PSIS k
-                        <StatTooltip explanation="Pareto k diagnostic for importance sampling reliability. Values > 0.7 indicate unreliable sensitivity estimates." />
-                      </span>
-                    </TableHead>
-                  )}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {powerScaling.map((ps) => (
-                  <TableRow key={ps.parameter}>
-                    <TableCell className="font-medium font-mono text-sm">{ps.parameter}</TableCell>
-                    <TableCell>
-                      <Badge variant={diagnosisBadgeVariant[ps.diagnosis] ?? "secondary"}>
-                        {diagnosisLabel[ps.diagnosis] ?? ps.diagnosis}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-sm">
-                      {formatNumber(ps.prior_sensitivity)}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-sm">
-                      {formatNumber(ps.likelihood_sensitivity)}
-                    </TableCell>
-                    {powerScaling.some((p) => p.psis_k_hat != null) && (
-                      <TableCell className="text-right font-mono text-sm">
-                        {ps.psis_k_hat != null ? (
-                          <Badge
-                            variant={ps.psis_k_hat > 0.7 ? "destructive" : ps.psis_k_hat > 0.5 ? "warning" : "success"}
-                          >
-                            {formatNumber(ps.psis_k_hat, 2)}
-                          </Badge>
-                        ) : (
-                          "—"
-                        )}
-                      </TableCell>
-                    )}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <PowerScalingTable results={powerScaling} />
           </div>
         </AccordionContent>
       </AccordionItem>
@@ -366,45 +284,7 @@ export function DiagnosticsAccordion({
           </Badge>
         </AccordionTrigger>
         <AccordionContent value="ppc">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Variable</TableHead>
-                <TableHead>Check</TableHead>
-                <TableHead className="text-right">Value</TableHead>
-                <TableHead>Message</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {ppc.per_variable_warnings.map((w, i) => (
-                <TableRow
-                  key={`ppc-${
-                    // biome-ignore lint/suspicious/noArrayIndexKey: stable ordered list
-                    i
-                  }`}
-                >
-                  <TableCell className="font-medium">{w.variable}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{w.check_type}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm">
-                    {w.value != null ? formatNumber(w.value) : "—"}
-                  </TableCell>
-                  <TableCell className="max-w-sm text-sm text-muted-foreground">
-                    {w.message}
-                  </TableCell>
-                  <TableCell>
-                    {w.passed ? (
-                      <Check className="h-4 w-4 text-success" />
-                    ) : (
-                      <X className="h-4 w-4 text-destructive" />
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <PPCWarningsTable warnings={ppc.per_variable_warnings} />
         </AccordionContent>
       </AccordionItem>
 
