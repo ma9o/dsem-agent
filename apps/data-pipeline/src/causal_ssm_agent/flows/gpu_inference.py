@@ -88,17 +88,36 @@ def _stage5_on_gpu(
     result = builder.fit(wide_data)
     logger.info("Fit complete: method=%s", result.method)
 
+    # Prepare shared arrays used by multiple diagnostics
+    manifest_cols = [c for c in wide_data.columns if c != "time"]
+    observations = jnp.array(wide_data.select(manifest_cols).to_numpy(), dtype=jnp.float32)
+    times = jnp.array(wide_data["time"].to_numpy(), dtype=jnp.float32)
+
     # Extract serializable diagnostics before they get lost across the boundary
     mcmc_diag = result.get_mcmc_diagnostics()
     svi_diag = result.get_svi_diagnostics()
+
+    # LOO diagnostics
+    import functools
+
+    model_fn = functools.partial(
+        builder._model.model,
+        likelihood_backend=builder._model.make_likelihood_backend(),
+    )
+    loo_diag = result.get_loo_diagnostics(
+        model_fn=model_fn,
+        observations=observations,
+        times=times,
+    )
+
+    # Posterior marginals and pairs
+    posterior_marginals = result.get_posterior_marginals()
+    posterior_pairs = result.get_posterior_pairs()
 
     # ---------- power-scaling sensitivity ----------
     ps_result: dict[str, Any]
     try:
         ssm_model = builder._model
-        manifest_cols = [c for c in wide_data.columns if c != "time"]
-        observations = jnp.array(wide_data.select(manifest_cols).to_numpy(), dtype=jnp.float32)
-        times = jnp.array(wide_data["time"].to_numpy(), dtype=jnp.float32)
 
         ps = power_scaling_sensitivity(
             model=ssm_model,
@@ -195,6 +214,9 @@ def _stage5_on_gpu(
         "intervention_results": intervention_results,
         "mcmc_diagnostics": mcmc_diag,
         "svi_diagnostics": svi_diag,
+        "loo_diagnostics": loo_diag,
+        "posterior_marginals": posterior_marginals,
+        "posterior_pairs": posterior_pairs,
     }
 
 

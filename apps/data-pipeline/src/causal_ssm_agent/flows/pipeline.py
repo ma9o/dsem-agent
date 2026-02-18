@@ -455,13 +455,17 @@ async def causal_inference_pipeline(
         diag = ps_result.get("diagnosis", {})
         prior_s = ps_result.get("prior_sensitivity", {})
         lik_s = ps_result.get("likelihood_sensitivity", {})
+        psis_k = ps_result.get("psis_k_hat", {})
         for param in diag:
-            ps_list.append({
+            entry = {
                 "parameter": param,
                 "diagnosis": diag[param],
                 "prior_sensitivity": prior_s.get(param, 0.0),
                 "likelihood_sensitivity": lik_s.get(param, 0.0),
-            })
+            }
+            if param in psis_k:
+                entry["psis_k_hat"] = psis_k[param]
+            ps_list.append(entry)
 
     # Inference metadata
     inf_meta = {
@@ -478,16 +482,25 @@ async def causal_inference_pipeline(
         "duration_seconds": 0.0,
     }
 
-    # MCMC / SVI diagnostics
+    # MCMC / SVI / LOO / posterior diagnostics
     mcmc_diagnostics = None
     svi_diagnostics = None
+    loo_diagnostics = None
+    posterior_marginals = None
+    posterior_pairs = None
     if config.inference.gpu:
         mcmc_diagnostics = gpu_result.get("mcmc_diagnostics")
         svi_diagnostics = gpu_result.get("svi_diagnostics")
+        loo_diagnostics = gpu_result.get("loo_diagnostics")
+        posterior_marginals = gpu_result.get("posterior_marginals")
+        posterior_pairs = gpu_result.get("posterior_pairs")
     else:
         fitted_res = fitted.result() if hasattr(fitted, "result") else fitted
         mcmc_diagnostics = fitted_res.get("mcmc_diagnostics")
         svi_diagnostics = fitted_res.get("svi_diagnostics")
+        loo_diagnostics = fitted_res.get("loo_diagnostics")
+        posterior_marginals = fitted_res.get("posterior_marginals")
+        posterior_pairs = fitted_res.get("posterior_pairs")
 
     return {
         "intervention_results": intervention_results,
@@ -496,6 +509,9 @@ async def causal_inference_pipeline(
         "inference_metadata": inf_meta,
         "mcmc_diagnostics": mcmc_diagnostics,
         "svi_diagnostics": svi_diagnostics,
+        "loo_diagnostics": loo_diagnostics,
+        "posterior_marginals": posterior_marginals,
+        "posterior_pairs": posterior_pairs,
     }
 
 

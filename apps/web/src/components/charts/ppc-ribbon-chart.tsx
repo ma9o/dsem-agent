@@ -18,15 +18,26 @@ interface PPCRibbonChartProps {
 }
 
 export function PPCRibbonChart({ overlay }: PPCRibbonChartProps) {
-  const data = overlay.observed.map((obs, i) => ({
-    t: i + 1,
-    observed: obs,
-    q025: overlay.q025[i],
-    q25: overlay.q25[i],
-    median: overlay.median[i],
-    q75: overlay.q75[i],
-    q975: overlay.q975[i],
-  }));
+  const hasSpaghetti = overlay.spaghetti_draws && overlay.spaghetti_draws.length > 0;
+
+  const data = overlay.observed.map((obs, i) => {
+    const row: Record<string, number | null> = {
+      t: i + 1,
+      observed: obs,
+      q025: overlay.q025[i],
+      q25: overlay.q25[i],
+      median: overlay.median[i],
+      q75: overlay.q75[i],
+      q975: overlay.q975[i],
+    };
+    // Add spaghetti draws
+    if (hasSpaghetti) {
+      for (let d = 0; d < overlay.spaghetti_draws!.length; d++) {
+        row[`draw_${d}`] = overlay.spaghetti_draws![d][i];
+      }
+    }
+    return row;
+  });
 
   return (
     <div className="h-56 w-full">
@@ -51,6 +62,7 @@ export function PPCRibbonChart({ overlay }: PPCRibbonChartProps) {
                   q25: "25%",
                   q75: "75%",
                 };
+                if (name.startsWith("draw_")) return [formatNumber(value, 2), "y_rep"];
                 return [formatNumber(value, 2), labels[name] ?? name];
               }) as any
             }
@@ -87,6 +99,21 @@ export function PPCRibbonChart({ overlay }: PPCRibbonChartProps) {
             fillOpacity={1}
             type="monotone"
           />
+          {/* Spaghetti draws (thin, semi-transparent) */}
+          {hasSpaghetti &&
+            overlay.spaghetti_draws!.map((_, d) => (
+              <Line
+                key={`draw_${d}`}
+                dataKey={`draw_${d}`}
+                stroke="var(--primary)"
+                strokeWidth={0.5}
+                strokeOpacity={0.15}
+                dot={false}
+                type="monotone"
+                name={`draw_${d}`}
+                legendType="none"
+              />
+            ))}
           {/* Posterior predictive median */}
           <Line
             dataKey="median"

@@ -59,6 +59,7 @@ class PPCOverlay:
 
     Provides the data for Gabry's ppc_dens_overlay / ppc_ribbon plots:
     observed time series vs posterior predictive quantile bands.
+    Optionally includes individual y_rep draw lines for spaghetti plots.
     """
 
     variable: str
@@ -69,9 +70,11 @@ class PPCOverlay:
     median: list[float]  # 50th percentile
     q75: list[float]  # 75th percentile
     q975: list[float]  # 97.5th percentile
+    # Spaghetti draws: list of individual y_rep trajectories (each length T)
+    spaghetti_draws: list[list[float]] = field(default_factory=list)
 
     def to_dict(self) -> dict:
-        return {
+        d: dict = {
             "variable": self.variable,
             "observed": self.observed,
             "q025": self.q025,
@@ -80,6 +83,9 @@ class PPCOverlay:
             "q75": self.q75,
             "q975": self.q975,
         }
+        if self.spaghetti_draws:
+            d["spaghetti_draws"] = self.spaghetti_draws
+        return d
 
 
 @dataclass
@@ -809,16 +815,19 @@ def _compute_overlays(
     y_sim: jnp.ndarray,
     observations: jnp.ndarray,
     manifest_names: list[str],
+    n_spaghetti: int = 20,
 ) -> list[PPCOverlay]:
-    """Compute per-variable quantile bands for PPC ribbon plots.
+    """Compute per-variable quantile bands and spaghetti draws for PPC plots.
 
     Args:
         y_sim: (n_subsample, T, n_manifest)
         observations: (T, n_manifest)
         manifest_names: variable names
+        n_spaghetti: number of individual y_rep draws to include for spaghetti plots
     """
     overlays = []
     n_manifest = observations.shape[1]
+    n_draws = y_sim.shape[0]
 
     q025 = jnp.percentile(y_sim, 2.5, axis=0)  # (T, m)
     q25 = jnp.percentile(y_sim, 25.0, axis=0)
@@ -826,10 +835,20 @@ def _compute_overlays(
     q75 = jnp.percentile(y_sim, 75.0, axis=0)
     q975 = jnp.percentile(y_sim, 97.5, axis=0)
 
+    # Select evenly-spaced spaghetti draws
+    n_spag = min(n_spaghetti, n_draws)
+    spag_indices = jnp.linspace(0, n_draws - 1, n_spag).astype(int)
+
     for j in range(n_manifest):
         name = manifest_names[j] if j < len(manifest_names) else f"var_{j}"
         obs_j = observations[:, j]
         observed = [None if jnp.isnan(v) else float(v) for v in obs_j]
+
+        # Spaghetti: individual draw trajectories for this variable
+        spaghetti = [
+            [float(v) for v in y_sim[int(idx), :, j]]
+            for idx in spag_indices
+        ]
 
         overlays.append(
             PPCOverlay(
@@ -840,6 +859,7 @@ def _compute_overlays(
                 median=[float(v) for v in q50[:, j]],
                 q75=[float(v) for v in q75[:, j]],
                 q975=[float(v) for v in q975[:, j]],
+                spaghetti_draws=spaghetti,
             )
         )
 

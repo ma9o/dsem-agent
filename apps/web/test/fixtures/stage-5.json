@@ -6,24 +6,20 @@
     { "treatment": "workload", "beta_hat": 0.089, "se": 0.061, "ci_lower": -0.030, "ci_upper": 0.208, "p_positive": 0.821, "identifiable": true, "sensitivity_flag": false }
   ],
   "power_scaling": [
-    { "parameter": "beta_stress_procrastination", "diagnosis": "well_identified", "prior_sensitivity": 0.12, "likelihood_sensitivity": 0.85 },
-    { "parameter": "beta_distraction_procrastination", "diagnosis": "well_identified", "prior_sensitivity": 0.18, "likelihood_sensitivity": 0.79 },
-    { "parameter": "beta_sleep_stress", "diagnosis": "prior_dominated", "prior_sensitivity": 0.65, "likelihood_sensitivity": 0.32 },
-    { "parameter": "rho_procrastination", "diagnosis": "well_identified", "prior_sensitivity": 0.08, "likelihood_sensitivity": 0.91 },
-    { "parameter": "sigma_stress", "diagnosis": "well_identified", "prior_sensitivity": 0.15, "likelihood_sensitivity": 0.82 }
+    { "parameter": "beta_stress_procrastination", "diagnosis": "well_identified", "prior_sensitivity": 0.12, "likelihood_sensitivity": 0.85, "psis_k_hat": 0.15 },
+    { "parameter": "beta_distraction_procrastination", "diagnosis": "well_identified", "prior_sensitivity": 0.18, "likelihood_sensitivity": 0.79, "psis_k_hat": 0.22 },
+    { "parameter": "beta_sleep_stress", "diagnosis": "prior_dominated", "prior_sensitivity": 0.65, "likelihood_sensitivity": 0.32, "psis_k_hat": 0.58 },
+    { "parameter": "rho_procrastination", "diagnosis": "well_identified", "prior_sensitivity": 0.08, "likelihood_sensitivity": 0.91, "psis_k_hat": 0.10 },
+    { "parameter": "sigma_stress", "diagnosis": "well_identified", "prior_sensitivity": 0.15, "likelihood_sensitivity": 0.82, "psis_k_hat": 0.18 }
   ],
   "ppc": {
     "per_variable_warnings": [
       { "variable": "youtube_watch_time", "check_type": "calibration", "message": "95% CI coverage: 93.2% (expected ~95%)", "value": 0.932, "passed": true },
       { "variable": "youtube_watch_time", "check_type": "autocorrelation", "message": "Residual autocorrelation at lag 1: 0.15", "value": 0.15, "passed": true },
       { "variable": "youtube_watch_time", "check_type": "variance", "message": "Predicted variance 14.2 vs observed 15.7 (ratio 0.90)", "value": 0.9, "passed": true },
-      { "variable": "late_night_activity", "check_type": "calibration", "message": "95% CI coverage: 88.5% (expected ~95%)", "value": 0.885, "passed": true },
-      { "variable": "late_night_activity", "check_type": "autocorrelation", "message": "Residual autocorrelation at lag 1: 0.08", "value": 0.08, "passed": true },
       { "variable": "productive_hours", "check_type": "calibration", "message": "95% CI coverage: 96.1% (expected ~95%)", "value": 0.961, "passed": true },
       { "variable": "productive_hours", "check_type": "autocorrelation", "message": "Residual autocorrelation at lag 1: 0.22", "value": 0.22, "passed": true },
-      { "variable": "productive_hours", "check_type": "variance", "message": "Predicted variance 5.1 vs observed 5.7 (ratio 0.89)", "value": 0.89, "passed": true },
-      { "variable": "task_completion_rate", "check_type": "calibration", "message": "95% CI coverage: 94.0% (expected ~95%)", "value": 0.94, "passed": true },
-      { "variable": "task_completion_rate", "check_type": "variance", "message": "Predicted variance 0.038 vs observed 0.042 (ratio 0.90)", "value": 0.9, "passed": true }
+      { "variable": "productive_hours", "check_type": "variance", "message": "Predicted variance 5.1 vs observed 5.7 (ratio 0.89)", "value": 0.89, "passed": true }
     ],
     "overall_passed": true,
     "overlays": [
@@ -34,7 +30,12 @@
         "q25":     [36.2, 32.8, 39.5, 34.9, 41.0, 30.5, 37.8, 34.2, 39.8, 31.8, 36.5, 33.5, 40.2, 37.3, 31.0, 38.5, 35.0, 39.0, 32.5, 36.8],
         "median":  [43.5, 39.2, 48.1, 42.3, 50.2, 36.8, 45.8, 41.5, 48.5, 38.0, 44.0, 40.2, 49.0, 45.2, 37.2, 46.8, 42.5, 47.5, 39.0, 44.5],
         "q75":     [50.8, 45.6, 56.7, 49.7, 59.4, 43.1, 53.8, 48.8, 57.2, 44.2, 51.5, 47.0, 57.8, 53.1, 43.5, 55.1, 50.0, 56.0, 45.5, 52.2],
-        "q975":    [62.5, 56.2, 69.8, 61.3, 73.2, 53.1, 66.2, 60.1, 70.5, 54.5, 63.5, 58.0, 71.2, 65.4, 53.5, 68.0, 61.5, 69.0, 56.0, 64.5]
+        "q975":    [62.5, 56.2, 69.8, 61.3, 73.2, 53.1, 66.2, 60.1, 70.5, 54.5, 63.5, 58.0, 71.2, 65.4, 53.5, 68.0, 61.5, 69.0, 56.0, 64.5],
+        "spaghetti_draws": [
+          [44.1, 37.5, 51.2, 40.8, 53.5, 35.2, 47.1, 41.3, 49.8, 37.1, 43.5, 38.8, 52.0, 46.5, 36.2, 48.5, 42.8, 50.5, 38.2, 45.1],
+          [42.8, 39.8, 49.5, 43.2, 52.1, 34.5, 46.3, 42.8, 51.2, 35.8, 45.2, 40.1, 50.8, 44.8, 34.8, 47.2, 41.5, 49.2, 37.5, 44.8],
+          [45.5, 38.5, 53.1, 41.0, 56.2, 33.2, 49.5, 40.5, 52.5, 36.8, 44.8, 39.5, 54.2, 48.1, 35.5, 50.8, 43.5, 52.8, 38.8, 46.5]
+        ]
       },
       {
         "variable": "productive_hours",
@@ -43,14 +44,17 @@
         "q25":     [4.8, 5.4, 4.5, 5.3, 4.0, 5.7, 4.9, 4.5, 5.5, 4.6, 5.2, 4.2, 5.5, 4.7, 4.4, 5.3, 4.8, 4.3, 5.6, 5.0],
         "median":  [6.0, 6.8, 5.6, 6.6, 5.0, 7.2, 6.2, 5.7, 7.0, 5.8, 6.5, 5.3, 6.9, 5.9, 5.5, 6.7, 6.1, 5.4, 7.1, 6.3],
         "q75":     [7.2, 8.2, 6.7, 7.9, 6.0, 8.7, 7.5, 6.9, 8.5, 7.0, 7.8, 6.4, 8.3, 7.1, 6.6, 8.1, 7.4, 6.5, 8.6, 7.6],
-        "q975":    [9.0, 10.1, 8.4, 9.8, 7.5, 10.8, 9.3, 8.6, 10.5, 8.7, 9.7, 8.0, 10.3, 8.8, 8.2, 10.0, 9.2, 8.1, 10.7, 9.5]
+        "q975":    [9.0, 10.1, 8.4, 9.8, 7.5, 10.8, 9.3, 8.6, 10.5, 8.7, 9.7, 8.0, 10.3, 8.8, 8.2, 10.0, 9.2, 8.1, 10.7, 9.5],
+        "spaghetti_draws": [
+          [5.8, 6.5, 5.5, 6.2, 4.8, 7.0, 5.9, 5.4, 6.8, 5.6, 6.3, 5.1, 6.7, 5.7, 5.3, 6.5, 5.8, 5.2, 6.9, 6.0],
+          [6.5, 7.2, 5.9, 7.0, 5.3, 7.8, 6.6, 6.0, 7.5, 6.1, 7.0, 5.6, 7.4, 6.2, 5.8, 7.1, 6.4, 5.7, 7.6, 6.7],
+          [5.5, 6.8, 5.2, 6.5, 4.5, 7.3, 5.7, 5.2, 7.1, 5.3, 6.6, 4.9, 7.0, 5.5, 5.0, 6.8, 5.6, 4.8, 7.2, 5.8]
+        ]
       }
     ],
     "test_stats": [
       { "variable": "youtube_watch_time", "stat_name": "mean", "observed_value": 44.1, "rep_values": [43.2, 44.8, 42.5, 45.1, 43.7, 44.3, 42.9, 45.5, 43.0, 44.6, 43.5, 44.9, 42.8, 45.2, 43.3, 44.7, 42.6, 45.3, 43.1, 44.4, 43.8, 44.0, 42.7, 45.0, 43.4, 44.5, 42.4, 45.4, 43.6, 44.2, 43.9, 44.1, 42.3, 45.6, 43.2, 44.8, 42.1, 45.7, 43.5, 44.3, 42.9, 45.1, 43.7, 44.6, 42.6, 45.3, 43.0, 44.9, 43.4, 44.5], "p_value": 0.52 },
       { "variable": "youtube_watch_time", "stat_name": "sd", "observed_value": 6.1, "rep_values": [5.2, 6.8, 5.5, 7.1, 5.8, 6.3, 5.0, 7.4, 5.3, 6.9, 5.6, 7.0, 5.1, 7.3, 5.4, 6.7, 5.7, 6.5, 5.9, 6.2, 5.3, 7.2, 5.6, 6.8, 5.0, 7.5, 5.2, 7.1, 5.4, 6.6, 5.8, 6.4, 5.1, 7.0, 5.5, 6.9, 5.7, 6.3, 5.9, 6.1, 5.3, 7.2, 5.6, 6.7, 5.0, 7.4, 5.2, 7.0, 5.4, 6.8], "p_value": 0.44 },
-      { "variable": "youtube_watch_time", "stat_name": "min", "observed_value": 33.9, "rep_values": [25.1, 30.2, 22.5, 32.1, 27.3, 29.8, 24.0, 33.5, 26.2, 31.0, 23.8, 32.8, 25.5, 30.5, 28.1, 29.2, 24.5, 33.0, 26.8, 31.5, 23.2, 32.5, 25.8, 30.8, 27.5, 29.5, 24.2, 33.2, 26.5, 31.2, 23.5, 32.2, 25.2, 30.0, 27.8, 29.0, 24.8, 33.8, 26.0, 31.8, 22.8, 32.0, 25.0, 30.3, 27.0, 29.3, 24.3, 33.3, 26.3, 31.3], "p_value": 0.82 },
-      { "variable": "youtube_watch_time", "stat_name": "max", "observed_value": 55.0, "rep_values": [58.2, 52.1, 60.5, 50.3, 57.8, 53.5, 61.2, 49.8, 59.0, 51.5, 57.2, 54.0, 60.8, 50.0, 58.5, 52.8, 61.5, 49.5, 59.3, 51.2, 57.5, 53.2, 60.2, 50.5, 58.8, 52.5, 61.0, 49.2, 59.5, 51.8, 57.0, 53.8, 60.0, 50.8, 58.2, 52.2, 61.3, 49.0, 59.8, 51.0, 57.8, 53.0, 60.5, 50.2, 58.5, 52.0, 61.8, 48.8, 59.2, 51.5], "p_value": 0.22 },
       { "variable": "productive_hours", "stat_name": "mean", "observed_value": 6.4, "rep_values": [6.1, 6.7, 5.9, 6.9, 6.3, 6.5, 5.8, 7.0, 6.0, 6.8, 6.2, 6.6, 5.7, 7.1, 6.1, 6.7, 6.4, 6.3, 6.0, 6.8, 5.9, 6.9, 6.2, 6.6, 5.8, 7.0, 6.1, 6.7, 6.3, 6.5, 6.0, 6.8, 5.9, 6.9, 6.2, 6.6, 5.8, 7.1, 6.0, 6.7, 6.3, 6.5, 5.9, 6.9, 6.1, 6.8, 6.4, 6.2, 6.0, 6.6], "p_value": 0.48 },
       { "variable": "productive_hours", "stat_name": "sd", "observed_value": 0.68, "rep_values": [0.55, 0.82, 0.60, 0.78, 0.52, 0.85, 0.58, 0.75, 0.63, 0.70, 0.50, 0.88, 0.56, 0.80, 0.62, 0.72, 0.54, 0.83, 0.59, 0.76, 0.51, 0.86, 0.57, 0.79, 0.61, 0.73, 0.53, 0.84, 0.58, 0.77, 0.64, 0.71, 0.52, 0.87, 0.56, 0.81, 0.60, 0.74, 0.55, 0.83, 0.59, 0.78, 0.53, 0.85, 0.57, 0.80, 0.61, 0.75, 0.54, 0.82], "p_value": 0.46 }
     ]
@@ -70,5 +74,57 @@
     ]
   },
   "mcmc_diagnostics": null,
-  "context": "Stage 5 fits the SSM via variational inference (SVI), runs power-scaling sensitivity analysis, posterior predictive checks, and computes interventional effects. Treatment effects are ranked by posterior probability of positive effect."
+  "loo_diagnostics": {
+    "elpd_loo": -38.56,
+    "p_loo": 2.83,
+    "se": 4.66,
+    "n_data_points": 50,
+    "pareto_k": [0.02, 0.09, 0.08, 0.28, 0.27, 0.05, 0.08, 0.01, 0.03, 0.08, 0.15, 0.12, 0.06, 0.22, 0.19, 0.04, 0.11, 0.07, 0.13, 0.09, 0.16, 0.03, 0.25, 0.18, 0.10, 0.07, 0.14, 0.20, 0.05, 0.11, 0.08, 0.23, 0.06, 0.17, 0.09, 0.12, 0.04, 0.21, 0.15, 0.08, 0.10, 0.13, 0.07, 0.19, 0.06, 0.16, 0.11, 0.14, 0.03, 0.09],
+    "n_bad_k": 0,
+    "loo_pit": [0.45, 0.72, 0.31, 0.58, 0.82, 0.15, 0.67, 0.41, 0.89, 0.23, 0.53, 0.36, 0.78, 0.48, 0.19, 0.61, 0.34, 0.85, 0.27, 0.56, 0.43, 0.69, 0.22, 0.74, 0.38, 0.65, 0.12, 0.81, 0.29, 0.57, 0.46, 0.73, 0.33, 0.62, 0.18, 0.79, 0.42, 0.55, 0.25, 0.68, 0.37, 0.84, 0.51, 0.14, 0.71, 0.28, 0.63, 0.39, 0.76, 0.47]
+  },
+  "posterior_marginals": [
+    {
+      "parameter": "beta_stress",
+      "x_values": [-0.1, -0.05, 0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7],
+      "density": [0.1, 0.3, 0.8, 1.5, 2.8, 4.2, 5.5, 6.2, 5.8, 4.5, 3.1, 1.8, 0.9, 0.4, 0.2, 0.1, 0.05],
+      "mean": 0.312,
+      "sd": 0.089,
+      "hdi_3": 0.15,
+      "hdi_97": 0.48
+    },
+    {
+      "parameter": "beta_distraction",
+      "x_values": [-0.05, 0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45],
+      "density": [0.2, 0.5, 1.5, 3.0, 5.0, 6.5, 5.2, 3.5, 1.8, 0.7, 0.2],
+      "mean": 0.198,
+      "sd": 0.072,
+      "hdi_3": 0.06,
+      "hdi_97": 0.34
+    },
+    {
+      "parameter": "sigma_obs",
+      "x_values": [0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8],
+      "density": [0.1, 0.4, 1.2, 2.8, 5.0, 6.8, 6.2, 4.5, 2.5, 1.1, 0.4, 0.15, 0.05],
+      "mean": 0.51,
+      "sd": 0.053,
+      "hdi_3": 0.42,
+      "hdi_97": 0.61
+    }
+  ],
+  "posterior_pairs": [
+    {
+      "param_x": "beta_stress",
+      "param_y": "beta_distraction",
+      "x_values": [0.25, 0.31, 0.28, 0.35, 0.22, 0.38, 0.30, 0.27, 0.33, 0.29, 0.36, 0.24, 0.32, 0.26, 0.34, 0.23, 0.37, 0.31, 0.28, 0.30],
+      "y_values": [0.18, 0.22, 0.15, 0.25, 0.20, 0.12, 0.21, 0.17, 0.23, 0.19, 0.14, 0.24, 0.16, 0.22, 0.13, 0.26, 0.11, 0.20, 0.18, 0.21]
+    },
+    {
+      "param_x": "beta_stress",
+      "param_y": "sigma_obs",
+      "x_values": [0.25, 0.31, 0.28, 0.35, 0.22, 0.38, 0.30, 0.27, 0.33, 0.29, 0.36, 0.24, 0.32, 0.26, 0.34, 0.23, 0.37, 0.31, 0.28, 0.30],
+      "y_values": [0.52, 0.48, 0.55, 0.46, 0.53, 0.50, 0.49, 0.54, 0.47, 0.51, 0.45, 0.56, 0.48, 0.53, 0.44, 0.57, 0.43, 0.50, 0.52, 0.49]
+    }
+  ],
+  "context": "Stage 5 fits the SSM via variational inference (SVI), runs power-scaling sensitivity analysis, LOO cross-validation, posterior predictive checks, and computes interventional effects. Treatment effects are ranked by posterior probability of positive effect."
 }

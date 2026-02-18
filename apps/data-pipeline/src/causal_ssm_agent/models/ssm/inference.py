@@ -59,7 +59,8 @@ class InferenceResult:
     def get_mcmc_diagnostics(self) -> dict[str, Any] | None:
         """Extract JSON-serializable MCMC diagnostics.
 
-        Returns per-parameter R-hat, ESS, and sampler-level divergence/tree stats.
+        Returns per-parameter R-hat, ESS (bulk+tail), MCSE, trace data,
+        rank histograms, and sampler-level divergence/tree stats.
         Returns None for non-MCMC methods (SVI, etc.).
         """
         if self.method in ("svi", "structured_vi", "laplace_em"):
@@ -72,6 +73,7 @@ class InferenceResult:
         from numpyro.diagnostics import summary as numpyro_summary
 
         result: dict[str, Any] = {}
+        chain_samples = None
 
         # Per-parameter convergence diagnostics via numpyro.diagnostics.summary
         try:
@@ -90,6 +92,26 @@ class InferenceResult:
             result["per_parameter"] = per_param
         except Exception:
             result["per_parameter"] = []
+
+        # ArviZ-based ESS-tail and MCSE (enriches per_parameter entries)
+        try:
+            import arviz as az
+
+            idata = az.from_numpyro(mcmc)
+            ess_tail = az.ess(idata, method="tail")
+            mcse_mean = az.mcse(idata, method="mean")
+
+            # Merge into per_parameter entries
+            for entry in result["per_parameter"]:
+                name = entry["parameter"]
+                if name in ess_tail:
+                    v = ess_tail[name].values
+                    entry["ess_tail"] = float(v) if v.ndim == 0 else [float(x) for x in v.flat]
+                if name in mcse_mean:
+                    v = mcse_mean[name].values
+                    entry["mcse_mean"] = float(v) if v.ndim == 0 else [float(x) for x in v.flat]
+        except Exception:
+            pass
 
         # Sampler-level diagnostics from extra fields
         try:
@@ -110,6 +132,12 @@ class InferenceResult:
 
         result["num_chains"] = int(mcmc.num_chains) if hasattr(mcmc, "num_chains") else None
         result["num_samples"] = int(mcmc._num_samples) if hasattr(mcmc, "_num_samples") else None
+
+        # Chain-level trace data (thinned to ~200 points per chain)
+        # and rank histograms for chain mixing assessment
+        if chain_samples is not None:
+            result["trace_data"] = _build_trace_data(chain_samples, max_points=200)
+            result["rank_histograms"] = _build_rank_histograms(chain_samples, n_bins=20)
 
         return result
 
@@ -133,6 +161,161 @@ class InferenceResult:
 
         return {"elbo_losses": loss_list}
 
+    def get_loo_diagnostics(
+        self,
+        model_fn: Any = None,
+        observations: jnp.ndarray | None = None,
+        times: jnp.ndarray | None = None,
+    ) -> dict[str, Any] | None:
+        """Extract LOO-CV diagnostics via ArviZ.
+
+        Computes leave-one-out cross-validation using PSIS (Pareto-smoothed
+        importance sampling). Returns ELPD, p_loo, per-observation Pareto k
+        values, and LOO-PIT for calibration.
+
+        Args:
+            model_fn: The NumPyro model function (needed for log_likelihood)
+            observations: (T, n_manifest) observed data
+            times: (T,) time points
+
+        Returns:
+            Dict with LOO diagnostics, or None if not computable.
+        """
+        mcmc = self.diagnostics.get("mcmc")
+        if mcmc is None or model_fn is None or observations is None:
+            return None
+
+        try:
+            import arviz as az
+            from numpyro.infer import log_likelihood as numpyro_log_likelihood
+
+            flat_samples = mcmc.get_samples()
+
+            # Compute pointwise log-likelihood
+            ll = numpyro_log_likelihood(model_fn, flat_samples, observations, times)
+            if not ll:
+                return None
+
+            # Use the first (and typically only) observed site
+            ll_key = next(iter(ll))
+            ll_vals = ll[ll_key]  # (n_draws, n_obs) or (n_draws, T, m)
+
+            # Flatten spatial dims if needed: (n_draws, T*m)
+            n_draws = ll_vals.shape[0]
+            ll_flat = ll_vals.reshape(n_draws, -1)
+            n_obs = ll_flat.shape[1]
+
+            # Reshape to (n_chains, n_draws_per_chain, n_obs) for ArviZ
+            n_chains = int(mcmc.num_chains) if hasattr(mcmc, "num_chains") else 1
+            n_per_chain = n_draws // n_chains
+            ll_chained = ll_flat[:n_chains * n_per_chain].reshape(n_chains, n_per_chain, n_obs)
+
+            idata = az.from_numpyro(
+                mcmc,
+                log_likelihood={ll_key: ll_chained},
+            )
+
+            loo_result = az.loo(idata)
+
+            result: dict[str, Any] = {
+                "elpd_loo": float(loo_result.elpd_loo),
+                "p_loo": float(loo_result.p_loo),
+                "se": float(loo_result.se),
+                "n_data_points": int(loo_result.n_data_points),
+            }
+
+            # Per-observation Pareto k values
+            if hasattr(loo_result, "pareto_k"):
+                pk = loo_result.pareto_k
+                pk_vals = pk.values if hasattr(pk, "values") else jnp.array(pk)
+                result["pareto_k"] = [float(v) for v in pk_vals]
+                result["n_bad_k"] = int((pk_vals > 0.7).sum())
+
+            # LOO-PIT for calibration
+            try:
+                pit_vals = az.loo_pit(idata, y=ll_key)
+                if hasattr(pit_vals, "values"):
+                    result["loo_pit"] = [float(v) for v in pit_vals.values.flat]
+                else:
+                    result["loo_pit"] = [float(v) for v in jnp.array(pit_vals).flat]
+            except Exception:
+                pass
+
+            return result
+
+        except Exception:
+            return None
+
+    def get_posterior_marginals(self, n_bins: int = 50) -> list[dict[str, Any]]:
+        """Compute marginal posterior density data for visualization.
+
+        For each scalar parameter, computes a histogram-based density estimate.
+        For multi-dimensional parameters, flattens to indexed scalars.
+
+        Args:
+            n_bins: Number of histogram bins for density estimation.
+
+        Returns:
+            List of {parameter, x_values, density} dicts.
+        """
+        marginals: list[dict[str, Any]] = []
+
+        for name, values in self._samples.items():
+            if values.ndim == 1:
+                marginals.append(_param_marginal(name, values, n_bins))
+            elif values.ndim >= 2:
+                flat = values.reshape(values.shape[0], -1)
+                # Only include up to 20 elements to avoid payload bloat
+                n_elem = min(flat.shape[1], 20)
+                for i in range(n_elem):
+                    label = f"{name}[{i}]"
+                    marginals.append(_param_marginal(label, flat[:, i], n_bins))
+
+        return marginals
+
+    def get_posterior_pairs(self, max_params: int = 6, max_samples: int = 200) -> list[dict[str, Any]]:
+        """Compute pairwise scatter data for joint posterior visualization.
+
+        Selects up to max_params scalar parameters and returns thinned
+        pairwise samples for scatter matrix plots.
+
+        Args:
+            max_params: Maximum number of parameters to include.
+            max_samples: Maximum samples per pair (thinned evenly).
+
+        Returns:
+            List of {param_x, param_y, x_values, y_values} dicts.
+        """
+        # Collect scalar parameters
+        scalars: list[tuple[str, jnp.ndarray]] = []
+        for name, values in self._samples.items():
+            if values.ndim == 1:
+                scalars.append((name, values))
+            elif values.ndim >= 2:
+                flat = values.reshape(values.shape[0], -1)
+                for i in range(min(flat.shape[1], 4)):
+                    scalars.append((f"{name}[{i}]", flat[:, i]))
+            if len(scalars) >= max_params:
+                break
+
+        scalars = scalars[:max_params]
+        n_draws = scalars[0][1].shape[0] if scalars else 0
+        step = max(1, n_draws // max_samples)
+
+        pairs: list[dict[str, Any]] = []
+        for i in range(len(scalars)):
+            for j in range(i + 1, len(scalars)):
+                name_x, vals_x = scalars[i]
+                name_y, vals_y = scalars[j]
+                pairs.append({
+                    "param_x": name_x,
+                    "param_y": name_y,
+                    "x_values": [float(v) for v in vals_x[::step]],
+                    "y_values": [float(v) for v in vals_y[::step]],
+                })
+
+        return pairs
+
     def print_summary(self) -> None:
         """Print summary statistics for posterior samples."""
         print(f"\nInference method: {self.method}")
@@ -155,6 +338,148 @@ class InferenceResult:
                     q5 = float(jnp.percentile(flat[:, i], 5))
                     q95 = float(jnp.percentile(flat[:, i], 95))
                     print(f"{label:<30} {mean:>10.4f} {std:>10.4f} {q5:>10.4f} {q95:>10.4f}")
+
+
+def _build_trace_data(
+    chain_samples: dict[str, jnp.ndarray],
+    max_points: int = 200,
+) -> list[dict[str, Any]]:
+    """Build thinned trace plot data from chain-level samples.
+
+    Args:
+        chain_samples: {param: (n_chains, n_samples, *shape)} from get_samples(group_by_chain=True)
+        max_points: Maximum samples per chain in the output.
+
+    Returns:
+        List of {parameter, chains: [{chain, values}]} dicts.
+        Multi-dimensional params are flattened to indexed scalars.
+    """
+    traces: list[dict[str, Any]] = []
+
+    for name, arr in chain_samples.items():
+        n_chains = arr.shape[0]
+        n_samples = arr.shape[1]
+        step = max(1, n_samples // max_points)
+
+        if arr.ndim == 2:
+            # Scalar parameter: (n_chains, n_samples)
+            thinned = arr[:, ::step]
+            traces.append({
+                "parameter": name,
+                "chains": [
+                    {"chain": int(c), "values": [float(v) for v in thinned[c]]}
+                    for c in range(n_chains)
+                ],
+            })
+        elif arr.ndim >= 3:
+            # Multi-dim: flatten to indexed scalars, cap at 12 elements
+            flat = arr.reshape(n_chains, n_samples, -1)
+            n_elem = min(flat.shape[2], 12)
+            for i in range(n_elem):
+                thinned = flat[:, ::step, i]
+                traces.append({
+                    "parameter": f"{name}[{i}]",
+                    "chains": [
+                        {"chain": int(c), "values": [float(v) for v in thinned[c]]}
+                        for c in range(n_chains)
+                    ],
+                })
+
+    return traces
+
+
+def _build_rank_histograms(
+    chain_samples: dict[str, jnp.ndarray],
+    n_bins: int = 20,
+) -> list[dict[str, Any]]:
+    """Build rank histogram data for chain mixing assessment.
+
+    Ranks all samples across chains and bins per chain.
+    Uniform histograms indicate good mixing.
+
+    Args:
+        chain_samples: {param: (n_chains, n_samples, *shape)}
+        n_bins: Number of bins for rank histogram.
+
+    Returns:
+        List of {parameter, n_bins, expected_per_bin, chains: [{chain, counts}]} dicts.
+    """
+    histograms: list[dict[str, Any]] = []
+
+    for name, arr in chain_samples.items():
+        if arr.ndim > 2:
+            # Skip multi-dim params (too many histograms)
+            continue
+
+        n_chains, n_samples = arr.shape[:2]
+        total = n_chains * n_samples
+        all_vals = arr.reshape(-1)
+        ranks = jnp.argsort(jnp.argsort(all_vals)) + 1
+
+        ranks_by_chain = ranks.reshape(n_chains, n_samples)
+        chain_hists = []
+        for c in range(n_chains):
+            hist, _ = jnp.histogram(
+                ranks_by_chain[c],
+                bins=n_bins,
+                range=(1, total + 1),
+            )
+            chain_hists.append({
+                "chain": int(c),
+                "counts": [int(v) for v in hist],
+            })
+
+        histograms.append({
+            "parameter": name,
+            "n_bins": n_bins,
+            "expected_per_bin": float(n_samples / n_bins),
+            "chains": chain_hists,
+        })
+
+    return histograms
+
+
+def _param_marginal(name: str, values: jnp.ndarray, n_bins: int = 50) -> dict[str, Any]:
+    """Compute histogram-based marginal density for a scalar parameter.
+
+    Args:
+        name: Parameter name.
+        values: (n_draws,) samples.
+        n_bins: Number of bins.
+
+    Returns:
+        {parameter, x_values, density, mean, sd, hdi_3, hdi_97}
+    """
+    v_min, v_max = float(jnp.min(values)), float(jnp.max(values))
+    # Slight padding to avoid edge artifacts
+    padding = (v_max - v_min) * 0.05 if v_max > v_min else 0.5
+    counts, edges = jnp.histogram(values, bins=n_bins, range=(v_min - padding, v_max + padding))
+    # Normalize to density
+    bin_width = float(edges[1] - edges[0])
+    density = counts / (float(jnp.sum(counts)) * bin_width)
+    x_centers = (edges[:-1] + edges[1:]) / 2.0
+
+    # HDI (highest density interval) at 94%
+    sorted_vals = jnp.sort(values)
+    n = len(sorted_vals)
+    ci_size = int(jnp.ceil(0.94 * n))
+    if ci_size < n:
+        widths = sorted_vals[ci_size:] - sorted_vals[: n - ci_size]
+        best = int(jnp.argmin(widths))
+        hdi_lo = float(sorted_vals[best])
+        hdi_hi = float(sorted_vals[best + ci_size])
+    else:
+        hdi_lo, hdi_hi = v_min, v_max
+
+    return {
+        "parameter": name,
+        "x_values": [float(v) for v in x_centers],
+        "density": [float(v) for v in density],
+        "mean": float(jnp.mean(values)),
+        "sd": float(jnp.std(values)),
+        "hdi_3": hdi_lo,
+        "hdi_97": hdi_hi,
+    }
 
 
 def fit(

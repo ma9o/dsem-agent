@@ -16,6 +16,7 @@ export interface PowerScalingResult {
   diagnosis: PowerScalingDiagnosis;
   prior_sensitivity: number;
   likelihood_sensitivity: number;
+  psis_k_hat?: number;
 }
 
 export interface PPCWarning {
@@ -41,6 +42,8 @@ export interface PPCOverlay {
   q75: number[];
   /** 97.5th percentile. */
   q975: number[];
+  /** Individual y_rep trajectories for spaghetti plots (each length T). */
+  spaghetti_draws?: number[][];
 }
 
 /** Distribution of a test statistic across y_rep vs observed (Gabry's ppc_stat). */
@@ -67,11 +70,43 @@ export interface InferenceMetadata {
   duration_seconds: number;
 }
 
+// ---------------------------------------------------------------------------
+// MCMC Diagnostics
+// ---------------------------------------------------------------------------
+
 /** Per-parameter convergence diagnostic from MCMC. */
 export interface MCMCParamDiagnostic {
   parameter: string;
   r_hat: number | number[];
   ess_bulk: number | number[];
+  /** Tail ESS (via ArviZ). */
+  ess_tail?: number | number[];
+  /** Monte Carlo standard error of the mean. */
+  mcse_mean?: number | number[];
+}
+
+/** Chain-level trace data for trace plots. */
+export interface TraceChain {
+  chain: number;
+  values: number[];
+}
+
+export interface TraceData {
+  parameter: string;
+  chains: TraceChain[];
+}
+
+/** Chain-level rank histogram for mixing assessment. */
+export interface RankHistogramChain {
+  chain: number;
+  counts: number[];
+}
+
+export interface RankHistogram {
+  parameter: string;
+  n_bins: number;
+  expected_per_bin: number;
+  chains: RankHistogramChain[];
 }
 
 /** MCMC sampler-level diagnostics (NUTS/HMC). */
@@ -84,10 +119,65 @@ export interface MCMCDiagnostics {
   accept_prob_mean: number;
   num_chains: number | null;
   num_samples: number | null;
+  /** Thinned chain-level samples for trace plots. */
+  trace_data?: TraceData[];
+  /** Rank histograms per parameter for mixing assessment. */
+  rank_histograms?: RankHistogram[];
 }
 
 /** SVI diagnostics (ELBO loss curve). */
 export interface SVIDiagnostics {
   /** ELBO loss per optimization step (thinned to ~500 points). */
   elbo_losses: number[];
+}
+
+// ---------------------------------------------------------------------------
+// LOO Diagnostics
+// ---------------------------------------------------------------------------
+
+/** Leave-one-out cross-validation diagnostics via PSIS. */
+export interface LOODiagnostics {
+  /** Expected log pointwise predictive density. */
+  elpd_loo: number;
+  /** Effective number of parameters. */
+  p_loo: number;
+  /** Standard error of ELPD estimate. */
+  se: number;
+  /** Number of data points. */
+  n_data_points: number;
+  /** Per-observation Pareto k values (length = n_data_points). */
+  pareto_k?: number[];
+  /** Number of observations with Pareto k > 0.7 (problematic). */
+  n_bad_k?: number;
+  /** LOO-PIT values for calibration (length = n_data_points). */
+  loo_pit?: number[];
+}
+
+// ---------------------------------------------------------------------------
+// Posterior Visualization Data
+// ---------------------------------------------------------------------------
+
+/** Marginal posterior density for one parameter. */
+export interface PosteriorMarginal {
+  parameter: string;
+  /** Bin centers for density plot. */
+  x_values: number[];
+  /** Density values (normalized). */
+  density: number[];
+  mean: number;
+  sd: number;
+  /** 3% HDI bound. */
+  hdi_3: number;
+  /** 97% HDI bound. */
+  hdi_97: number;
+}
+
+/** Pairwise posterior scatter data for two parameters. */
+export interface PosteriorPair {
+  param_x: string;
+  param_y: string;
+  /** Thinned x-axis samples. */
+  x_values: number[];
+  /** Thinned y-axis samples. */
+  y_values: number[];
 }

@@ -22,6 +22,9 @@ export default function Stage5Content({ data }: { data: Stage5Data }) {
         ppc={data.ppc}
         mcmcDiagnostics={data.mcmc_diagnostics}
         sviDiagnostics={data.svi_diagnostics}
+        looDiagnostics={data.loo_diagnostics}
+        posteriorMarginals={data.posterior_marginals}
+        posteriorPairs={data.posterior_pairs}
       />
       <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
         Inference: {data.inference_metadata.method} | {data.inference_metadata.n_samples} samples |{" "}

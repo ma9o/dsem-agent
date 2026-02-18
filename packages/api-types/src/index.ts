@@ -74,6 +74,13 @@ export type {
   MCMCParamDiagnostic,
   MCMCDiagnostics,
   SVIDiagnostics,
+  TraceData,
+  TraceChain,
+  RankHistogram,
+  RankHistogramChain,
+  LOODiagnostics,
+  PosteriorMarginal,
+  PosteriorPair,
 } from "./models/inference";
 
 // Stage data envelope types
@@ -146,4 +153,7 @@ export interface Stage5Data {
   inference_metadata: import("./models/inference").InferenceMetadata;
   mcmc_diagnostics?: import("./models/inference").MCMCDiagnostics | null;
   svi_diagnostics?: import("./models/inference").SVIDiagnostics | null;
+  loo_diagnostics?: import("./models/inference").LOODiagnostics | null;
+  posterior_marginals?: import("./models/inference").PosteriorMarginal[] | null;
+  posterior_pairs?: import("./models/inference").PosteriorPair[] | null;
 }

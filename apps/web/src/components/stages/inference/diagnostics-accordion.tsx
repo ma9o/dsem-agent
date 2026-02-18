@@ -18,23 +18,35 @@ import {
 } from "@/components/ui/table";
 import { formatNumber } from "@/lib/utils/format";
 import type {
+  LOODiagnostics,
   MCMCDiagnostics,
   PPCResult,
+  PosteriorMarginal,
+  PosteriorPair,
   PowerScalingResult,
   SVIDiagnostics,
 } from "@causal-ssm/api-types";
 import { Check, X } from "lucide-react";
 import { ELBOLossChart } from "@/components/charts/elbo-loss-chart";
+import { LOOPITChart } from "@/components/charts/loo-pit-chart";
 import { MCMCDiagnosticsPanel } from "@/components/charts/mcmc-diagnostics-panel";
+import { ParetoKChart } from "@/components/charts/pareto-k-chart";
 import { PPCRibbonChart } from "@/components/charts/ppc-ribbon-chart";
 import { PPCTestStatChart } from "@/components/charts/ppc-test-stat-chart";
+import { PosteriorDensityChart } from "@/components/charts/posterior-density-chart";
+import { PosteriorPairsChart } from "@/components/charts/posterior-pairs-chart";
 import { PowerScalingScatter } from "@/components/charts/power-scaling-scatter";
+import { RankHistogram } from "@/components/charts/rank-histogram";
+import { TracePlot } from "@/components/charts/trace-plot";
 
 interface DiagnosticsAccordionProps {
   powerScaling: PowerScalingResult[];
   ppc: PPCResult;
   mcmcDiagnostics?: MCMCDiagnostics | null;
   sviDiagnostics?: SVIDiagnostics | null;
+  looDiagnostics?: LOODiagnostics | null;
+  posteriorMarginals?: PosteriorMarginal[] | null;
+  posteriorPairs?: PosteriorPair[] | null;
 }
 
 const diagnosisBadgeVariant: Record<string, "success" | "warning" | "destructive"> = {
@@ -54,6 +66,9 @@ export function DiagnosticsAccordion({
   ppc,
   mcmcDiagnostics,
   sviDiagnostics,
+  looDiagnostics,
+  posteriorMarginals,
+  posteriorPairs,
 }: DiagnosticsAccordionProps) {
   // Determine which sections to open by default
   const defaultOpen = ["power-scaling", "ppc"];
@@ -61,6 +76,7 @@ export function DiagnosticsAccordion({
   if (sviDiagnostics) defaultOpen.push("svi");
   if (ppc.overlays?.length) defaultOpen.push("ppc-overlays");
   if (ppc.test_stats?.length) defaultOpen.push("ppc-stats");
+  if (looDiagnostics) defaultOpen.push("loo");
 
   // Deduplicate overlay variables for grouped display
   const overlayVars = ppc.overlays ?? [];
@@ -71,6 +87,11 @@ export function DiagnosticsAccordion({
     testStatsByVar.set(ts.variable, existing);
   }
 
+  const hasTraces = mcmcDiagnostics?.trace_data && mcmcDiagnostics.trace_data.length > 0;
+  const hasRankHists = mcmcDiagnostics?.rank_histograms && mcmcDiagnostics.rank_histograms.length > 0;
+  const hasMarginals = posteriorMarginals && posteriorMarginals.length > 0;
+  const hasPairs = posteriorPairs && posteriorPairs.length > 0;
+
   return (
     <Accordion defaultOpen={defaultOpen}>
       {/* MCMC Convergence Diagnostics */}
@@ -79,7 +100,7 @@ export function DiagnosticsAccordion({
           <AccordionTrigger value="mcmc" className="text-sm">
             <span className="inline-flex items-center gap-1.5">
               MCMC Convergence
-              <StatTooltip explanation="Chain mixing and convergence diagnostics: R-hat, effective sample size, divergences, and tree depth from NUTS/HMC." />
+              <StatTooltip explanation="Chain mixing and convergence diagnostics: R-hat, effective sample size (bulk + tail), MCSE, divergences, and tree depth from NUTS/HMC." />
             </span>
             <Badge
               variant={mcmcDiagnostics.num_divergences === 0 ? "success" : "destructive"}
@@ -90,6 +111,47 @@ export function DiagnosticsAccordion({
           </AccordionTrigger>
           <AccordionContent value="mcmc">
             <MCMCDiagnosticsPanel diagnostics={mcmcDiagnostics} />
+          </AccordionContent>
+        </AccordionItem>
+      )}
+
+      {/* Trace Plots */}
+      {hasTraces && (
+        <AccordionItem value="traces">
+          <AccordionTrigger value="traces" className="text-sm">
+            <span className="inline-flex items-center gap-1.5">
+              Trace Plots
+              <StatTooltip explanation="MCMC chain trajectories over sampling iterations. Well-mixed chains should look like 'hairy caterpillars' with no trends or stuck regions." />
+            </span>
+            <Badge variant="outline" className="ml-2">
+              {mcmcDiagnostics!.trace_data!.length} params
+            </Badge>
+          </AccordionTrigger>
+          <AccordionContent value="traces">
+            <div className="grid gap-4 sm:grid-cols-2">
+              {mcmcDiagnostics!.trace_data!.map((trace) => (
+                <TracePlot key={trace.parameter} trace={trace} />
+              ))}
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+      )}
+
+      {/* Rank Histograms */}
+      {hasRankHists && (
+        <AccordionItem value="rank-hists">
+          <AccordionTrigger value="rank-hists" className="text-sm">
+            <span className="inline-flex items-center gap-1.5">
+              Rank Histograms
+              <StatTooltip explanation="Rank histograms (Vehtari et al. 2021). Samples are ranked across all chains and binned per chain. Uniform histograms indicate good mixing." />
+            </span>
+          </AccordionTrigger>
+          <AccordionContent value="rank-hists">
+            <div className="grid gap-4 sm:grid-cols-2">
+              {mcmcDiagnostics!.rank_histograms!.map((hist) => (
+                <RankHistogram key={hist.parameter} histogram={hist} />
+              ))}
+            </div>
           </AccordionContent>
         </AccordionItem>
       )}
@@ -105,6 +167,78 @@ export function DiagnosticsAccordion({
           </AccordionTrigger>
           <AccordionContent value="svi">
             <ELBOLossChart diagnostics={sviDiagnostics} />
+          </AccordionContent>
+        </AccordionItem>
+      )}
+
+      {/* LOO-CV Diagnostics */}
+      {looDiagnostics && (
+        <AccordionItem value="loo">
+          <AccordionTrigger value="loo" className="text-sm">
+            <span className="inline-flex items-center gap-1.5">
+              LOO Cross-Validation
+              <StatTooltip explanation="Leave-one-out cross-validation via Pareto-smoothed importance sampling. Assesses predictive accuracy and identifies influential observations." />
+            </span>
+            <Badge
+              variant={
+                looDiagnostics.n_bad_k != null && looDiagnostics.n_bad_k === 0
+                  ? "success"
+                  : "warning"
+              }
+              className="ml-2"
+            >
+              ELPD = {formatNumber(looDiagnostics.elpd_loo, 1)}
+            </Badge>
+          </AccordionTrigger>
+          <AccordionContent value="loo">
+            <div className="space-y-4">
+              {looDiagnostics.loo_pit && <LOOPITChart loo={looDiagnostics} />}
+              {looDiagnostics.pareto_k && <ParetoKChart loo={looDiagnostics} />}
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+      )}
+
+      {/* Posterior Marginals */}
+      {hasMarginals && (
+        <AccordionItem value="posteriors">
+          <AccordionTrigger value="posteriors" className="text-sm">
+            <span className="inline-flex items-center gap-1.5">
+              Posterior Distributions
+              <StatTooltip explanation="Marginal posterior density for each parameter with 94% HDI. Vertical line shows the posterior mean." />
+            </span>
+            <Badge variant="outline" className="ml-2">
+              {posteriorMarginals!.length} params
+            </Badge>
+          </AccordionTrigger>
+          <AccordionContent value="posteriors">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {posteriorMarginals!.map((m) => (
+                <PosteriorDensityChart key={m.parameter} marginal={m} />
+              ))}
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+      )}
+
+      {/* Posterior Pairs */}
+      {hasPairs && (
+        <AccordionItem value="pairs">
+          <AccordionTrigger value="pairs" className="text-sm">
+            <span className="inline-flex items-center gap-1.5">
+              Posterior Pairs
+              <StatTooltip explanation="Pairwise scatter plots of posterior samples. Reveals correlations and potential identifiability issues between parameters." />
+            </span>
+            <Badge variant="outline" className="ml-2">
+              {posteriorPairs!.length} pairs
+            </Badge>
+          </AccordionTrigger>
+          <AccordionContent value="pairs">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {posteriorPairs!.map((p) => (
+                <PosteriorPairsChart key={`${p.param_x}-${p.param_y}`} pair={p} />
+              ))}
+            </div>
           </AccordionContent>
         </AccordionItem>
       )}
@@ -151,6 +285,14 @@ export function DiagnosticsAccordion({
                       <StatTooltip explanation="How much the posterior changes when the likelihood is scaled. High values indicate the data is informative." />
                     </span>
                   </TableHead>
+                  {powerScaling.some((p) => p.psis_k_hat != null) && (
+                    <TableHead className="text-right">
+                      <span className="inline-flex items-center gap-1">
+                        PSIS k
+                        <StatTooltip explanation="Pareto k diagnostic for importance sampling reliability. Values > 0.7 indicate unreliable sensitivity estimates." />
+                      </span>
+                    </TableHead>
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -168,6 +310,19 @@ export function DiagnosticsAccordion({
                     <TableCell className="text-right font-mono text-sm">
                       {formatNumber(ps.likelihood_sensitivity)}
                     </TableCell>
+                    {powerScaling.some((p) => p.psis_k_hat != null) && (
+                      <TableCell className="text-right font-mono text-sm">
+                        {ps.psis_k_hat != null ? (
+                          <Badge
+                            variant={ps.psis_k_hat > 0.7 ? "destructive" : ps.psis_k_hat > 0.5 ? "warning" : "success"}
+                          >
+                            {formatNumber(ps.psis_k_hat, 2)}
+                          </Badge>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>
@@ -236,7 +391,7 @@ export function DiagnosticsAccordion({
           <AccordionTrigger value="ppc-overlays" className="text-sm">
             <span className="inline-flex items-center gap-1.5">
               PPC Overlay Plots
-              <StatTooltip explanation="Observed data (solid line) vs posterior predictive quantile bands. The shaded regions show where the model expects data to fall." />
+              <StatTooltip explanation="Observed data (solid line) vs posterior predictive quantile bands and individual y_rep draws. The shaded regions show where the model expects data to fall." />
             </span>
             <Badge variant="outline" className="ml-2">
               {overlayVars.length} variable{overlayVars.length !== 1 && "s"}

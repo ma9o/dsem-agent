@@ -25,7 +25,8 @@ function rhatBadge(value: number | number[]) {
   return <Badge variant="destructive">{formatNumber(v, 3)}</Badge>;
 }
 
-function essBadge(value: number | number[], nSamples: number | null) {
+function essBadge(value: number | number[] | undefined, nSamples: number | null) {
+  if (value == null) return <span className="text-muted-foreground">—</span>;
   const v = Array.isArray(value) ? Math.min(...value) : value;
   const total = nSamples ?? 1000;
   const ratio = v / total;
@@ -35,8 +36,16 @@ function essBadge(value: number | number[], nSamples: number | null) {
   return <span className="font-mono text-sm text-destructive">{formatNumber(v, 0)}</span>;
 }
 
+function mcseCell(value: number | number[] | undefined) {
+  if (value == null) return <span className="text-muted-foreground">—</span>;
+  const v = Array.isArray(value) ? Math.max(...value) : value;
+  return <span className="font-mono text-sm">{formatNumber(v, 4)}</span>;
+}
+
 export function MCMCDiagnosticsPanel({ diagnostics }: MCMCDiagnosticsPanelProps) {
   const hasDivergences = diagnostics.num_divergences > 0;
+  const hasEssTail = diagnostics.per_parameter.some((p) => p.ess_tail != null);
+  const hasMcse = diagnostics.per_parameter.some((p) => p.mcse_mean != null);
 
   return (
     <div className="space-y-3">
@@ -79,6 +88,22 @@ export function MCMCDiagnosticsPanel({ diagnostics }: MCMCDiagnosticsPanelProps)
                   <StatTooltip explanation="Effective sample size for bulk of the distribution. Higher is better. Worry if < 100 per chain." />
                 </span>
               </TableHead>
+              {hasEssTail && (
+                <TableHead className="text-right">
+                  <span className="inline-flex items-center gap-1">
+                    ESS (tail)
+                    <StatTooltip explanation="Effective sample size for the tails (5th/95th percentiles). Important for credible interval reliability." />
+                  </span>
+                </TableHead>
+              )}
+              {hasMcse && (
+                <TableHead className="text-right">
+                  <span className="inline-flex items-center gap-1">
+                    MCSE
+                    <StatTooltip explanation="Monte Carlo standard error of the mean. Should be small relative to the posterior standard deviation." />
+                  </span>
+                </TableHead>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -89,6 +114,14 @@ export function MCMCDiagnosticsPanel({ diagnostics }: MCMCDiagnosticsPanelProps)
                 <TableCell className="text-right">
                   {essBadge(p.ess_bulk, diagnostics.num_samples)}
                 </TableCell>
+                {hasEssTail && (
+                  <TableCell className="text-right">
+                    {essBadge(p.ess_tail, diagnostics.num_samples)}
+                  </TableCell>
+                )}
+                {hasMcse && (
+                  <TableCell className="text-right">{mcseCell(p.mcse_mean)}</TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>

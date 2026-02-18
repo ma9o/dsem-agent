@@ -67,6 +67,23 @@ def fit_model(
         mcmc_diag = result.get_mcmc_diagnostics()
         svi_diag = result.get_svi_diagnostics()
 
+        # LOO diagnostics (needs model function and data)
+        import functools
+
+        model_fn = functools.partial(
+            builder._model.model,
+            likelihood_backend=builder._model.make_likelihood_backend(),
+        )
+        loo_diag = result.get_loo_diagnostics(
+            model_fn=model_fn,
+            observations=jnp.array(X.drop("time").to_numpy(), dtype=jnp.float32),
+            times=fit_times,
+        )
+
+        # Posterior marginals and pairs
+        posterior_marginals = result.get_posterior_marginals()
+        posterior_pairs = result.get_posterior_pairs()
+
         return {
             "fitted": True,
             "inference_type": result.method,
@@ -75,6 +92,9 @@ def fit_model(
             "times": fit_times,
             "mcmc_diagnostics": mcmc_diag,
             "svi_diagnostics": svi_diag,
+            "loo_diagnostics": loo_diag,
+            "posterior_marginals": posterior_marginals,
+            "posterior_pairs": posterior_pairs,
         }
 
     except NotImplementedError:
