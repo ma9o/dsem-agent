@@ -210,19 +210,54 @@ def validate_priors_task(
     try:
         from causal_ssm_agent.models.prior_predictive import validate_prior_predictive
 
-        is_valid, results = validate_prior_predictive(
+        is_valid, results, raw_samples = validate_prior_predictive(
             model_spec, priors, raw_data, causal_spec=causal_spec
         )
+
+        # Forward-simulate per-variable prior predictive observations
+        pp_samples: dict[str, list[float]] = {}
+        if is_valid and raw_samples:
+            try:
+                import jax.numpy as jnp
+                import numpy as np
+
+                from causal_ssm_agent.models.posterior_predictive import (
+                    simulate_posterior_predictive,
+                )
+                from causal_ssm_agent.orchestrator.schemas_model import ModelSpec
+
+                spec = ModelSpec.model_validate(model_spec) if isinstance(model_spec, dict) else model_spec
+                manifest_names = [lik.variable for lik in spec.likelihoods]
+                manifest_dists = [lik.distribution.value for lik in spec.likelihoods]
+
+                y_sim = simulate_posterior_predictive(
+                    raw_samples,
+                    times=jnp.arange(30, dtype=jnp.float32),
+                    manifest_dists=manifest_dists,
+                    n_subsample=100,
+                )
+                # y_sim: (n_subsample, T, n_manifest) → flatten to per-variable lists
+                y_np = np.asarray(y_sim)
+                for j, name in enumerate(manifest_names):
+                    col = y_np[:, :, j].flatten()
+                    # Filter out NaN/Inf from unstable draws
+                    col = col[np.isfinite(col)]
+                    pp_samples[name] = col.tolist()
+            except Exception as e:
+                logger.warning("Prior predictive simulation failed: %s", e)
+
         return {
             "is_valid": is_valid,
             "results": [r.model_dump() for r in results],
             "issues": [r.issue for r in results if not r.is_valid and r.issue],
+            "prior_predictive_samples": pp_samples,
         }
     except Exception as e:
         return {
             "is_valid": False,
             "results": [],
             "issues": [f"Prior validation error: {e}"],
+            "prior_predictive_samples": {},
         }
 
 
@@ -446,4 +481,5 @@ async def stage4_orchestrated_flow(
         "model_info": model_result,
         "is_valid": validation_result.get("is_valid", False) if validation_result else False,
         "causal_spec": causal_spec,
+        "prior_predictive_samples": validation_result.get("prior_predictive_samples", {}),
     }

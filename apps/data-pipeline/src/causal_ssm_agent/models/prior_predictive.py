@@ -293,7 +293,7 @@ def validate_prior_predictive(
     n_samples: int = 500,
     constraint_tolerance: float = 0.05,
     causal_spec: dict | None = None,
-) -> tuple[bool, list[PriorValidationResult]]:
+) -> tuple[bool, list[PriorValidationResult], dict]:
     """Validate priors via prior predictive sampling.
 
     Checks for:
@@ -313,7 +313,9 @@ def validate_prior_predictive(
         causal_spec: CausalSpec dict for DAG-constrained masks
 
     Returns:
-        Tuple of (is_valid, list of validation results)
+        Tuple of (is_valid, validation results, raw prior predictive samples).
+        The samples dict can be passed to simulate_posterior_predictive() to
+        generate per-variable observation samples for visualization.
     """
     from causal_ssm_agent.models.ssm_builder import SSMModelBuilder
 
@@ -355,7 +357,7 @@ def validate_prior_predictive(
                 issue=f"Model build failed: {e}",
                 suggested_adjustment="Fix model_spec or priors to enable model construction",
             )
-        ]
+        ], {}
 
     # 2. Sample prior predictive
     try:
@@ -368,7 +370,7 @@ def validate_prior_predictive(
                 issue=f"Prior predictive sampling failed: {e}",
                 suggested_adjustment="Check priors for numerical issues",
             )
-        ]
+        ], {}
 
     # 3. Run checks
     results: list[PriorValidationResult] = []
@@ -404,7 +406,7 @@ def validate_prior_predictive(
             )
         is_valid = True
 
-    return is_valid, results
+    return is_valid, results, samples
 
 
 def format_validation_report(

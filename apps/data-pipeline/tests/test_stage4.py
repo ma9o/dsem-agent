@@ -527,7 +527,7 @@ class TestPriorPredictiveValidation:
     def test_valid_priors_pass(self, simple_model_spec, simple_priors):
         """Simple spec + priors + polars data -> is_valid=True."""
         raw_data = _make_polars_data()
-        is_valid, results = validate_prior_predictive(
+        is_valid, results, _samples = validate_prior_predictive(
             simple_model_spec, simple_priors, raw_data, n_samples=10
         )
         assert is_valid is True
@@ -561,7 +561,7 @@ class TestPriorPredictiveValidation:
             "causal_ssm_agent.models.ssm_builder.SSMModelBuilder.build_model",
             side_effect=ValueError("deliberate test failure"),
         ):
-            is_valid, results = validate_prior_predictive(
+            is_valid, results, _samples = validate_prior_predictive(
                 broken_spec, simple_priors, None, n_samples=10
             )
             assert is_valid is False
@@ -603,7 +603,7 @@ class TestPriorPredictiveValidation:
 
     def test_no_data_still_validates(self, simple_model_spec, simple_priors):
         """raw_data=None -> NaN/constraint/extreme checks run, scale skipped."""
-        is_valid, results = validate_prior_predictive(
+        is_valid, results, _samples = validate_prior_predictive(
             simple_model_spec, simple_priors, None, n_samples=10
         )
         # Should still produce results (pass or fail) without crashing
@@ -612,7 +612,7 @@ class TestPriorPredictiveValidation:
 
     def test_format_report_integrates(self, simple_model_spec, simple_priors):
         """validate + format_validation_report -> well-formed string."""
-        is_valid, results = validate_prior_predictive(
+        is_valid, results, _samples = validate_prior_predictive(
             simple_model_spec, simple_priors, None, n_samples=10
         )
         report = format_validation_report(is_valid, results)
