@@ -16,7 +16,6 @@ export type {
 export type {
   Indicator,
   MeasurementModel,
-  MeasurementGranularity,
   MeasurementDtype,
   AggregationFunction,
 } from "./models/indicator";

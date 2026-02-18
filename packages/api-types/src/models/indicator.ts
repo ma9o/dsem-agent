@@ -1,11 +1,3 @@
-export type MeasurementGranularity =
-  | "finest"
-  | "hourly"
-  | "daily"
-  | "weekly"
-  | "monthly"
-  | "yearly";
-
 export type MeasurementDtype = "continuous" | "binary" | "count" | "ordinal" | "categorical";
 
 export type AggregationFunction =
@@ -38,7 +30,6 @@ export interface Indicator {
   name: string;
   construct_name: string;
   how_to_measure: string;
-  measurement_granularity: MeasurementGranularity;
   measurement_dtype: MeasurementDtype;
   aggregation: AggregationFunction;
   ordinal_levels: string[] | null;
