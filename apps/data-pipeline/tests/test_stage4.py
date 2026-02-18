@@ -92,7 +92,6 @@ def simple_priors() -> dict:
             "distribution": "Normal",
             "params": {"mu": 5.0, "sigma": 1.0},
             "sources": [],
-            "confidence": 0.5,
             "reasoning": "Centered on scale midpoint",
         },
         "rho_mood": {
@@ -100,7 +99,6 @@ def simple_priors() -> dict:
             "distribution": "Beta",
             "params": {"alpha": 2.0, "beta": 2.0},
             "sources": [],
-            "confidence": 0.5,
             "reasoning": "Weakly informative for AR coefficient",
         },
         "sigma_mood_score": {
@@ -108,7 +106,6 @@ def simple_priors() -> dict:
             "distribution": "HalfNormal",
             "params": {"sigma": 1.0},
             "sources": [],
-            "confidence": 0.5,
             "reasoning": "Weakly informative for residual SD",
         },
     }
@@ -175,10 +172,8 @@ class TestSchemas:
                     effect_size="r=0.3",
                 )
             ],
-            confidence=0.8,
             reasoning="Based on meta-analysis",
         )
-        assert proposal.confidence == 0.8
         assert len(proposal.sources) == 1
 
 
@@ -296,17 +291,6 @@ class TestDefaultPriors:
         prior = get_default_prior(param)
         assert prior.distribution == "Normal"
 
-    def test_default_prior_low_confidence(self):
-        """Default priors have low confidence."""
-        param = ParameterSpec(
-            name="beta_x",
-            role=ParameterRole.FIXED_EFFECT,
-            constraint=ParameterConstraint.NONE,
-            description="Fixed effect",
-            search_context="",
-        )
-        prior = get_default_prior(param)
-        assert prior.confidence == 0.3
 
 
 # --- AutoElicit Tests ---
@@ -319,7 +303,7 @@ class TestAutoElicit:
         """GMM with unimodal data falls back to simple pooling."""
         # All samples identical -> GMM should select K=1 -> simple pooling
         samples = [
-            RawPriorSample(paraphrase_id=i, mu=0.3, sigma=0.1, confidence=0.8, reasoning="")
+            RawPriorSample(paraphrase_id=i, mu=0.3, sigma=0.1, reasoning="")
             for i in range(5)
         ]
 
@@ -334,12 +318,12 @@ class TestAutoElicit:
         """GMM detects multimodal distribution (K >= 2)."""
         # Create clearly bimodal samples with more separation
         samples = [
-            RawPriorSample(paraphrase_id=0, mu=-2.0, sigma=0.1, confidence=0.8, reasoning=""),
-            RawPriorSample(paraphrase_id=1, mu=-2.0, sigma=0.1, confidence=0.7, reasoning=""),
-            RawPriorSample(paraphrase_id=2, mu=-2.0, sigma=0.1, confidence=0.9, reasoning=""),
-            RawPriorSample(paraphrase_id=3, mu=2.0, sigma=0.1, confidence=0.8, reasoning=""),
-            RawPriorSample(paraphrase_id=4, mu=2.0, sigma=0.1, confidence=0.7, reasoning=""),
-            RawPriorSample(paraphrase_id=5, mu=2.0, sigma=0.1, confidence=0.9, reasoning=""),
+            RawPriorSample(paraphrase_id=0, mu=-2.0, sigma=0.1, reasoning=""),
+            RawPriorSample(paraphrase_id=1, mu=-2.0, sigma=0.1, reasoning=""),
+            RawPriorSample(paraphrase_id=2, mu=-2.0, sigma=0.1, reasoning=""),
+            RawPriorSample(paraphrase_id=3, mu=2.0, sigma=0.1, reasoning=""),
+            RawPriorSample(paraphrase_id=4, mu=2.0, sigma=0.1, reasoning=""),
+            RawPriorSample(paraphrase_id=5, mu=2.0, sigma=0.1, reasoning=""),
         ]
 
         result = aggregate_prior_samples(samples)
@@ -357,8 +341,8 @@ class TestAutoElicit:
     def test_aggregate_too_few_samples_uses_simple(self):
         """GMM with <3 samples falls back to simple."""
         samples = [
-            RawPriorSample(paraphrase_id=0, mu=0.2, sigma=0.1, confidence=0.8, reasoning=""),
-            RawPriorSample(paraphrase_id=1, mu=0.3, sigma=0.1, confidence=0.7, reasoning=""),
+            RawPriorSample(paraphrase_id=0, mu=0.2, sigma=0.1, reasoning=""),
+            RawPriorSample(paraphrase_id=1, mu=0.3, sigma=0.1, reasoning=""),
         ]
 
         result = aggregate_prior_samples(samples)
@@ -429,7 +413,7 @@ class TestAutoElicit:
     def test_single_sample_returns_input(self):
         """With n=1, aggregation returns same values as input."""
         samples = [
-            RawPriorSample(paraphrase_id=0, mu=0.3, sigma=0.15, confidence=0.8, reasoning="test"),
+            RawPriorSample(paraphrase_id=0, mu=0.3, sigma=0.15, reasoning="test"),
         ]
 
         result = aggregate_prior_samples(samples)
@@ -802,7 +786,6 @@ class TestSSMPriorConversion:
                 "distribution": "Beta",
                 "params": {"alpha": 2.0, "beta": 2.0},
                 "sources": [],
-                "confidence": 0.5,
                 "reasoning": "test",
             },
         }
@@ -830,7 +813,6 @@ class TestSSMPriorConversion:
                 "distribution": "HalfNormal",
                 "params": {"sigma": 0.5},
                 "sources": [],
-                "confidence": 0.5,
                 "reasoning": "test",
             },
         }
@@ -866,7 +848,6 @@ class TestSSMPriorConversion:
                 "distribution": "HalfNormal",
                 "params": {"sigma": 0.8},
                 "sources": [],
-                "confidence": 0.5,
                 "reasoning": "test",
             },
         }

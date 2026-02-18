@@ -3,27 +3,13 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { evaluatePdf } from "@/lib/utils/distributions";
-import { formatNumber, formatPercent } from "@/lib/utils/format";
+import { formatNumber } from "@/lib/utils/format";
 import type { PriorProposal } from "@causal-ssm/api-types";
 import { ExternalLink } from "lucide-react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, XAxis, YAxis } from "recharts";
 
 interface PriorCardProps {
   prior: PriorProposal;
-}
-
-function confidenceVariant(
-  prior: PriorProposal,
-): "success" | "warning" | "destructive" | "secondary" {
-  if (prior.confidence_level) {
-    return prior.confidence_level === "high"
-      ? "success"
-      : prior.confidence_level === "medium"
-        ? "warning"
-        : "destructive";
-  }
-  // No pipeline-provided level — show neutral badge
-  return "secondary";
 }
 
 export function PriorCard({ prior }: PriorCardProps) {
@@ -39,9 +25,6 @@ export function PriorCard({ prior }: PriorCardProps) {
             <CardTitle className="text-base font-mono">{prior.parameter}</CardTitle>
             <CardDescription>{prior.distribution}</CardDescription>
           </div>
-          <Badge variant={confidenceVariant(prior)}>
-            Confidence: {formatPercent(prior.confidence)}
-          </Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">

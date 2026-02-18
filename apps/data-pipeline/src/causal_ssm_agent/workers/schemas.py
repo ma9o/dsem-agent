@@ -21,12 +21,6 @@ class Extraction(BaseModel):
         default=None,
         description="Supporting text snippet from the source that justifies this extraction",
     )
-    confidence: float | None = Field(
-        default=None,
-        ge=0.0,
-        le=1.0,
-        description="Extraction confidence (0=low, 1=high). Null if not assessed.",
-    )
 
 
 class WorkerOutput(BaseModel):
@@ -42,7 +36,7 @@ class WorkerOutput(BaseModel):
 
         Returns:
             DataFrame with columns: indicator (Utf8), value (Utf8), timestamp (Utf8),
-            evidence_text (Utf8), confidence (Float64).
+            evidence_text (Utf8).
             Value column is stored as string. Downstream _encode_non_continuous()
             handles binary/ordinal/categorical encoding, then the final Float64
             cast happens in aggregate_worker_measurements().
@@ -52,7 +46,6 @@ class WorkerOutput(BaseModel):
             "value": pl.Utf8,
             "timestamp": pl.Utf8,
             "evidence_text": pl.Utf8,
-            "confidence": pl.Float64,
         }
         if not self.extractions:
             return pl.DataFrame(schema=schema)
@@ -74,7 +67,6 @@ class WorkerOutput(BaseModel):
                     "value": str_val,
                     "timestamp": e.timestamp,
                     "evidence_text": e.evidence_text,
-                    "confidence": e.confidence,
                 }
             )
 
@@ -185,7 +177,6 @@ def validate_worker_output(
             "value": value,
             "timestamp": ext_data.get("timestamp"),
             "evidence_text": ext_data.get("evidence_text"),
-            "confidence": ext_data.get("confidence"),
         }
 
         # Validate via Pydantic

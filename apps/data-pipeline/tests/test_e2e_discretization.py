@@ -193,7 +193,6 @@ def weekly_study_priors() -> dict[str, dict]:
                     "study_interval_days": 7.0,
                 }
             ],
-            "confidence": 0.8,
             "reasoning": "Meta-analysis of weekly diary studies",
             "reference_interval_days": 7.0,
         },
@@ -202,7 +201,6 @@ def weekly_study_priors() -> dict[str, dict]:
             "distribution": "Beta",
             "params": {"alpha": 2.0, "beta": 2.0},
             "sources": [],
-            "confidence": 0.5,
             "reasoning": "No literature; weakly informative",
             # No reference_interval_days → falls back to temporal_scale (daily → dt=1)
         },
@@ -217,7 +215,6 @@ def weekly_study_priors() -> dict[str, dict]:
                     "study_interval_days": 7.0,
                 }
             ],
-            "confidence": 0.7,
             "reasoning": "Weekly cross-lagged panel study",
             "reference_interval_days": 7.0,
         },
@@ -226,7 +223,6 @@ def weekly_study_priors() -> dict[str, dict]:
             "distribution": "HalfNormal",
             "params": {"sigma": 1.0},
             "sources": [],
-            "confidence": 0.5,
             "reasoning": "Weakly informative",
         },
         "sigma_stress_self_report": {
@@ -234,7 +230,6 @@ def weekly_study_priors() -> dict[str, dict]:
             "distribution": "HalfNormal",
             "params": {"sigma": 1.0},
             "sources": [],
-            "confidence": 0.5,
             "reasoning": "Weakly informative",
         },
         "sigma_stress_cortisol": {
@@ -242,7 +237,6 @@ def weekly_study_priors() -> dict[str, dict]:
             "distribution": "HalfNormal",
             "params": {"sigma": 1.0},
             "sources": [],
-            "confidence": 0.5,
             "reasoning": "Weakly informative",
         },
         "lambda_stress_cortisol_stress": {
@@ -250,7 +244,6 @@ def weekly_study_priors() -> dict[str, dict]:
             "distribution": "HalfNormal",
             "params": {"sigma": 0.8},
             "sources": [],
-            "confidence": 0.5,
             "reasoning": "Weakly informative free loading",
         },
     }

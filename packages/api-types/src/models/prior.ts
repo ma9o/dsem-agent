@@ -10,9 +10,6 @@ export interface PriorProposal {
   distribution: string;
   params: Record<string, number>;
   sources: PriorSource[];
-  confidence: number;
-  /** Pipeline-determined confidence interpretation (avoids frontend hardcoding thresholds). */
-  confidence_level?: "high" | "medium" | "low";
   reasoning: string;
   /** Pre-computed density points from the pipeline (preferred over client-side approximation). */
   density_points?: Array<{ x: number; y: number }>;
@@ -29,7 +26,6 @@ export interface RawPriorSample {
   paraphrase_id: number;
   mu: number;
   sigma: number;
-  confidence: number;
   reasoning: string;
 }
 

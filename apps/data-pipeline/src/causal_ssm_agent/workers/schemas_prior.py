@@ -35,9 +35,6 @@ class PriorProposal(BaseModel):
     sources: list[PriorSource] = Field(
         default_factory=list, description="Literature sources supporting this prior"
     )
-    confidence: float = Field(
-        ge=0.0, le=1.0, description="Confidence in this prior (0-1), based on evidence quality"
-    )
     reasoning: str = Field(
         description="Justification for the chosen prior distribution and parameters"
     )
@@ -71,7 +68,6 @@ class RawPriorSample(BaseModel):
     paraphrase_id: int = Field(description="Index of the paraphrase template used (0-indexed)")
     mu: float = Field(description="Elicited mean/location parameter")
     sigma: float = Field(description="Elicited standard deviation/scale parameter")
-    confidence: float = Field(ge=0.0, le=1.0, description="Confidence in this elicitation (0-1)")
     reasoning: str = Field(description="Justification for this elicitation")
 
 

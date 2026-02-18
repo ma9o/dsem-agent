@@ -160,7 +160,6 @@ async def _elicit_single_paraphrase(
             paraphrase_id=paraphrase_id,
             mu=mu,
             sigma=sigma,
-            confidence=prior_data.get("confidence", 0.5),
             reasoning=prior_data.get("reasoning", ""),
         )
     except Exception:
@@ -424,7 +423,6 @@ async def _research_single_prior_single_shot(
         distribution=prior_data.get("distribution", "Normal"),
         params=prior_data.get("params", {"mu": 0.0, "sigma": 1.0}),
         sources=sources,
-        confidence=prior_data.get("confidence", 0.5),
         reasoning=prior_data.get("reasoning", ""),
     )
 
@@ -489,7 +487,6 @@ async def _research_single_prior_paraphrased(
         distribution="Normal",  # Aggregation produces Normal params
         params={"mu": aggregated.mu, "sigma": aggregated.sigma},
         sources=[],  # Sources come from literature, not paraphrases
-        confidence=float(np.mean([s.confidence for s in samples])),
         reasoning=f"Aggregated from {len(samples)} paraphrased elicitations using GMM.",
     )
 
@@ -540,6 +537,5 @@ def get_default_prior(parameter: ParameterSpec) -> PriorProposal:
         distribution=distribution,
         params=params,
         sources=[],
-        confidence=0.3,  # Low confidence for default
         reasoning=f"Default prior for {parameter.role.value} parameter",
     )

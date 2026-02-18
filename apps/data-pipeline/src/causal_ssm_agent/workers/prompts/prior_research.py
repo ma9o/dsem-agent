@@ -27,10 +27,10 @@ Your task is to propose an **informative prior** based on:
 - **Uniform(lower, upper)**: When you want to bound the parameter
 - **TruncatedNormal(mu, sigma, lower, upper)**: Bounded with a center
 
-### Express Uncertainty Honestly
-- Confident (good literature): Use smaller sigma (tighter prior)
-- Uncertain (sparse/conflicting evidence): Use larger sigma (wider prior)
-- Very uncertain (no evidence): Use weakly informative defaults
+### Express Uncertainty Via Prior Width
+- Good literature: Use smaller sigma (tighter prior)
+- Sparse/conflicting evidence: Use larger sigma (wider prior)
+- No evidence: Use weakly informative defaults
 
 ### Respect Constraints
 - AR coefficients (rho): Must be in [0, 1] for stationarity
@@ -54,7 +54,6 @@ Return a JSON object:
       "effect_size": "r=0.3, 95% CI [0.2, 0.4]"
     }
   ],
-  "confidence": 0.7,
   "reasoning": "Justification for the prior"
 }
 ```
@@ -95,9 +94,8 @@ Based on the literature evidence (if any) and domain knowledge, propose a prior 
 Consider:
 1. What is the expected direction (positive/negative) of this effect?
 2. What magnitude is plausible given the domain?
-3. How confident are you in this prior?
 
-If no literature evidence is available, use domain reasoning and be explicit about your uncertainty.
+If no literature evidence is available, use domain reasoning and be explicit about your uncertainty (use a wider prior sigma).
 
 Output your prior as JSON.
 """
@@ -121,9 +119,8 @@ Based on the literature evidence (if any) and domain knowledge, propose a prior 
 Consider:
 1. What is the expected direction (positive/negative) of this effect?
 2. What magnitude is plausible given the domain?
-3. How confident are you in this prior?
 
-If no literature evidence is available, use domain reasoning and be explicit about your uncertainty.
+If no literature evidence is available, use domain reasoning and be explicit about your uncertainty (use a wider prior sigma).
 
 Output your prior as JSON.""",
     # 1: Uncertainty emphasis
@@ -135,7 +132,7 @@ Think about:
 2. Where would you place most probability mass?
 3. What would surprise you if you observed it?
 
-Be honest about what you don't know. Wider priors are better than overconfident narrow ones.
+Be honest about what you don't know. Wider priors are better than unjustifiably narrow ones.
 
 Output your prior as JSON.""",
     # 2: Direction focus
@@ -193,7 +190,7 @@ Consider:
 2. Where do multiple sources converge?
 3. What prior honors the empirical evidence?
 
-You can be more confident if evidence is consistent across studies.
+You can use a tighter prior if evidence is consistent across studies.
 
 Output your prior as JSON.""",
     # 7: Practical significance
