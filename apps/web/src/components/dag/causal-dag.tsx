@@ -5,7 +5,6 @@ import type { CausalEdge, Construct, IdentifiabilityStatus, IdentifiedTreatmentS
 import {
   Background,
   BackgroundVariant,
-  Controls,
   type NodeChange,
   type NodeTypes,
   Panel,
@@ -197,13 +196,15 @@ export function CausalDag({
         fitViewOptions={{ padding: 0.25 }}
         nodesDraggable
         nodesConnectable={false}
+        zoomOnScroll={false}
+        zoomOnPinch={false}
+        zoomOnDoubleClick={false}
         proOptions={{ hideAttribution: true }}
         defaultEdgeOptions={{
           style: { strokeWidth: 2 },
         }}
       >
         <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
-        <Controls showInteractive={false} />
         <Panel position="top-right">
           <div className="flex flex-col gap-2">
             <EdgeLegend hasLagged={hasLagged} hasContemporaneous={hasContemporaneous} />
