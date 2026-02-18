@@ -2,58 +2,87 @@
 
 import type { PipelineProgress } from "@/lib/hooks/use-run-events";
 import { STAGES } from "@causal-ssm/api-types";
-import type { StageMeta } from "@causal-ssm/api-types";
+import type { StageId } from "@causal-ssm/api-types";
 import { ArrowDown } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
-
-function getBelowViewport(progress: PipelineProgress): StageMeta[] {
-  return STAGES.filter((s) => {
-    const status = progress.stages[s.id];
-    if (status !== "completed" && status !== "failed") return false;
-    const el = document.getElementById(s.id);
-    if (!el) return true; // not yet rendered, treat as below
-    return el.getBoundingClientRect().top >= window.innerHeight;
-  });
-}
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
- * Fixed bottom notification showing how many completed stages
- * are currently below the viewport. Count updates live as the
- * user scrolls.
+ * Fixed bottom notification for stages that completed while the user
+ * wasn't scrolled down to them. A stage is "unseen" until the user
+ * scrolls it into the viewport at least once. Scrolling back up does
+ * NOT re-add already-seen stages.
  */
 export function NewStagesNotification({
   progress,
 }: {
   progress: PipelineProgress;
 }) {
-  const [belowStages, setBelowStages] = useState<StageMeta[]>([]);
+  // Stages the user has scrolled past (seen) at least once
+  const seenRef = useRef<Set<StageId>>(new Set());
+  const [unseenIds, setUnseenIds] = useState<StageId[]>([]);
 
-  // Recompute on progress changes
+  // When progress changes, check for newly completed stages below viewport
   useEffect(() => {
-    setBelowStages(getBelowViewport(progress));
+    const newUnseen: StageId[] = [];
+    for (const s of STAGES) {
+      const status = progress.stages[s.id];
+      if (status !== "completed" && status !== "failed") continue;
+      if (seenRef.current.has(s.id)) continue;
+
+      const el = document.getElementById(s.id);
+      if (!el) {
+        // Not rendered yet — unseen
+        newUnseen.push(s.id);
+        continue;
+      }
+      const rect = el.getBoundingClientRect();
+      if (rect.top < window.innerHeight) {
+        // Already visible — mark as seen immediately
+        seenRef.current.add(s.id);
+      } else {
+        newUnseen.push(s.id);
+      }
+    }
+    setUnseenIds(newUnseen);
   }, [progress]);
 
-  // Recompute on scroll
+  // On scroll, check if any unseen stages have entered the viewport
   useEffect(() => {
-    const handler = () => setBelowStages(getBelowViewport(progress));
+    if (unseenIds.length === 0) return;
+
+    const handler = () => {
+      let changed = false;
+      for (const id of unseenIds) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.top < window.innerHeight) {
+          seenRef.current.add(id);
+          changed = true;
+        }
+      }
+      if (changed) {
+        setUnseenIds((prev) => prev.filter((id) => !seenRef.current.has(id)));
+      }
+    };
+
     window.addEventListener("scroll", handler, { passive: true });
     return () => window.removeEventListener("scroll", handler);
-  }, [progress]);
+  }, [unseenIds]);
 
   const scrollToNext = useCallback(() => {
-    // Scroll to the first stage below the viewport
-    if (belowStages.length === 0) return;
-    const el = document.getElementById(belowStages[0].id);
+    if (unseenIds.length === 0) return;
+    const el = document.getElementById(unseenIds[0]);
     el?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [belowStages]);
+  }, [unseenIds]);
 
-  if (belowStages.length === 0) return null;
+  if (unseenIds.length === 0) return null;
 
-  const next = belowStages[0];
+  const next = STAGES.find((s) => s.id === unseenIds[0])!;
   const label =
-    belowStages.length === 1
+    unseenIds.length === 1
       ? `Stage ${next.number}: ${next.label} completed`
-      : `${belowStages.length} stages completed below`;
+      : `${unseenIds.length} new stages completed`;
 
   return (
     <button
