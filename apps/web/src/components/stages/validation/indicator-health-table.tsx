@@ -1,98 +1,104 @@
 import { Badge } from "@/components/ui/badge";
-import { StatTooltip } from "@/components/ui/stat-tooltip";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { HeaderWithTooltip, InfoTable } from "@/components/ui/info-table";
+import { createColumnHelper } from "@tanstack/react-table";
 import { formatNumber } from "@/lib/utils/format";
 import type { IndicatorHealth } from "@causal-ssm/api-types";
 
+const col = createColumnHelper<IndicatorHealth>();
+
+const columns = [
+  col.accessor("indicator", {
+    header: "Indicator",
+    cell: (info) => <span className="font-medium">{info.getValue()}</span>,
+  }),
+  col.accessor("n_obs", {
+    header: () => (
+      <HeaderWithTooltip
+        label="Obs"
+        tooltip="Number of non-null observations after extraction. More observations generally yield more reliable estimates."
+      />
+    ),
+    cell: (info) => info.getValue().toLocaleString(),
+    meta: { align: "right" },
+  }),
+  col.accessor("variance", {
+    header: () => (
+      <HeaderWithTooltip
+        label="Variance"
+        tooltip="Sample variance of the indicator values. Near-zero variance means the series is effectively constant and carries no information."
+      />
+    ),
+    cell: (info) => {
+      const v = info.getValue();
+      return v !== null ? formatNumber(v) : "--";
+    },
+    meta: { align: "right" },
+  }),
+  col.accessor("time_coverage_ratio", {
+    header: () => (
+      <HeaderWithTooltip
+        label="Time Coverage"
+        tooltip="Fraction of the requested time range that has data. Values close to 1.0 indicate good temporal coverage."
+      />
+    ),
+    cell: (info) => {
+      const v = info.getValue();
+      return v !== null ? formatNumber(v) : "--";
+    },
+    meta: { align: "right" },
+  }),
+  col.accessor("max_gap_ratio", {
+    header: () => (
+      <HeaderWithTooltip
+        label="Max Gap"
+        tooltip="Longest consecutive gap without data as a fraction of the total time range. Large values indicate periods where the indicator is missing."
+      />
+    ),
+    cell: (info) => {
+      const v = info.getValue();
+      return v !== null ? formatNumber(v) : "--";
+    },
+    meta: { align: "right" },
+  }),
+  col.accessor("dtype_violations", {
+    header: () => (
+      <HeaderWithTooltip
+        label="Dtype Violations"
+        tooltip="Number of values that could not be converted to the expected numeric type. Non-zero counts suggest data quality issues at the source."
+      />
+    ),
+    cell: (info) => {
+      const v = info.getValue();
+      return v > 0 ? <Badge variant="destructive">{v}</Badge> : "0";
+    },
+    meta: { align: "right" },
+  }),
+  col.accessor("duplicate_pct", {
+    header: () => (
+      <HeaderWithTooltip
+        label="Dup %"
+        tooltip="Percentage of duplicate timestamp-value pairs. High duplication may indicate redundant data or extraction errors."
+      />
+    ),
+    cell: (info) => formatNumber(info.getValue()),
+    meta: { align: "right" },
+  }),
+  col.accessor("arithmetic_sequence_detected", {
+    header: () => (
+      <HeaderWithTooltip
+        label="Arith. Seq."
+        tooltip="Whether the values form an arithmetic sequence (constant step between consecutive observations). Detected sequences often indicate synthetic or interpolated data rather than real measurements."
+      />
+    ),
+    cell: (info) =>
+      info.getValue() ? (
+        <Badge variant="warning">detected</Badge>
+      ) : (
+        <span className="text-muted-foreground">none</span>
+      ),
+  }),
+];
+
 export function IndicatorHealthTable({ rows }: { rows: IndicatorHealth[] }) {
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Indicator</TableHead>
-          <TableHead className="text-right">
-            <span className="inline-flex items-center gap-1">
-              Obs
-              <StatTooltip explanation="Number of non-null observations after extraction. More observations generally yield more reliable estimates." />
-            </span>
-          </TableHead>
-          <TableHead className="text-right">
-            <span className="inline-flex items-center gap-1">
-              Variance
-              <StatTooltip explanation="Sample variance of the indicator values. Near-zero variance means the series is effectively constant and carries no information." />
-            </span>
-          </TableHead>
-          <TableHead className="text-right">
-            <span className="inline-flex items-center gap-1">
-              Time Coverage
-              <StatTooltip explanation="Fraction of the requested time range that has data. Values close to 1.0 indicate good temporal coverage." />
-            </span>
-          </TableHead>
-          <TableHead className="text-right">
-            <span className="inline-flex items-center gap-1">
-              Max Gap
-              <StatTooltip explanation="Longest consecutive gap without data as a fraction of the total time range. Large values indicate periods where the indicator is missing." />
-            </span>
-          </TableHead>
-          <TableHead className="text-right">
-            <span className="inline-flex items-center gap-1">
-              Dtype Violations
-              <StatTooltip explanation="Number of values that could not be converted to the expected numeric type. Non-zero counts suggest data quality issues at the source." />
-            </span>
-          </TableHead>
-          <TableHead className="text-right">
-            <span className="inline-flex items-center gap-1">
-              Dup %
-              <StatTooltip explanation="Percentage of duplicate timestamp-value pairs. High duplication may indicate redundant data or extraction errors." />
-            </span>
-          </TableHead>
-          <TableHead>
-            <span className="inline-flex items-center gap-1">
-              Arith. Seq.
-              <StatTooltip explanation="Whether the values form an arithmetic sequence (constant step between consecutive observations). Detected sequences often indicate synthetic or interpolated data rather than real measurements." />
-            </span>
-          </TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((h) => (
-          <TableRow key={h.indicator}>
-            <TableCell className="font-medium">{h.indicator}</TableCell>
-            <TableCell className="text-right">{h.n_obs.toLocaleString()}</TableCell>
-            <TableCell className="text-right">
-              {h.variance !== null ? formatNumber(h.variance) : "--"}
-            </TableCell>
-            <TableCell className="text-right">
-              {h.time_coverage_ratio !== null ? formatNumber(h.time_coverage_ratio) : "--"}
-            </TableCell>
-            <TableCell className="text-right">
-              {h.max_gap_ratio !== null ? formatNumber(h.max_gap_ratio) : "--"}
-            </TableCell>
-            <TableCell className="text-right">
-              {h.dtype_violations > 0 ? (
-                <Badge variant="destructive">{h.dtype_violations}</Badge>
-              ) : (
-                "0"
-              )}
-            </TableCell>
-            <TableCell className="text-right">{formatNumber(h.duplicate_pct)}</TableCell>
-            <TableCell>
-              {h.arithmetic_sequence_detected ? (
-                <Badge variant="warning">detected</Badge>
-              ) : (
-                <span className="text-muted-foreground">none</span>
-              )}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
+  return <InfoTable columns={columns} data={rows} />;
 }

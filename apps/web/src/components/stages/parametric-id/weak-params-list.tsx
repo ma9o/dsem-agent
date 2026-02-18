@@ -1,19 +1,8 @@
 import { Badge } from "@/components/ui/badge";
-import { StatTooltip } from "@/components/ui/stat-tooltip";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { HeaderWithTooltip, InfoTable } from "@/components/ui/info-table";
+import { createColumnHelper } from "@tanstack/react-table";
 import { formatNumber } from "@/lib/utils/format";
 import type { ParameterClassification, ParameterIdentification } from "@causal-ssm/api-types";
-
-interface WeakParamsListProps {
-  params: ParameterIdentification[];
-}
 
 const classificationVariant: Record<
   ParameterClassification,
@@ -30,41 +19,46 @@ const classificationLabel: Record<ParameterClassification, string> = {
   weak: "Weak",
 };
 
-export function WeakParamsList({ params }: WeakParamsListProps) {
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Parameter</TableHead>
-          <TableHead>
-            <span className="inline-flex items-center gap-1">
-              Classification
-              <StatTooltip explanation="Structurally identified: uniquely determined by the model. Boundary: near the identification boundary. Weak: poorly identified — posterior dominated by the prior." />
-            </span>
-          </TableHead>
-          <TableHead>
-            <span className="inline-flex items-center gap-1">
-              Contraction
-              <StatTooltip explanation="Prior-to-posterior contraction ratio. Values near 1 mean the data strongly informs the parameter; values near 0 mean the posterior is dominated by the prior (weak identification)." />
-            </span>
-          </TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {params.map((param) => (
-          <TableRow key={param.name}>
-            <TableCell className="font-medium font-mono text-sm">{param.name}</TableCell>
-            <TableCell>
-              <Badge variant={classificationVariant[param.classification]}>
-                {classificationLabel[param.classification]}
-              </Badge>
-            </TableCell>
-            <TableCell className="text-sm text-muted-foreground">
-              {param.contraction_ratio !== null ? formatNumber(param.contraction_ratio) : "--"}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
+const col = createColumnHelper<ParameterIdentification>();
+
+const columns = [
+  col.accessor("name", {
+    header: "Parameter",
+    cell: (info) => (
+      <span className="font-medium font-mono">{info.getValue()}</span>
+    ),
+  }),
+  col.accessor("classification", {
+    header: () => (
+      <HeaderWithTooltip
+        label="Classification"
+        tooltip="Structurally identified: uniquely determined by the model. Boundary: near the identification boundary. Weak: poorly identified — posterior dominated by the prior."
+      />
+    ),
+    cell: (info) => (
+      <Badge variant={classificationVariant[info.getValue()]}>
+        {classificationLabel[info.getValue()]}
+      </Badge>
+    ),
+  }),
+  col.accessor("contraction_ratio", {
+    header: () => (
+      <HeaderWithTooltip
+        label="Contraction"
+        tooltip="Prior-to-posterior contraction ratio. Values near 1 mean the data strongly informs the parameter; values near 0 mean the posterior is dominated by the prior (weak identification)."
+      />
+    ),
+    cell: (info) => {
+      const v = info.getValue();
+      return (
+        <span className="text-muted-foreground">
+          {v !== null ? formatNumber(v) : "--"}
+        </span>
+      );
+    },
+  }),
+];
+
+export function WeakParamsList({ params }: { params: ParameterIdentification[] }) {
+  return <InfoTable columns={columns} data={params} />;
 }

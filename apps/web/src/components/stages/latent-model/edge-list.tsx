@@ -1,45 +1,35 @@
 import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { InfoTable } from "@/components/ui/info-table";
+import { createColumnHelper } from "@tanstack/react-table";
 import type { CausalEdge } from "@causal-ssm/api-types";
 
-interface EdgeListProps {
-  edges: CausalEdge[];
-}
+const col = createColumnHelper<CausalEdge>();
 
-export function EdgeList({ edges }: EdgeListProps) {
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Cause</TableHead>
-          <TableHead>Effect</TableHead>
-          <TableHead>Timing</TableHead>
-          <TableHead>Description</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {edges.map((edge) => (
-          <TableRow key={`${edge.cause}->${edge.effect}`}>
-            <TableCell className="font-medium">{edge.cause}</TableCell>
-            <TableCell className="font-medium">{edge.effect}</TableCell>
-            <TableCell>
-              <Badge variant={edge.lagged ? "default" : "secondary"}>
-                {edge.lagged ? "Lagged" : "Contemporaneous"}
-              </Badge>
-            </TableCell>
-            <TableCell className="max-w-xs text-sm text-muted-foreground">
-              {edge.description}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
+const columns = [
+  col.accessor("cause", {
+    header: "Cause",
+    cell: (info) => <span className="font-medium">{info.getValue()}</span>,
+  }),
+  col.accessor("effect", {
+    header: "Effect",
+    cell: (info) => <span className="font-medium">{info.getValue()}</span>,
+  }),
+  col.accessor("lagged", {
+    header: "Timing",
+    cell: (info) => (
+      <Badge variant={info.getValue() ? "default" : "secondary"}>
+        {info.getValue() ? "Lagged" : "Contemporaneous"}
+      </Badge>
+    ),
+  }),
+  col.accessor("description", {
+    header: "Description",
+    cell: (info) => (
+      <span className="max-w-xs text-muted-foreground">{info.getValue()}</span>
+    ),
+  }),
+];
+
+export function EdgeList({ edges }: { edges: CausalEdge[] }) {
+  return <InfoTable columns={columns} data={edges} />;
 }
