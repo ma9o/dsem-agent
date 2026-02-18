@@ -1,11 +1,4 @@
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DynamicTable } from "@/components/ui/dynamic-table";
 import type { Stage2Data } from "@causal-ssm/api-types";
 import { CheckCircle2, XCircle } from "lucide-react";
 
@@ -51,34 +44,7 @@ export default function Stage2Content({ data }: { data: Stage2Data }) {
         </div>
       )}
 
-      {data.combined_extractions_sample.length > 0 && (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Indicator</TableHead>
-              <TableHead>Value</TableHead>
-              <TableHead>Timestamp</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data.combined_extractions_sample.map((ext, i) => (
-              <TableRow key={`${ext.indicator}-${ext.timestamp}-${i}`}>
-                <TableCell className="font-medium">{ext.indicator}</TableCell>
-                <TableCell className="font-mono text-sm">
-                  {ext.value === null ? (
-                    <span className="text-muted-foreground">null</span>
-                  ) : (
-                    String(ext.value)
-                  )}
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {ext.timestamp ?? "--"}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
+      <DynamicTable rows={data.combined_extractions_sample} />
     </div>
   );
 }

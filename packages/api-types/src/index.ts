@@ -109,7 +109,7 @@ export interface Stage1bData {
 
 export interface Stage2Data {
   workers: import("./models/worker").WorkerStatus[];
-  combined_extractions_sample: import("./models/worker").Extraction[];
+  combined_extractions_sample: Array<Record<string, string | null>>;
   total_extractions: number;
   per_indicator_counts: Record<string, number>;
 }
