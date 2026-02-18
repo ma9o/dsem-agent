@@ -1,5 +1,5 @@
 import { DataSummaryStats } from "@/components/stages/preprocess/data-summary-stats";
-import { DynamicTable } from "@/components/ui/dynamic-table";
+import { DataTable } from "@/components/ui/data-table";
 import type { Stage0Data } from "@causal-ssm/api-types";
 
 export default function Stage0Content({ data }: { data: Stage0Data }) {
@@ -10,7 +10,7 @@ export default function Stage0Content({ data }: { data: Stage0Data }) {
         nRecords={data.n_records}
         dateRange={data.date_range}
       />
-      {data.sample.length > 0 && <DynamicTable rows={data.sample} maxHeight="max-h-64" />}
+      {data.sample.length > 0 && <DataTable rows={data.sample} maxHeight="max-h-64" />}
     </div>
   );
 }

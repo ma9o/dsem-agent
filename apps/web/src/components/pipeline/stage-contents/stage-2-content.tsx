@@ -1,4 +1,4 @@
-import { DynamicTable } from "@/components/ui/dynamic-table";
+import { DataTable } from "@/components/ui/data-table";
 import type { Stage2Data } from "@causal-ssm/api-types";
 import { CheckCircle2, XCircle } from "lucide-react";
 
@@ -44,7 +44,7 @@ export default function Stage2Content({ data }: { data: Stage2Data }) {
         </div>
       )}
 
-      <DynamicTable rows={data.combined_extractions_sample} />
+      <DataTable rows={data.combined_extractions_sample} />
     </div>
   );
 }
