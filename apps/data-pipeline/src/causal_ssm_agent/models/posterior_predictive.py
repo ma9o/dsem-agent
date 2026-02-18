@@ -41,13 +41,69 @@ class PPCWarning:
     check: str  # "calibration" | "autocorrelation" | "variance"
     message: str  # human-readable
     value: float  # diagnostic statistic
+    passed: bool = True  # whether the check passed
 
     def to_dict(self) -> dict:
         return {
             "variable": self.variable,
-            "check": self.check,
+            "check_type": self.check,
             "message": self.message,
             "value": self.value,
+            "passed": self.passed,
+        }
+
+
+@dataclass
+class PPCOverlay:
+    """Per-variable quantile bands for PPC ribbon/density overlay plots.
+
+    Provides the data for Gabry's ppc_dens_overlay / ppc_ribbon plots:
+    observed time series vs posterior predictive quantile bands.
+    """
+
+    variable: str
+    # All arrays are length T (one value per timestep)
+    observed: list[float | None]  # observed data (None for missing)
+    q025: list[float]  # 2.5th percentile of y_rep
+    q25: list[float]  # 25th percentile
+    median: list[float]  # 50th percentile
+    q75: list[float]  # 75th percentile
+    q975: list[float]  # 97.5th percentile
+
+    def to_dict(self) -> dict:
+        return {
+            "variable": self.variable,
+            "observed": self.observed,
+            "q025": self.q025,
+            "q25": self.q25,
+            "median": self.median,
+            "q75": self.q75,
+            "q975": self.q975,
+        }
+
+
+@dataclass
+class PPCTestStat:
+    """Distribution of a test statistic across y_rep draws vs observed.
+
+    Provides the data for Gabry's ppc_stat plots: histogram of T(y_rep)
+    with a vertical line at T(y_observed).
+    """
+
+    variable: str
+    stat_name: str  # "mean" | "sd" | "min" | "max"
+    observed_value: float  # T(y_observed)
+    # Histogram of T(y_rep) across posterior draws
+    rep_values: list[float]  # one per y_rep draw
+    p_value: float  # fraction of rep_values >= observed_value
+
+    def to_dict(self) -> dict:
+        return {
+            "variable": self.variable,
+            "stat_name": self.stat_name,
+            "observed_value": self.observed_value,
+            "rep_values": self.rep_values,
+            "p_value": self.p_value,
         }
 
 
@@ -58,12 +114,21 @@ class PPCResult:
     warnings: list[PPCWarning] = field(default_factory=list)
     checked: bool = False
     n_subsample: int = 0
+    overlays: list[PPCOverlay] = field(default_factory=list)
+    test_stats: list[PPCTestStat] = field(default_factory=list)
+
+    @property
+    def overall_passed(self) -> bool:
+        return all(w.passed for w in self.warnings) if self.warnings else True
 
     def to_dict(self) -> dict:
         return {
-            "warnings": [w.to_dict() for w in self.warnings],
+            "per_variable_warnings": [w.to_dict() for w in self.warnings],
+            "overall_passed": self.overall_passed,
             "checked": self.checked,
             "n_subsample": self.n_subsample,
+            "overlays": [o.to_dict() for o in self.overlays],
+            "test_stats": [t.to_dict() for t in self.test_stats],
         }
 
 
@@ -578,6 +643,7 @@ def _check_calibration(
                     check="calibration",
                     message=f"Undercoverage: {coverage:.0%} of observations fall in 95% PPC interval (expected ~95%)",
                     value=coverage,
+                    passed=False,
                 )
             )
         elif coverage > high_threshold:
@@ -587,6 +653,17 @@ def _check_calibration(
                     check="calibration",
                     message=f"Overcoverage: {coverage:.0%} of observations fall in 95% PPC interval (model may be too diffuse)",
                     value=coverage,
+                    passed=False,
+                )
+            )
+        else:
+            warnings.append(
+                PPCWarning(
+                    variable=name,
+                    check="calibration",
+                    message=f"95% CI coverage: {coverage:.1%} (expected ~95%)",
+                    value=coverage,
+                    passed=True,
                 )
             )
 
@@ -637,15 +714,17 @@ def _check_residual_autocorrelation(
         rho = float(autocov / var_r)
 
         name = manifest_names[j] if j < len(manifest_names) else f"var_{j}"
-        if abs(rho) > threshold:
-            warnings.append(
-                PPCWarning(
-                    variable=name,
-                    check="autocorrelation",
-                    message=f"Residual lag-1 autocorrelation = {rho:.2f} (|rho| > {threshold})",
-                    value=rho,
-                )
+        passed = abs(rho) <= threshold
+        warnings.append(
+            PPCWarning(
+                variable=name,
+                check="autocorrelation",
+                message=f"Residual autocorrelation at lag 1: {rho:.2f}"
+                + ("" if passed else f" (|rho| > {threshold})"),
+                value=rho,
+                passed=passed,
             )
+        )
 
     return warnings
 
@@ -694,6 +773,7 @@ def _check_variance_ratio(
                     check="variance",
                     message=f"PPC variance too high: simulated std / observed std = {ratio:.1f}",
                     value=ratio,
+                    passed=False,
                 )
             )
         elif ratio < low_ratio:
@@ -703,10 +783,132 @@ def _check_variance_ratio(
                     check="variance",
                     message=f"PPC variance too low: simulated std / observed std = {ratio:.1f}",
                     value=ratio,
+                    passed=False,
+                )
+            )
+        else:
+            warnings.append(
+                PPCWarning(
+                    variable=name,
+                    check="variance",
+                    message=f"Predicted variance {float(pp_std[j]):.3f} vs observed {obs_std:.3f} (ratio {ratio:.2f})",
+                    value=ratio,
+                    passed=True,
                 )
             )
 
     return warnings
+
+
+# ---------------------------------------------------------------------------
+# Overlay and test statistic computations
+# ---------------------------------------------------------------------------
+
+
+def _compute_overlays(
+    y_sim: jnp.ndarray,
+    observations: jnp.ndarray,
+    manifest_names: list[str],
+) -> list[PPCOverlay]:
+    """Compute per-variable quantile bands for PPC ribbon plots.
+
+    Args:
+        y_sim: (n_subsample, T, n_manifest)
+        observations: (T, n_manifest)
+        manifest_names: variable names
+    """
+    overlays = []
+    n_manifest = observations.shape[1]
+
+    q025 = jnp.percentile(y_sim, 2.5, axis=0)  # (T, m)
+    q25 = jnp.percentile(y_sim, 25.0, axis=0)
+    q50 = jnp.percentile(y_sim, 50.0, axis=0)
+    q75 = jnp.percentile(y_sim, 75.0, axis=0)
+    q975 = jnp.percentile(y_sim, 97.5, axis=0)
+
+    for j in range(n_manifest):
+        name = manifest_names[j] if j < len(manifest_names) else f"var_{j}"
+        obs_j = observations[:, j]
+        observed = [None if jnp.isnan(v) else float(v) for v in obs_j]
+
+        overlays.append(
+            PPCOverlay(
+                variable=name,
+                observed=observed,
+                q025=[float(v) for v in q025[:, j]],
+                q25=[float(v) for v in q25[:, j]],
+                median=[float(v) for v in q50[:, j]],
+                q75=[float(v) for v in q75[:, j]],
+                q975=[float(v) for v in q975[:, j]],
+            )
+        )
+
+    return overlays
+
+
+def _compute_test_stats(
+    y_sim: jnp.ndarray,
+    observations: jnp.ndarray,
+    manifest_names: list[str],
+) -> list[PPCTestStat]:
+    """Compute test statistic distributions across y_rep draws.
+
+    For each variable and each stat (mean, sd, min, max), computes the
+    statistic across all y_rep draws and compares to the observed value.
+    This is Gabry's ppc_stat plot data.
+
+    Args:
+        y_sim: (n_subsample, T, n_manifest)
+        observations: (T, n_manifest)
+        manifest_names: variable names
+    """
+    test_stats = []
+    n_manifest = observations.shape[1]
+
+    stat_fns = {
+        "mean": jnp.nanmean,
+        "sd": lambda x, **kw: jnp.nanstd(x, **kw),
+        "min": jnp.nanmin,
+        "max": jnp.nanmax,
+    }
+
+    for j in range(n_manifest):
+        name = manifest_names[j] if j < len(manifest_names) else f"var_{j}"
+        obs_j = observations[:, j]
+        valid = ~jnp.isnan(obs_j)
+        n_valid = int(jnp.sum(valid))
+        if n_valid < 3:
+            continue
+
+        valid_idx = jnp.where(valid, size=n_valid)[0]
+        obs_valid = obs_j[valid_idx]
+
+        for stat_name, stat_fn in stat_fns.items():
+            obs_stat = float(stat_fn(obs_valid))
+
+            # Compute stat for each y_rep draw (over time axis)
+            rep_stats = []
+            for i in range(y_sim.shape[0]):
+                y_rep_j = y_sim[i, :, j]
+                # Use same valid mask as observed
+                y_rep_valid = y_rep_j[valid_idx]
+                rep_stats.append(float(stat_fn(y_rep_valid)))
+
+            # Posterior predictive p-value: P(T(y_rep) >= T(y_obs))
+            rep_arr = jnp.array(rep_stats)
+            p_value = float(jnp.mean(rep_arr >= obs_stat))
+
+            test_stats.append(
+                PPCTestStat(
+                    variable=name,
+                    stat_name=stat_name,
+                    observed_value=obs_stat,
+                    rep_values=rep_stats,
+                    p_value=p_value,
+                )
+            )
+
+    return test_stats
 
 
 # ---------------------------------------------------------------------------
@@ -785,15 +987,18 @@ def run_posterior_predictive_checks(
         rng_seed=rng_seed,
     )
 
-    y_sim_flat = y_sim
-
     warnings: list[PPCWarning] = []
-    warnings.extend(_check_calibration(y_sim_flat, observations, manifest_names))
-    warnings.extend(_check_residual_autocorrelation(y_sim_flat, observations, manifest_names))
-    warnings.extend(_check_variance_ratio(y_sim_flat, observations, manifest_names))
+    warnings.extend(_check_calibration(y_sim, observations, manifest_names))
+    warnings.extend(_check_residual_autocorrelation(y_sim, observations, manifest_names))
+    warnings.extend(_check_variance_ratio(y_sim, observations, manifest_names))
+
+    overlays = _compute_overlays(y_sim, observations, manifest_names)
+    test_stats = _compute_test_stats(y_sim, observations, manifest_names)
 
     return PPCResult(
         warnings=warnings,
         checked=True,
         n_subsample=int(y_sim.shape[0]),
+        overlays=overlays,
+        test_stats=test_stats,
     )

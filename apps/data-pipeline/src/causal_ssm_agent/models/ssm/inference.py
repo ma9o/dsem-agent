@@ -56,6 +56,83 @@ class InferenceResult:
         """Return posterior samples dict."""
         return self._samples
 
+    def get_mcmc_diagnostics(self) -> dict[str, Any] | None:
+        """Extract JSON-serializable MCMC diagnostics.
+
+        Returns per-parameter R-hat, ESS, and sampler-level divergence/tree stats.
+        Returns None for non-MCMC methods (SVI, etc.).
+        """
+        if self.method in ("svi", "structured_vi", "laplace_em"):
+            return None
+
+        mcmc = self.diagnostics.get("mcmc")
+        if mcmc is None:
+            return None
+
+        from numpyro.diagnostics import summary as numpyro_summary
+
+        result: dict[str, Any] = {}
+
+        # Per-parameter convergence diagnostics via numpyro.diagnostics.summary
+        try:
+            chain_samples = mcmc.get_samples(group_by_chain=True)
+            summ = numpyro_summary(chain_samples)
+            per_param: list[dict[str, Any]] = []
+            for name, stats in summ.items():
+                entry: dict[str, Any] = {"parameter": name}
+                if "r_hat" in stats:
+                    val = stats["r_hat"]
+                    entry["r_hat"] = float(val) if val.ndim == 0 else [float(v) for v in val.flat]
+                if "n_eff" in stats:
+                    val = stats["n_eff"]
+                    entry["ess_bulk"] = float(val) if val.ndim == 0 else [float(v) for v in val.flat]
+                per_param.append(entry)
+            result["per_parameter"] = per_param
+        except Exception:
+            result["per_parameter"] = []
+
+        # Sampler-level diagnostics from extra fields
+        try:
+            extra = mcmc.get_extra_fields()
+            if "diverging" in extra:
+                div = extra["diverging"]
+                result["num_divergences"] = int(jnp.sum(div))
+                result["divergence_rate"] = float(jnp.mean(div))
+            if "num_steps" in extra:
+                steps = extra["num_steps"]
+                result["tree_depth_mean"] = float(jnp.mean(steps))
+                result["tree_depth_max"] = int(jnp.max(steps))
+            if "accept_prob" in extra:
+                ap = extra["accept_prob"]
+                result["accept_prob_mean"] = float(jnp.mean(ap))
+        except Exception:
+            pass
+
+        result["num_chains"] = int(mcmc.num_chains) if hasattr(mcmc, "num_chains") else None
+        result["num_samples"] = int(mcmc._num_samples) if hasattr(mcmc, "_num_samples") else None
+
+        return result
+
+    def get_svi_diagnostics(self) -> dict[str, Any] | None:
+        """Extract JSON-serializable SVI diagnostics (ELBO loss curve).
+
+        Returns None for non-SVI methods.
+        """
+        if self.method != "svi":
+            return None
+
+        losses = self.diagnostics.get("losses")
+        if losses is None:
+            return None
+
+        loss_list = [float(v) for v in losses]
+        # Thin to at most 500 points for the frontend
+        if len(loss_list) > 500:
+            step = len(loss_list) / 500
+            loss_list = [loss_list[int(i * step)] for i in range(500)]
+
+        return {"elbo_losses": loss_list}
+
     def print_summary(self) -> None:
         """Print summary statistics for posterior samples."""
         print(f"\nInference method: {self.method}")
@@ -226,7 +303,7 @@ def _fit_nuts(
     )
 
     rng_key = random.PRNGKey(seed)
-    mcmc.run(rng_key, observations, times)
+    mcmc.run(rng_key, observations, times, extra_fields=("diverging", "num_steps", "accept_prob"))
 
     return InferenceResult(
         _samples=mcmc.get_samples(),

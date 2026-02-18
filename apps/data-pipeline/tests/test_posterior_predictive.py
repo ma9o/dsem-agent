@@ -310,7 +310,19 @@ class TestPPCDataclasses:
     def test_ppc_warning_to_dict(self):
         w = PPCWarning(variable="x", check="calibration", message="bad", value=0.5)
         d = w.to_dict()
-        assert d == {"variable": "x", "check": "calibration", "message": "bad", "value": 0.5}
+        assert d == {
+            "variable": "x",
+            "check_type": "calibration",
+            "message": "bad",
+            "value": 0.5,
+            "passed": True,
+        }
+
+    def test_ppc_warning_to_dict_failed(self):
+        w = PPCWarning(variable="x", check="calibration", message="bad", value=0.5, passed=False)
+        d = w.to_dict()
+        assert d["passed"] is False
+        assert d["check_type"] == "calibration"
 
     def test_ppc_result_to_dict(self):
         w = PPCWarning(variable="x", check="calibration", message="bad", value=0.5)
@@ -318,8 +330,17 @@ class TestPPCDataclasses:
         d = r.to_dict()
         assert d["checked"] is True
         assert d["n_subsample"] == 50
-        assert len(d["warnings"]) == 1
-        assert d["warnings"][0]["variable"] == "x"
+        assert d["overall_passed"] is True
+        assert len(d["per_variable_warnings"]) == 1
+        assert d["per_variable_warnings"][0]["variable"] == "x"
+        assert d["overlays"] == []
+        assert d["test_stats"] == []
+
+    def test_ppc_result_overall_passed_false(self):
+        w = PPCWarning(variable="x", check="calibration", message="bad", value=0.5, passed=False)
+        r = PPCResult(warnings=[w], checked=True, n_subsample=50)
+        assert r.overall_passed is False
+        assert r.to_dict()["overall_passed"] is False
 
 
 class TestRunPPC:
