@@ -1,5 +1,14 @@
 ALWAYS THINK VERY HARD
 
+# Web app
+
+- A dev server is ALREADY running on port 3000. Do NOT start a new one.
+- To check for errors, use the next-devtools MCP 
+- If you need to restart the server, ask me first.
+- We are strictily in the `bun` ecosystem, not `npm` or `pnpm` or `yarn`
+
+# Data Pipeline
+
 - Avoid running tests marked as `slow` unless you changed something that directly impacts them. In general always run the subset of tests that make sense for the changes.
 
 - A B200 costs 6$/h on Modal so when you run GPU benchmarks be conscious of the costs.
@@ -22,9 +31,9 @@ ALWAYS THINK VERY HARD
 
 - ALWAYS encode structural assumptions as DAGs with explicit latent confounders. NEVER use ADMGs (bidirected edges) as user-facing representations. If unobserved confounding exists, model it as an explicit unobserved node (e.g., `U -> X`, `U -> Y`) rather than a bidirected edge (`X <-> Y`). ADMGs are only used internally for running y0's identification algorithm via projection.
 
-------
 
-# Terminology: Causal Modeling
+
+## Terminology: Causal Modeling
 
 We avoid "structural" due to SEM/SCM terminology collision:
 - In SEM: "structural" loosely means "latent-to-latent relationships" (vs measurement)
@@ -38,10 +47,6 @@ We avoid "structural" due to SEM/SCM terminology collision:
 | Latent-to-observed mapping | **Measurement model** | SEM distinction |
 | DAG encoding parent-child relationships | **Topological structure** | SCM distinction (y0) |
 | Mathematical form of causal mechanisms | **Functional specification** | SCM distinction (NumPyro) |
-
-------
-
-# Libraries
 
 ## polars
 Docs: https://docs.pola.rs/api/python/stable/reference/index.html
@@ -82,7 +87,7 @@ Docs: https://exa.ai/docs/sdks/python-sdk-specification
 
 ------
 
-# y0 (Causal Identification)
+## y0 (Causal Identification)
 
 Docs: https://y0.readthedocs.io/
 Theory: [docs/modeling/assumptions.md](docs/modeling/assumptions.md) (A3a for temporal unrolling)
