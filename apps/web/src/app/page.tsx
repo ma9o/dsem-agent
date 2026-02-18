@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { uploadFile } from "@/lib/api/endpoints";
-import { MOCK_RUN_ID, isMockMode } from "@/lib/api/mock-provider";
+import { isMockMode, MOCK_RUN_ID } from "@/lib/api/mock-provider";
 import { getDeploymentId, triggerRun } from "@/lib/api/prefect";
 import { ArrowRight, FileText, Loader2, Sparkles, Upload, X } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -29,6 +29,12 @@ export default function LandingPage() {
   const [file, setFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isMac, setIsMac] = useState(false);
+
+  useEffect(() => {
+    if (isMockMode()) {
+      router.replace(`/analysis/${MOCK_RUN_ID}`);
+    }
+  }, [router]);
 
   useEffect(() => {
     setIsMac(/Mac/.test(navigator.userAgent));
@@ -82,16 +88,14 @@ export default function LandingPage() {
     setError(null);
 
     try {
-      if (isMockMode()) {
-        router.push(`/analysis/${MOCK_RUN_ID}`);
+      if (!file) {
+        setError("Please upload your data file.");
+        setIsSubmitting(false);
         return;
       }
 
       const userId = `user-${Date.now()}`;
-
-      if (file) {
-        await uploadFile(file, userId);
-      }
+      await uploadFile(file, userId);
 
       const deploymentId = await getDeploymentId();
       const runId = await triggerRun(deploymentId, {
@@ -107,7 +111,7 @@ export default function LandingPage() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && question.trim() && !isSubmitting) {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && question.trim() && file && !isSubmitting) {
       handleSubmit();
     }
   };
@@ -164,17 +168,10 @@ export default function LandingPage() {
 
         <Card className="animate-fade-in-up" style={{ animationDelay: "0.1s" }}>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Data Upload</CardTitle>
-                <CardDescription>
-                  Upload your Google Takeout export (ZIP or JSON)
-                </CardDescription>
-              </div>
-              <span className="rounded-full border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                Optional
-              </span>
-            </div>
+            <CardTitle>Data Upload</CardTitle>
+            <CardDescription>
+              Upload your Google Takeout export (ZIP or JSON)
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div
@@ -247,7 +244,7 @@ export default function LandingPage() {
             className="w-full"
             size="lg"
             onClick={handleSubmit}
-            disabled={isSubmitting || !question.trim()}
+            disabled={isSubmitting || !question.trim() || !file}
           >
             {isSubmitting ? (
               <>

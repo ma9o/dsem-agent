@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "katex/dist/katex.min.css";
 import "./globals.css";
-import { SiteHeader } from "@/components/site-header";
 import { Providers } from "./providers";
 
 const geistSans = Geist({
@@ -42,7 +41,6 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <Providers>
-          <SiteHeader />
           <main>{children}</main>
         </Providers>
       </body>

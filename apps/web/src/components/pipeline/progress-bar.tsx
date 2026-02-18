@@ -2,6 +2,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import type { PipelineProgress } from "@/lib/hooks/use-run-events";
 import { STAGES } from "@causal-ssm/api-types";
 import { Check, Loader2, X } from "lucide-react";
+import Link from "next/link";
 
 export function PipelineProgressBar({ progress }: { progress: PipelineProgress | undefined }) {
   if (!progress) return null;
@@ -9,20 +10,28 @@ export function PipelineProgressBar({ progress }: { progress: PipelineProgress |
   const completed = STAGES.filter((s) => progress.stages[s.id] === "completed").length;
 
   return (
-    <div className="sticky top-12 z-40 bg-background/80 backdrop-blur-sm border-b px-3 py-2.5 sm:px-4 sm:py-3">
+    <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-sm border-b px-3 py-2.5 sm:px-4 sm:py-3">
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-1.5">
-          <span className="text-xs font-medium text-muted-foreground">
-            {completed}/{STAGES.length} stages
-          </span>
-          {progress.isComplete && (
-            <span className="animate-fade-in text-xs font-medium text-success">
-              Complete
+          <Link
+            href="/"
+            className="text-sm font-semibold tracking-tight hover:opacity-80 transition-opacity"
+          >
+            Causal Inference Pipeline
+          </Link>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">
+              {completed}/{STAGES.length} stages
             </span>
-          )}
-          {progress.isFailed && (
-            <span className="text-xs font-medium text-destructive">Failed</span>
-          )}
+            {progress.isComplete && (
+              <span className="animate-fade-in text-xs font-medium text-success">
+                Complete
+              </span>
+            )}
+            {progress.isFailed && (
+              <span className="text-xs font-medium text-destructive">Failed</span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-1.5">
           {STAGES.map((stage) => {
@@ -71,6 +80,6 @@ export function PipelineProgressBar({ progress }: { progress: PipelineProgress |
           })}
         </div>
       </div>
-    </div>
+    </header>
   );
 }
