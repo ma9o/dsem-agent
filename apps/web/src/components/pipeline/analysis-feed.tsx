@@ -19,6 +19,15 @@ export function AnalysisFeed({
   runId: string;
   progress: PipelineProgress | undefined;
 }) {
+  const visibleStageIds = useMemo(
+    () =>
+      progress
+        ? STAGES.filter((s) => progress.stages[s.id] !== "pending").map((s) => s.id)
+        : [],
+    [progress],
+  );
+  useKeyboardNav(visibleStageIds);
+
   if (!progress) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-20">
@@ -40,8 +49,6 @@ export function AnalysisFeed({
   }
 
   const visibleStages = STAGES.filter((s) => progress.stages[s.id] !== "pending");
-  const visibleStageIds = useMemo(() => visibleStages.map((s) => s.id), [visibleStages]);
-  useKeyboardNav(visibleStageIds);
 
   return (
     <div>
