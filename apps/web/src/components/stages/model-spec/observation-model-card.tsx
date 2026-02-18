@@ -18,6 +18,7 @@ import {
 interface ObservationModelCardProps {
   likelihood: LikelihoodSpec;
   extractions: Extraction[];
+  priorSamples?: number[];
 }
 
 /** Bin numeric values into a histogram. */
@@ -55,76 +56,49 @@ function buildCountFrequency(values: number[]): Array<{ binCenter: number; count
     .map(([k, count]) => ({ binCenter: k, count }));
 }
 
-/** Poisson PMF. */
-function poissonPmf(k: number, lambda: number): number {
-  if (k < 0 || !Number.isInteger(k)) return 0;
-  let logP = -lambda + k * Math.log(lambda);
-  for (let i = 2; i <= k; i++) logP -= Math.log(i);
-  return Math.exp(logP);
-}
+/**
+ * Bin prior predictive samples into the same bin structure as the data histogram,
+ * scaled so the total area matches the data histogram (n_data counts).
+ */
+function binPriorSamples(
+  priorSamples: number[],
+  dataBins: Array<{ binCenter: number }>,
+  nData: number,
+  isDiscrete: boolean,
+): Array<{ binCenter: number; prior: number }> {
+  if (priorSamples.length === 0 || dataBins.length === 0) return [];
 
-/** Normal PDF. */
-function normalPdf(x: number, mu: number, sigma: number): number {
-  const z = (x - mu) / sigma;
-  return Math.exp(-0.5 * z * z) / (sigma * Math.sqrt(2 * Math.PI));
-}
-
-/** Beta PDF (using Stirling approx for log-gamma). */
-function betaPdf(x: number, a: number, b: number): number {
-  if (x <= 0 || x >= 1) return 0;
-  const lnGamma = (v: number) =>
-    0.5 * Math.log((2 * Math.PI) / v) + v * (Math.log(v + 1 / (12 * v - 1 / (10 * v))) - 1);
-  const logB = lnGamma(a) + lnGamma(b) - lnGamma(a + b);
-  return Math.exp((a - 1) * Math.log(x) + (b - 1) * Math.log(1 - x) - logB);
-}
-
-/** MoM fit: fit distribution to data via method of moments. */
-function momOverlay(
-  dist: string,
-  values: number[],
-  bins: Array<{ binCenter: number }>,
-  n: number,
-): Array<{ binCenter: number; mom: number }> {
-  if (values.length < 2) return [];
-
-  const mean = values.reduce((s, v) => s + v, 0) / values.length;
-  const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / (values.length - 1);
-  const std = Math.sqrt(variance);
-
-  switch (dist) {
-    case "gaussian": {
-      const binWidth = bins.length > 1 ? bins[1].binCenter - bins[0].binCenter : 1;
-      return bins.map((b) => ({
-        binCenter: b.binCenter,
-        mom: normalPdf(b.binCenter, mean, std) * n * binWidth,
-      }));
+  if (isDiscrete) {
+    // Count frequency at each discrete value
+    const freq = new Map<number, number>();
+    for (const v of priorSamples) {
+      freq.set(v, (freq.get(v) ?? 0) + 1);
     }
-    case "poisson": {
-      return bins.map((b) => ({
-        binCenter: b.binCenter,
-        mom: poissonPmf(b.binCenter, mean) * n,
-      }));
-    }
-    case "bernoulli": {
-      return [
-        { binCenter: 0, mom: (1 - mean) * n },
-        { binCenter: 1, mom: mean * n },
-      ];
-    }
-    case "beta": {
-      const m = Math.max(0.01, Math.min(0.99, mean));
-      const v = Math.min(variance, m * (1 - m) - 0.001);
-      const alpha = m * ((m * (1 - m)) / Math.max(v, 0.001) - 1);
-      const beta = (1 - m) * ((m * (1 - m)) / Math.max(v, 0.001) - 1);
-      const binWidth = bins.length > 1 ? bins[1].binCenter - bins[0].binCenter : 0.1;
-      return bins.map((b) => ({
-        binCenter: b.binCenter,
-        mom: betaPdf(b.binCenter, Math.max(alpha, 0.1), Math.max(beta, 0.1)) * n * binWidth,
-      }));
-    }
-    default:
-      return [];
+    // Scale so total matches nData
+    const scale = nData / priorSamples.length;
+    return dataBins.map((b) => ({
+      binCenter: b.binCenter,
+      prior: (freq.get(b.binCenter) ?? 0) * scale,
+    }));
   }
+
+  // Continuous: use same bin edges as data histogram
+  if (dataBins.length < 2) return [];
+  const binWidth = dataBins[1].binCenter - dataBins[0].binCenter;
+  const firstEdge = dataBins[0].binCenter - binWidth / 2;
+
+  const counts = new Array(dataBins.length).fill(0);
+  for (const v of priorSamples) {
+    const idx = Math.min(Math.max(Math.floor((v - firstEdge) / binWidth), 0), dataBins.length - 1);
+    counts[idx]++;
+  }
+
+  // Scale so total count matches nData
+  const scale = nData / priorSamples.length;
+  return dataBins.map((b, i) => ({
+    binCenter: b.binCenter,
+    prior: counts[i] * scale,
+  }));
 }
 
 /** Format link function for display. */
@@ -143,7 +117,11 @@ function linkLabel(link: string): string {
   }
 }
 
-export function ObservationModelCard({ likelihood, extractions }: ObservationModelCardProps) {
+export function ObservationModelCard({
+  likelihood,
+  extractions,
+  priorSamples,
+}: ObservationModelCardProps) {
   const numericValues = extractions
     .map((e) => (typeof e.value === "boolean" ? (e.value ? 1 : 0) : Number(e.value)))
     .filter((v) => !Number.isNaN(v));
@@ -157,11 +135,16 @@ export function ObservationModelCard({ likelihood, extractions }: ObservationMod
     ? buildCountFrequency(numericValues)
     : buildHistogram(numericValues, Math.min(15, Math.ceil(Math.sqrt(numericValues.length))));
 
-  const mom = momOverlay(likelihood.distribution, numericValues, bins, numericValues.length);
+  const prior =
+    priorSamples && priorSamples.length > 0
+      ? binPriorSamples(priorSamples, bins, numericValues.length, isDiscrete)
+      : [];
+
+  const hasPrior = prior.length > 0;
 
   const chartData = bins.map((b) => {
-    const m = mom.find((o) => o.binCenter === b.binCenter);
-    return { ...b, mom: m?.mom ?? 0 };
+    const p = prior.find((o) => o.binCenter === b.binCenter);
+    return { ...b, ...(hasPrior ? { prior: p?.prior ?? 0 } : {}) };
   });
 
   const mean = numericValues.reduce((s, v) => s + v, 0) / numericValues.length;
@@ -196,13 +179,15 @@ export function ObservationModelCard({ likelihood, extractions }: ObservationMod
                 opacity={0.3}
                 barSize={isDiscrete ? 20 : undefined}
               />
-              <Line
-                type="monotone"
-                dataKey="mom"
-                stroke="var(--primary)"
-                strokeWidth={1.5}
-                dot={false}
-              />
+              {hasPrior && (
+                <Line
+                  type="monotone"
+                  dataKey="prior"
+                  stroke="var(--primary)"
+                  strokeWidth={2}
+                  dot={false}
+                />
+              )}
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -210,13 +195,15 @@ export function ObservationModelCard({ likelihood, extractions }: ObservationMod
           <span>
             n={numericValues.length} &middot; mean={formatNumber(mean, 2)}
           </span>
-          <span className="inline-flex items-center gap-2">
-            <span className="inline-flex items-center gap-1">
-              <span className="inline-block h-0.5 w-3 bg-primary" />
-              MoM fit
+          {hasPrior && (
+            <span className="inline-flex items-center gap-2">
+              <span className="inline-flex items-center gap-1">
+                <span className="inline-block h-0.5 w-3 bg-primary" />
+                prior pred.
+              </span>
+              <StatTooltip explanation="Marginal prior predictive — observations simulated from the model's priors before seeing data. Compare against the empirical histogram to check whether the priors imply a plausible data scale." />
             </span>
-            <StatTooltip explanation="Method of moments fit: best-fit distribution of the chosen family to the observed data. Shows whether the distribution family is a good match for the data shape." />
-          </span>
+          )}
         </div>
       </CardContent>
     </Card>

@@ -31,6 +31,7 @@ export default function Stage4Content({
                 key={lik.variable}
                 likelihood={lik}
                 extractions={extractions.filter((e) => e.indicator === lik.variable)}
+                priorSamples={data.prior_predictive_samples?.[lik.variable]}
               />
             ))}
           </div>
