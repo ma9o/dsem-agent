@@ -98,7 +98,7 @@ export function ForestPlotPanel({ results }: ForestPlotPanelProps) {
               <Legend />
               <ReferenceLine
                 x={0}
-                stroke="hsl(var(--destructive))"
+                stroke="var(--destructive)"
                 strokeDasharray="3 3"
                 strokeWidth={2}
               />
@@ -108,7 +108,7 @@ export function ForestPlotPanel({ results }: ForestPlotPanelProps) {
               <Bar
                 dataKey="lower_to_point"
                 stackId="ci"
-                fill="hsl(var(--muted-foreground))"
+                fill="var(--muted-foreground)"
                 name="CI (lower)"
                 radius={[0, 0, 0, 0]}
               />
@@ -116,7 +116,7 @@ export function ForestPlotPanel({ results }: ForestPlotPanelProps) {
               <Bar
                 dataKey="point_to_upper"
                 stackId="ci"
-                fill="hsl(var(--primary))"
+                fill="var(--primary)"
                 name="CI (upper)"
                 radius={[0, 4, 4, 0]}
               />

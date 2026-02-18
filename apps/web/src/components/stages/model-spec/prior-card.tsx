@@ -49,7 +49,7 @@ export function PriorCard({ prior }: PriorCardProps) {
               <Line
                 type="monotone"
                 dataKey="y"
-                stroke="hsl(var(--primary))"
+                stroke="var(--primary)"
                 strokeWidth={2}
                 dot={false}
               />

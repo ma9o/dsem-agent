@@ -21,8 +21,8 @@ interface TRuleCardProps {
 
 export function TRuleCard({ tRule }: TRuleCardProps) {
   const chartData = [
-    { name: "Free Params", value: tRule.n_free_params, fill: "hsl(var(--primary))" },
-    { name: "Moments", value: tRule.n_moments, fill: "hsl(var(--muted-foreground))" },
+    { name: "Free Params", value: tRule.n_free_params, fill: "var(--primary)" },
+    { name: "Moments", value: tRule.n_moments, fill: "var(--muted-foreground)" },
   ];
 
   const paramCountEntries = Object.entries(tRule.param_counts);

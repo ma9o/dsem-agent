@@ -66,7 +66,7 @@ export function PriorDensityChart({ distribution, params, densityPoints }: Prior
             {mean !== null && (
               <ReferenceLine
                 x={mean}
-                stroke="hsl(var(--muted-foreground))"
+                stroke="var(--muted-foreground)"
                 strokeDasharray="4 4"
                 label={{ value: `\u03BC=${formatNumber(mean, 2)}`, position: "top", fontSize: 11 }}
               />
@@ -74,7 +74,7 @@ export function PriorDensityChart({ distribution, params, densityPoints }: Prior
             <Line
               type="monotone"
               dataKey="y"
-              stroke="hsl(var(--primary))"
+              stroke="var(--primary)"
               strokeWidth={2}
               dot={false}
             />
