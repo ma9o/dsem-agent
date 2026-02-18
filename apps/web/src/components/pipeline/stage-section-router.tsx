@@ -22,8 +22,6 @@ import {
   type ReactNode,
   Suspense,
   lazy,
-  useLayoutEffect,
-  useRef,
   useState,
 } from "react";
 import { StageSection } from "./stage-section";
@@ -45,26 +43,12 @@ function StageWithTrace({
   trace?: LLMTrace;
 }) {
   const [showTrace, setShowTrace] = useState(false);
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [contentHeight, setContentHeight] = useState(600);
-
-  useLayoutEffect(() => {
-    const el = contentRef.current;
-    if (!el) return;
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContentHeight(Math.max(400, entry.contentRect.height));
-      }
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
 
   if (!trace) return <>{children}</>;
 
   return (
-    <div>
-      <div className="mb-3 flex justify-end">
+    <div className={showTrace ? "" : "max-w-6xl mx-auto"}>
+      <div className={cn("mb-3 flex justify-end", showTrace ? "" : "max-w-6xl mx-auto")}>
         <button
           type="button"
           onClick={() => setShowTrace((v) => !v)}
@@ -79,18 +63,12 @@ function StageWithTrace({
           {showTrace ? "Hide" : "Show"} LLM Trace
         </button>
       </div>
-      <div className="flex gap-4">
-        <div
-          ref={contentRef}
-          className={showTrace ? "min-w-0 flex-1" : "w-full"}
-        >
+      <div className={showTrace ? "flex gap-4" : ""}>
+        <div className={showTrace ? "min-w-0 w-2/3" : ""}>
           {children}
         </div>
         {showTrace && (
-          <div
-            className="w-[420px] shrink-0 overflow-y-auto rounded-lg border bg-muted/30 p-3"
-            style={{ maxHeight: contentHeight }}
-          >
+          <div className="min-w-0 w-1/3 overflow-y-auto rounded-lg border bg-muted/30 p-3">
             <LLMTracePanel trace={trace} />
           </div>
         )}
@@ -114,10 +92,10 @@ export function StageSectionRouter({
   const elapsedMs =
     timing?.completedAt && timing?.startedAt ? timing.completedAt - timing.startedAt : undefined;
 
-  // Read context from the stage data (shared query key — cache hit when stage content is loaded)
-  const { data: stageData } = useStageData<{ context?: string }>(runId, stage.id, isCompleted);
+  // Read context + trace from the stage data (shared query key — cache hit when stage content is loaded)
+  const { data: stageData } = useStageData<{ context?: string; llm_trace?: LLMTrace }>(runId, stage.id, isCompleted);
 
-  return (
+  const section = (
     <StageSection
       id={stage.id}
       number={stage.number}
@@ -137,6 +115,16 @@ export function StageSectionRouter({
       )}
     </StageSection>
   );
+
+  if (stageData?.llm_trace) {
+    return (
+      <StageWithTrace trace={stageData.llm_trace}>
+        {section}
+      </StageWithTrace>
+    );
+  }
+
+  return <div className="max-w-6xl mx-auto">{section}</div>;
 }
 
 function StageContent({ stageId, runId }: { stageId: string; runId: string }) {
@@ -171,21 +159,13 @@ function Stage0Wrapper({ runId }: { runId: string }) {
 function Stage1aWrapper({ runId }: { runId: string }) {
   const { data } = useStageData<Stage1aData>(runId, "stage-1a", true);
   if (!data) return null;
-  return (
-    <StageWithTrace trace={data.llm_trace}>
-      <Stage1aContent data={data} />
-    </StageWithTrace>
-  );
+  return <Stage1aContent data={data} />;
 }
 
 function Stage1bWrapper({ runId }: { runId: string }) {
   const { data } = useStageData<Stage1bData>(runId, "stage-1b", true);
   if (!data) return null;
-  return (
-    <StageWithTrace trace={data.llm_trace}>
-      <Stage1bContent data={data} />
-    </StageWithTrace>
-  );
+  return <Stage1bContent data={data} />;
 }
 
 function Stage2Wrapper({ runId }: { runId: string }) {
@@ -204,11 +184,7 @@ function Stage4Wrapper({ runId }: { runId: string }) {
   const { data } = useStageData<Stage4Data>(runId, "stage-4", true);
   const { data: stage2 } = useStageData<Stage2Data>(runId, "stage-2", true);
   if (!data) return null;
-  return (
-    <StageWithTrace trace={data.llm_trace}>
-      <Stage4Content data={data} extractions={stage2?.combined_extractions_sample} />
-    </StageWithTrace>
-  );
+  return <Stage4Content data={data} extractions={stage2?.combined_extractions_sample} />;
 }
 
 function Stage4bWrapper({ runId }: { runId: string }) {

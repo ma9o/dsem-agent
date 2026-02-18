@@ -54,7 +54,7 @@ export function AnalysisFeed({
   return (
     <div>
       <PipelineProgressBar progress={progress} />
-      <div className="max-w-6xl mx-auto space-y-4 px-4 py-6 sm:space-y-6 sm:px-6">
+      <div className="space-y-4 px-4 py-6 sm:space-y-6 sm:px-6">
         {visibleStages.map((stage) => (
           <StageSectionRouter
             key={stage.id}
@@ -64,8 +64,8 @@ export function AnalysisFeed({
             timing={progress.timings[stage.id]}
           />
         ))}
-        {!progress.isComplete && <ActiveStageIndicator stageId={progress.currentStage} />}
-        {progress.isComplete && <CompletionSummary runId={runId} />}
+        {!progress.isComplete && <div className="max-w-6xl mx-auto"><ActiveStageIndicator stageId={progress.currentStage} /></div>}
+        {progress.isComplete && <div className="max-w-6xl mx-auto"><CompletionSummary runId={runId} /></div>}
       </div>
       <NewStagesNotification progress={progress} />
       <BackToTop />
