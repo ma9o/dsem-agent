@@ -448,7 +448,55 @@ async def causal_inference_pipeline(
             description="Final treatment effect ranking",
         )
 
-    return {"intervention_results": intervention_results, "ppc": ppc_result}
+    # Assemble serializable stage-5 data for the webapp
+    # Power-scaling: reshape from {param -> value} dicts to per-param list
+    ps_list = []
+    if ps_result.get("checked", False):
+        diag = ps_result.get("diagnosis", {})
+        prior_s = ps_result.get("prior_sensitivity", {})
+        lik_s = ps_result.get("likelihood_sensitivity", {})
+        for param in diag:
+            ps_list.append({
+                "parameter": param,
+                "diagnosis": diag[param],
+                "prior_sensitivity": prior_s.get(param, 0.0),
+                "likelihood_sensitivity": lik_s.get(param, 0.0),
+            })
+
+    # Inference metadata
+    inf_meta = {
+        "method": (
+            fitted.result().get("inference_type", "unknown")
+            if hasattr(fitted, "result")
+            else fitted.get("inference_type", "unknown")
+        )
+        if not config.inference.gpu
+        else gpu_result.get("mcmc_diagnostics", {}).get("method", "unknown")
+        if config.inference.gpu
+        else "unknown",
+        "n_samples": 10000,
+        "duration_seconds": 0.0,
+    }
+
+    # MCMC / SVI diagnostics
+    mcmc_diagnostics = None
+    svi_diagnostics = None
+    if config.inference.gpu:
+        mcmc_diagnostics = gpu_result.get("mcmc_diagnostics")
+        svi_diagnostics = gpu_result.get("svi_diagnostics")
+    else:
+        fitted_res = fitted.result() if hasattr(fitted, "result") else fitted
+        mcmc_diagnostics = fitted_res.get("mcmc_diagnostics")
+        svi_diagnostics = fitted_res.get("svi_diagnostics")
+
+    return {
+        "intervention_results": intervention_results,
+        "power_scaling": ps_list,
+        "ppc": ppc_result,
+        "inference_metadata": inf_meta,
+        "mcmc_diagnostics": mcmc_diagnostics,
+        "svi_diagnostics": svi_diagnostics,
+    }
 
 
 if __name__ == "__main__":

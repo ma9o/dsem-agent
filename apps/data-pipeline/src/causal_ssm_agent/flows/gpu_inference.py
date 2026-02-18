@@ -88,6 +88,10 @@ def _stage5_on_gpu(
     result = builder.fit(wide_data)
     logger.info("Fit complete: method=%s", result.method)
 
+    # Extract serializable diagnostics before they get lost across the boundary
+    mcmc_diag = result.get_mcmc_diagnostics()
+    svi_diag = result.get_svi_diagnostics()
+
     # ---------- power-scaling sensitivity ----------
     ps_result: dict[str, Any]
     try:
@@ -189,6 +193,8 @@ def _stage5_on_gpu(
         "ps_result": ps_result,
         "ppc_result": ppc_result,
         "intervention_results": intervention_results,
+        "mcmc_diagnostics": mcmc_diag,
+        "svi_diagnostics": svi_diag,
     }
 
 

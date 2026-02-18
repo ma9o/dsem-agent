@@ -63,12 +63,18 @@ def fit_model(
         time_col = "time" if "time" in X.columns else None
         fit_times = jnp.array(X[time_col].to_numpy(), dtype=jnp.float32) if time_col else None
 
+        # Extract serializable diagnostics (MCMC or SVI)
+        mcmc_diag = result.get_mcmc_diagnostics()
+        svi_diag = result.get_svi_diagnostics()
+
         return {
             "fitted": True,
             "inference_type": result.method,
             "result": result,
             "builder": builder,
             "times": fit_times,
+            "mcmc_diagnostics": mcmc_diag,
+            "svi_diagnostics": svi_diag,
         }
 
     except NotImplementedError:
