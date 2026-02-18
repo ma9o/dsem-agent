@@ -67,8 +67,13 @@ export type {
   PowerScalingResult,
   PowerScalingDiagnosis,
   PPCWarning,
+  PPCOverlay,
+  PPCTestStat,
   PPCResult,
   InferenceMetadata,
+  MCMCParamDiagnostic,
+  MCMCDiagnostics,
+  SVIDiagnostics,
 } from "./models/inference";
 
 // Stage data envelope types
@@ -127,6 +132,7 @@ export interface Stage4Data {
   }>;
   ssm_equations: string[];
   raw_completion: string;
+  prior_predictive_samples?: Record<string, number[]>;
 }
 
 export interface Stage4bData {
@@ -138,4 +144,6 @@ export interface Stage5Data {
   power_scaling: import("./models/inference").PowerScalingResult[];
   ppc: import("./models/inference").PPCResult;
   inference_metadata: import("./models/inference").InferenceMetadata;
+  mcmc_diagnostics?: import("./models/inference").MCMCDiagnostics | null;
+  svi_diagnostics?: import("./models/inference").SVIDiagnostics | null;
 }
