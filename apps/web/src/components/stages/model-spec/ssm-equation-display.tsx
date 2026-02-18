@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatTooltip } from "@/components/ui/stat-tooltip";
 import type { LikelihoodSpec, ParameterSpec, PriorProposal } from "@causal-ssm/api-types";
@@ -143,6 +144,13 @@ export function SSMEquationDisplay({ likelihoods, parameters, priors }: SsmEquat
     String.raw`\mathrm{d}\boldsymbol{\eta}(t) = \bigl(\mathbf{A}\,\boldsymbol{\eta}(t) + \mathbf{c}\bigr)\,\mathrm{d}t + \mathbf{G}\,\mathrm{d}\mathbf{W}(t)`,
   );
 
+  const transitionLatex = tex(
+    String.raw`\begin{aligned}
+\eta_i(t) &= \rho_i \, \eta_i(t\!-\!1) + \textstyle\sum_{j \in \mathrm{pa}(i)} \beta_{ji}\, \eta_j(t\!-\!1) + \varepsilon_i(t) \\
+\varepsilon_i(t) &\sim \mathcal{N}(0,\, \sigma_i^2)
+\end{aligned}`,
+  );
+
   const stateVecLatex =
     states.length > 0
       ? tex(
@@ -177,12 +185,16 @@ export function SSMEquationDisplay({ likelihoods, parameters, priors }: SsmEquat
       <CardContent className="space-y-5">
         {/* State dynamics */}
         <section>
-          <h4 className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            State Dynamics
-            <StatTooltip explanation="Continuous-time stochastic differential equation governing how the latent states η(t) evolve. A encodes autoregressive persistence (diagonal) and cross-construct causal effects (off-diagonal). G scales the Wiener process noise." />
-          </h4>
+          <div className="mb-2 flex items-center justify-between">
+            <h4 className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              State Dynamics
+              <StatTooltip explanation="Continuous-time stochastic differential equation governing how the latent states η(t) evolve. A encodes autoregressive persistence (diagonal) and cross-construct causal effects (off-diagonal). G scales the Wiener process noise." />
+            </h4>
+            <Badge variant="outline">Linear Gaussian</Badge>
+          </div>
           <div className="overflow-x-auto rounded-md border bg-muted/30 px-4 py-3">
             <div dangerouslySetInnerHTML={{ __html: sdeLatex }} />
+            <div dangerouslySetInnerHTML={{ __html: transitionLatex }} />
             {stateVecLatex && <div dangerouslySetInnerHTML={{ __html: stateVecLatex }} />}
           </div>
         </section>
