@@ -46,32 +46,41 @@ function StageWithTrace({
 
   if (!trace) return <>{children}</>;
 
+  if (!showTrace) {
+    return (
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-3 flex justify-end">
+          <button
+            type="button"
+            onClick={() => setShowTrace(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-muted bg-muted/50 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted"
+          >
+            <Bot className="h-3.5 w-3.5" />
+            Show LLM Trace
+          </button>
+        </div>
+        {children}
+      </div>
+    );
+  }
+
   return (
-    <div className={showTrace ? "" : "max-w-6xl mx-auto"}>
-      <div className={cn("mb-3 flex justify-end", showTrace ? "" : "max-w-6xl mx-auto")}>
+    <div className="flex gap-4">
+      <div className="min-w-0 w-2/3">
+        {children}
+      </div>
+      <div className="min-w-0 w-1/3 flex flex-col gap-3">
         <button
           type="button"
-          onClick={() => setShowTrace((v) => !v)}
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
-            showTrace
-              ? "border-primary/30 bg-primary/10 text-primary"
-              : "border-muted bg-muted/50 text-muted-foreground hover:bg-muted",
-          )}
+          onClick={() => setShowTrace(false)}
+          className="inline-flex items-center gap-1.5 self-end rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors"
         >
           <Bot className="h-3.5 w-3.5" />
-          {showTrace ? "Hide" : "Show"} LLM Trace
+          Hide LLM Trace
         </button>
-      </div>
-      <div className={showTrace ? "flex gap-4" : ""}>
-        <div className={showTrace ? "min-w-0 w-2/3" : ""}>
-          {children}
+        <div className="overflow-y-auto rounded-lg border bg-muted/30 p-3">
+          <LLMTracePanel trace={trace} />
         </div>
-        {showTrace && (
-          <div className="min-w-0 w-1/3 overflow-y-auto rounded-lg border bg-muted/30 p-3">
-            <LLMTracePanel trace={trace} />
-          </div>
-        )}
       </div>
     </div>
   );
