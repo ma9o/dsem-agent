@@ -18,6 +18,7 @@ import type {
   StageMeta,
 } from "@causal-ssm/api-types";
 import { Bot } from "lucide-react";
+import { motion } from "motion/react";
 import {
   type ReactNode,
   Suspense,
@@ -46,42 +47,47 @@ function StageWithTrace({
 
   if (!trace) return <>{children}</>;
 
-  if (!showTrace) {
-    return (
-      <div className="max-w-6xl mx-auto">
-        <div className="mb-3 flex justify-end">
-          <button
-            type="button"
-            onClick={() => setShowTrace(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-muted bg-muted/50 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted"
-          >
-            <Bot className="h-3.5 w-3.5" />
-            Show LLM Trace
-          </button>
-        </div>
-        {children}
-      </div>
-    );
-  }
+  const transition = { duration: 0.35, ease: [0.4, 0, 0.2, 1] as const };
 
   return (
-    <div className="flex gap-4">
-      <div className="min-w-0 w-2/3">
+    <div className="flex items-stretch gap-4">
+      <motion.div
+        className={cn("min-w-0", !showTrace && "max-w-6xl mx-auto")}
+        animate={{ flex: showTrace ? 2 : 1 }}
+        transition={transition}
+      >
+        {!showTrace && (
+          <div className="mb-3 flex justify-end">
+            <button
+              type="button"
+              onClick={() => setShowTrace(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-muted bg-muted/50 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted"
+            >
+              <Bot className="h-3.5 w-3.5" />
+              Show LLM Trace
+            </button>
+          </div>
+        )}
         {children}
-      </div>
-      <div className="min-w-0 w-1/3 flex flex-col gap-3">
+      </motion.div>
+      <motion.div
+        className="flex min-w-0 flex-col gap-3 overflow-hidden"
+        animate={{ flex: showTrace ? 1 : 0, opacity: showTrace ? 1 : 0 }}
+        initial={false}
+        transition={transition}
+      >
         <button
           type="button"
           onClick={() => setShowTrace(false)}
-          className="inline-flex items-center gap-1.5 self-end rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors"
+          className="inline-flex w-full shrink-0 items-center justify-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors"
         >
           <Bot className="h-3.5 w-3.5" />
           Hide LLM Trace
         </button>
-        <div className="overflow-y-auto rounded-lg border bg-muted/30 p-3">
+        <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border bg-muted/30 p-3">
           <LLMTracePanel trace={trace} />
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
