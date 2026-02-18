@@ -2,6 +2,8 @@ ALWAYS THINK VERY HARD
 
 # Web app
 
+- NEVER put domain logic (statistical computations, field derivations, pass/fail decisions) into the frontend code. If the frontend needs a field, compute it at the source (the pipeline domain code that owns that data). Serialization boundaries should only assemble and pass through — never transform or derive.
+
 - A dev server is ALREADY running on port 3000. Do NOT start a new one.
 - To check for errors, use the next-devtools MCP 
 - If you need to restart the server, ask me first.
