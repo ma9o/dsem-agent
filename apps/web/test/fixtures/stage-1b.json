@@ -35,13 +35,15 @@
       "identifiable_treatments": {
         "stress": { "method": "do_calculus", "estimand": "P(procrastination | do(stress))", "marginalized_confounders": [], "instruments": [] },
         "digital_distraction": { "method": "do_calculus", "estimand": "P(procrastination | do(digital_distraction))", "marginalized_confounders": [], "instruments": [] },
-        "sleep_quality": { "method": "do_calculus", "estimand": "P(procrastination | do(sleep_quality))", "marginalized_confounders": [], "instruments": [] },
-        "workload": { "method": "do_calculus", "estimand": "P(procrastination | do(workload))", "marginalized_confounders": [], "instruments": [] }
+        "workload": { "method": "do_calculus", "estimand": "P(procrastination | do(workload))", "marginalized_confounders": [], "instruments": [] },
+        "self_efficacy": { "method": "do_calculus", "estimand": "P(procrastination | do(self_efficacy))", "marginalized_confounders": [], "instruments": [] }
       },
-      "non_identifiable_treatments": {}
+      "non_identifiable_treatments": {
+        "sleep_quality": { "confounders": ["unobserved_chronotype"], "notes": null }
+      }
     }
   },
-  "filtered_treatments": ["stress", "digital_distraction", "sleep_quality", "workload"],
+  "filtered_treatments": ["stress", "digital_distraction", "sleep_quality", "workload", "self_efficacy"],
   "raw_completion": "[LLM trace for measurement model proposal]",
-  "context": "Stage 1b proposes indicators and checks identifiability. Assumption A7 (reflective measurement model) enables causal identification by linking latent constructs to observable data."
+  "context": "Stage 1b proposes indicators and checks nonparametric identification via do-calculus (Pearl/Shpitser-Pearl ID algorithm). Assumption A7 (reflective measurement model) enables causal identification by linking latent constructs to observable data."
 }

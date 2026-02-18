@@ -1,25 +1,62 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
+import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils/cn";
-import type { Construct, Indicator } from "@causal-ssm/api-types";
+import type { Construct, IdentifiedTreatmentStatus, Indicator } from "@causal-ssm/api-types";
 import { Handle, type NodeProps, Position } from "@xyflow/react";
 import { Star } from "lucide-react";
 import { memo } from "react";
 
 interface ConstructNodeData extends Construct {
   indicators?: Indicator[];
+  identificationStatus?: "identified" | "non_identified";
+  identificationDetails?: IdentifiedTreatmentStatus;
+}
+
+function IdentifiedTooltipContent({ details }: { details: IdentifiedTreatmentStatus }) {
+  return (
+    <div className="space-y-1.5 max-w-xs">
+      <div className="flex items-center gap-2">
+        <span className="text-muted-foreground text-xs">Method:</span>
+        <Badge variant="success" className="text-[10px] px-1.5 py-0">
+          {details.method}
+        </Badge>
+      </div>
+      <div>
+        <span className="text-muted-foreground text-xs">Estimand:</span>
+        <code className="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-[11px]">
+          {details.estimand}
+        </code>
+      </div>
+      {details.instruments.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="text-muted-foreground text-xs">Instruments:</span>
+          {details.instruments.map((inst) => (
+            <Badge key={inst} variant="outline" className="text-[10px] px-1.5 py-0">
+              {inst}
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ConstructNodeInner({ data, selected }: NodeProps) {
   const construct = data as unknown as ConstructNodeData;
   const indicators = construct.indicators ?? [];
 
-  return (
+  const nodeContent = (
     <div
       className={cn(
-        "rounded-lg border-2 bg-card shadow-sm transition-all duration-200 cursor-pointer",
+        "rounded-lg border-2 shadow-sm transition-all duration-200 cursor-pointer",
         "hover:shadow-md hover:-translate-y-0.5",
+        construct.identificationStatus === "identified"
+          ? "bg-node-identified"
+          : construct.identificationStatus === "non_identified"
+            ? "bg-node-non-identified"
+            : "bg-card",
         construct.role === "endogenous"
           ? "border-node-endogenous"
           : "border-node-exogenous",
@@ -77,6 +114,16 @@ function ConstructNodeInner({ data, selected }: NodeProps) {
       />
     </div>
   );
+
+  if (construct.identificationStatus === "identified" && construct.identificationDetails) {
+    return (
+      <Tooltip content={<IdentifiedTooltipContent details={construct.identificationDetails} />}>
+        {nodeContent}
+      </Tooltip>
+    );
+  }
+
+  return nodeContent;
 }
 
 export const ConstructNode = memo(ConstructNodeInner);

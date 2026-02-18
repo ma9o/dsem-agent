@@ -1,7 +1,7 @@
 "use client";
 
 import { useElkLayout } from "@/lib/hooks/use-elk-layout";
-import type { CausalEdge, Construct, Indicator } from "@causal-ssm/api-types";
+import type { CausalEdge, Construct, IdentifiabilityStatus, IdentifiedTreatmentStatus, Indicator } from "@causal-ssm/api-types";
 import {
   Background,
   BackgroundVariant,
@@ -19,6 +19,7 @@ interface CausalDagProps {
   constructs: Construct[];
   edges: CausalEdge[];
   indicators?: Indicator[];
+  identifiability?: IdentifiabilityStatus | null;
   onNodeClick?: (constructName: string) => void;
   height?: string;
 }
@@ -54,10 +55,33 @@ function EdgeLegend({ hasLagged, hasContemporaneous }: { hasLagged: boolean; has
   );
 }
 
+function IdLegend({ hasIdentified, hasNonIdentified }: { hasIdentified: boolean; hasNonIdentified: boolean }) {
+  if (!hasIdentified && !hasNonIdentified) return null;
+  return (
+    <div className="rounded-md border bg-card/90 px-3 py-2 text-xs backdrop-blur-sm shadow-sm">
+      <div className="flex items-center gap-4">
+        {hasIdentified && (
+          <div className="flex items-center gap-2">
+            <span className="inline-block h-3 w-3 rounded-sm border border-border bg-node-identified shrink-0" />
+            <span className="text-muted-foreground">identified</span>
+          </div>
+        )}
+        {hasNonIdentified && (
+          <div className="flex items-center gap-2">
+            <span className="inline-block h-3 w-3 rounded-sm border border-border bg-node-non-identified shrink-0" />
+            <span className="text-muted-foreground">non-identified</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function CausalDag({
   constructs,
   edges,
   indicators,
+  identifiability,
   onNodeClick,
   height = "500px",
 }: CausalDagProps) {
@@ -65,17 +89,47 @@ export function CausalDag({
 
   const { nodes: layoutNodes, edges: flowEdges, isLayouting } = useElkLayout(constructs, edges, indicators);
 
+  // Build a per-node identification info map
+  const idInfoMap = useMemo(() => {
+    if (!identifiability) return null;
+    const map = new Map<string, { status: "identified" | "non_identified"; details?: IdentifiedTreatmentStatus }>();
+    for (const [name, details] of Object.entries(identifiability.identifiable_treatments)) {
+      map.set(name, { status: "identified", details });
+    }
+    for (const name of Object.keys(identifiability.non_identifiable_treatments)) {
+      map.set(name, { status: "non_identified" });
+    }
+    return map;
+  }, [identifiability]);
+
+  // Inject identification status + details into node data
+  const nodesWithIdStatus = useMemo(() => {
+    if (!idInfoMap) return layoutNodes;
+    return layoutNodes.map((n) => {
+      const info = idInfoMap.get(n.id);
+      if (!info) return n;
+      return {
+        ...n,
+        data: {
+          ...n.data,
+          identificationStatus: info.status,
+          ...(info.details && { identificationDetails: info.details }),
+        },
+      };
+    });
+  }, [layoutNodes, idInfoMap]);
+
   // Local node state so dragging works (React Flow controlled mode needs onNodesChange)
-  const [localNodes, setLocalNodes] = useState(layoutNodes);
+  const [localNodes, setLocalNodes] = useState(nodesWithIdStatus);
   const layoutKeyRef = useRef<string>("");
 
   useEffect(() => {
-    const key = JSON.stringify(layoutNodes.map((n) => n.id));
+    const key = JSON.stringify(nodesWithIdStatus.map((n) => n.id));
     if (key !== layoutKeyRef.current) {
       layoutKeyRef.current = key;
-      setLocalNodes(layoutNodes);
+      setLocalNodes(nodesWithIdStatus);
     }
-  }, [layoutNodes]);
+  }, [nodesWithIdStatus]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     setLocalNodes((nds) => applyNodeChanges(changes, nds));
@@ -83,6 +137,8 @@ export function CausalDag({
 
   const hasLagged = edges.some((e) => e.lagged);
   const hasContemporaneous = edges.some((e) => !e.lagged);
+  const hasIdentified = Object.keys(identifiability?.identifiable_treatments ?? {}).length > 0;
+  const hasNonIdentified = Object.keys(identifiability?.non_identifiable_treatments ?? {}).length > 0;
 
   const styledNodes = useMemo(() => {
     if (!selectedNode) return localNodes;
@@ -149,7 +205,10 @@ export function CausalDag({
         <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
         <Controls showInteractive={false} />
         <Panel position="top-right">
-          <EdgeLegend hasLagged={hasLagged} hasContemporaneous={hasContemporaneous} />
+          <div className="flex flex-col gap-2">
+            <EdgeLegend hasLagged={hasLagged} hasContemporaneous={hasContemporaneous} />
+            <IdLegend hasIdentified={hasIdentified} hasNonIdentified={hasNonIdentified} />
+          </div>
         </Panel>
       </ReactFlow>
     </div>

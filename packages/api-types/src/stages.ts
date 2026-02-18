@@ -40,7 +40,7 @@ export const STAGES: StageMeta[] = [
   },
   {
     id: "stage-1b",
-    label: "Measurement & Identifiability",
+    label: "Measurement & Nonparametric Identification",
     number: "1b",
     hasGate: true,
     prefectTaskName: "propose_measurement_with_identifiability_fix",

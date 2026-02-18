@@ -35,6 +35,8 @@
   --color-node-exogenous: var(--node-exogenous);
   --color-node-indicator: var(--node-indicator);
   --color-node-indicator-soft: var(--node-indicator-soft);
+  --color-node-identified: var(--node-identified);
+  --color-node-non-identified: var(--node-non-identified);
   --color-outcome: var(--outcome);
   --color-border: var(--border);
   --color-input: var(--input);
@@ -85,6 +87,8 @@
   --node-exogenous: oklch(0.68 0 0);
   --node-indicator: oklch(0.55 0 0);
   --node-indicator-soft: oklch(0.96 0 0);
+  --node-identified: oklch(0.97 0.02 150);
+  --node-non-identified: oklch(0.97 0.02 25);
   --outcome: oklch(0.35 0 0);
 
   --edge-lagged: oklch(0.55 0 0);
