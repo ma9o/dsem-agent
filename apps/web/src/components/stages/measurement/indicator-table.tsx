@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -35,8 +36,8 @@ export function IndicatorTable({ indicators }: { indicators: Indicator[] }) {
         </TableHeader>
         <TableBody>
           {[...grouped.entries()].map(([construct, inds]) => (
-            <>
-              <TableRow key={`header-${construct}`} className="bg-muted/50 hover:bg-muted/50">
+            <Fragment key={construct}>
+              <TableRow className="bg-muted/50 hover:bg-muted/50">
                 <TableCell colSpan={4} className="py-2">
                   <span className="text-sm font-semibold">{construct}</span>
                   <span className="ml-2 text-xs text-muted-foreground">
@@ -58,7 +59,7 @@ export function IndicatorTable({ indicators }: { indicators: Indicator[] }) {
                   </TableCell>
                 </TableRow>
               ))}
-            </>
+            </Fragment>
           ))}
         </TableBody>
       </Table>
