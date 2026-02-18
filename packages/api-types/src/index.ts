@@ -34,7 +34,6 @@ export type {
   ValidationIssue,
   ValidationSeverity,
   IndicatorHealth,
-  AggregationSummary,
 } from "./models/validation";
 
 export type {

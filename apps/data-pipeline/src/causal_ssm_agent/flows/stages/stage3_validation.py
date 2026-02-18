@@ -91,13 +91,19 @@ def _check_timestamps(ind_data: pl.DataFrame, ind_name: str) -> tuple[list[dict]
     return issues, parsed.drop_nulls()
 
 
-def _check_dtype_range(values: pl.Series, dtype: str, ind_name: str) -> list[dict]:
-    """Check values conform to declared measurement dtype."""
+def _check_dtype_range(values: pl.Series, dtype: str, ind_name: str) -> tuple[list[dict], int]:
+    """Check values conform to declared measurement dtype.
+
+    Returns:
+        Tuple of (issues, dtype_violation_count).
+    """
     issues: list[dict] = []
+    violation_count = 0
 
     if dtype == "binary":
         non_binary = values.filter(~values.is_in([0.0, 1.0]))
-        if len(non_binary) > 0:
+        violation_count = len(non_binary)
+        if violation_count > 0:
             samples = non_binary.to_list()[:5]
             issues.append(
                 {
@@ -110,6 +116,8 @@ def _check_dtype_range(values: pl.Series, dtype: str, ind_name: str) -> list[dic
 
     elif dtype == "count":
         negative = values.filter(values < 0)
+        fractional = values.filter((values % 1) != 0)
+        violation_count = len(negative) + len(fractional)
         if len(negative) > 0:
             issues.append(
                 {
@@ -119,7 +127,6 @@ def _check_dtype_range(values: pl.Series, dtype: str, ind_name: str) -> list[dic
                     "message": f"Count indicator has negative values: {negative.to_list()[:5]}",
                 }
             )
-        fractional = values.filter((values % 1) != 0)
         if len(fractional) > 0:
             issues.append(
                 {
@@ -142,42 +149,48 @@ def _check_dtype_range(values: pl.Series, dtype: str, ind_name: str) -> list[dic
                 lower = q1 - OUTLIER_IQR_MULTIPLIER * iqr
                 upper = q3 + OUTLIER_IQR_MULTIPLIER * iqr
                 outliers = values.filter((values < lower) | (values > upper))
-                if len(outliers) > 0:
+                violation_count = len(outliers)
+                if violation_count > 0:
                     issues.append(
                         {
                             "indicator": ind_name,
                             "issue_type": "dtype_violation",
                             "severity": "warning",
                             "message": (
-                                f"{len(outliers)} outlier(s) outside [{lower:.2f}, {upper:.2f}]"
+                                f"{violation_count} outlier(s) outside [{lower:.2f}, {upper:.2f}]"
                             ),
                         }
                     )
 
-    return issues
+    return issues, violation_count
 
 
 def _check_time_coverage(
     parsed_ts: pl.Series,
     temporal_scale: str | None,
     ind_name: str,
-) -> list[dict]:
-    """Check if data spans enough time for temporal modeling."""
+) -> tuple[list[dict], float | None]:
+    """Check if data spans enough time for temporal modeling.
+
+    Returns:
+        Tuple of (issues, time_coverage_ratio).
+    """
     issues: list[dict] = []
 
     if temporal_scale is None:
-        return issues
+        return issues, None
 
     gran_hours = GRANULARITY_HOURS.get(temporal_scale)
     if gran_hours is None:
-        return issues
+        return issues, None
 
     if len(parsed_ts) < 2:
-        return issues
+        return issues, None
 
     time_span = parsed_ts.max() - parsed_ts.min()
     time_span_hours = time_span.total_seconds() / 3600
     min_hours = MIN_COVERAGE_PERIODS * gran_hours
+    coverage_ratio = min(time_span_hours / min_hours, 1.0) if min_hours > 0 else None
 
     if time_span_hours < min_hours:
         issues.append(
@@ -192,32 +205,37 @@ def _check_time_coverage(
             }
         )
 
-    return issues
+    return issues, coverage_ratio
 
 
 def _check_timestamp_gaps(
     parsed_ts: pl.Series,
     temporal_scale: str | None,
     ind_name: str,
-) -> list[dict]:
-    """Check for excessively large gaps in timestamps."""
+) -> tuple[list[dict], float | None]:
+    """Check for excessively large gaps in timestamps.
+
+    Returns:
+        Tuple of (issues, max_gap_ratio).
+    """
     issues: list[dict] = []
 
     if temporal_scale is None:
-        return issues
+        return issues, None
 
     gran_hours = GRANULARITY_HOURS.get(temporal_scale)
     if gran_hours is None:
-        return issues
+        return issues, None
 
     if len(parsed_ts) < 3:
-        return issues
+        return issues, None
 
     sorted_ts = parsed_ts.sort()
     diffs = sorted_ts.diff().drop_nulls()
     max_gap = diffs.max()
     max_gap_hours = max_gap.total_seconds() / 3600
     threshold = MAX_GAP_MULTIPLIER * gran_hours
+    max_gap_ratio = max_gap_hours / threshold if threshold > 0 else None
 
     if max_gap_hours > threshold:
         issues.append(
@@ -232,23 +250,34 @@ def _check_timestamp_gaps(
             }
         )
 
-    return issues
+    return issues, max_gap_ratio
 
 
-def _check_hallucination_signals(values: pl.Series, dtype: str, ind_name: str) -> list[dict]:
-    """Check for patterns suspicious of LLM hallucination."""
+def _check_hallucination_signals(
+    values: pl.Series, dtype: str, ind_name: str
+) -> tuple[list[dict], float, bool]:
+    """Check for patterns suspicious of LLM hallucination.
+
+    Returns:
+        Tuple of (issues, duplicate_pct, arithmetic_sequence_detected).
+    """
     issues: list[dict] = []
     n = len(values)
+    duplicate_pct = 0.0
+    arithmetic_sequence_detected = False
+
     if n < 2:
-        return issues
+        return issues, duplicate_pct, arithmetic_sequence_detected
+
+    # Compute duplicate percentage for all types
+    vc = values.value_counts()
+    max_count = vc["count"].max()
+    duplicate_pct = max_count / n if n > 0 else 0.0
 
     # Excessive duplicates (only for continuous/ordinal data with variance > 0)
     if dtype not in ("binary", "count"):
         variance = values.var()
-        if variance is not None and variance > 0:
-            vc = values.value_counts()
-            max_count = vc["count"].max()
-            if max_count > n * HALLUCINATION_DUPLICATE_THRESHOLD:
+        if variance is not None and variance > 0 and max_count > n * HALLUCINATION_DUPLICATE_THRESHOLD:
                 most_common = vc.sort("count", descending=True).row(0)[0]
                 issues.append(
                     {
@@ -269,6 +298,7 @@ def _check_hallucination_signals(values: pl.Series, dtype: str, ind_name: str) -
         if diffs.n_unique() == 1:
             step = diffs[0]
             if step != 0:
+                arithmetic_sequence_detected = True
                 issues.append(
                     {
                         "indicator": ind_name,
@@ -278,7 +308,7 @@ def _check_hallucination_signals(values: pl.Series, dtype: str, ind_name: str) -
                     }
                 )
 
-    return issues
+    return issues, duplicate_pct, arithmetic_sequence_detected
 
 
 def _check_construct_correlations(
@@ -388,6 +418,7 @@ def validate_extraction(
         Dict with:
             - is_valid: bool
             - issues: list of {indicator, issue_type, severity, message}
+            - per_indicator_health: list of per-indicator metrics
     """
     # Concatenate all worker dataframes
     dataframes = [wr.dataframe for wr in worker_results if wr.dataframe is not None]
@@ -402,6 +433,7 @@ def validate_extraction(
                     "message": "No data extracted",
                 }
             ],
+            "per_indicator_health": [],
         }
 
     combined = pl.concat(dataframes, how="vertical")
@@ -417,6 +449,7 @@ def validate_extraction(
                     "message": "No data extracted",
                 }
             ],
+            "per_indicator_health": [],
         }
 
     indicators = causal_spec.get("measurement", {}).get("indicators", [])
@@ -427,6 +460,7 @@ def validate_extraction(
     construct_lookup = {c["name"]: c for c in constructs if c.get("name")}
 
     issues: list[dict] = []
+    per_indicator_health: list[dict] = []
 
     # Check each indicator in the extracted data
     for ind_name in indicator_names:
@@ -471,6 +505,7 @@ def validate_extraction(
             )
 
         # Check variance
+        variance: float | None = None
         try:
             variance = values["value"].var()
             if variance is not None and variance == 0:
@@ -486,7 +521,7 @@ def validate_extraction(
         except Exception as e:
             logger.debug("Variance check failed for indicator: %s", e)
 
-        # ── New validation checks ──────────────────────────────────────────
+        # ── Validation checks with metric collection ─────────────────────
 
         # Get indicator metadata for dtype/construct lookups
         ind_meta = indicator_lookup.get(ind_name, {})
@@ -501,17 +536,43 @@ def validate_extraction(
         issues.extend(ts_issues)
 
         # 2. Dtype range conformance
+        dtype_violations = 0
         if dtype:
-            issues.extend(_check_dtype_range(values["value"], dtype, ind_name))
+            dtype_issues, dtype_violations = _check_dtype_range(
+                values["value"], dtype, ind_name
+            )
+            issues.extend(dtype_issues)
 
         # 3-4. Time coverage and gaps (skip for time-invariant constructs)
+        time_coverage_ratio: float | None = None
+        max_gap_ratio: float | None = None
         if not is_time_invariant:
-            issues.extend(_check_time_coverage(parsed_ts, causal_gran, ind_name))
-            issues.extend(_check_timestamp_gaps(parsed_ts, causal_gran, ind_name))
+            coverage_issues, time_coverage_ratio = _check_time_coverage(
+                parsed_ts, causal_gran, ind_name
+            )
+            issues.extend(coverage_issues)
+            gap_issues, max_gap_ratio = _check_timestamp_gaps(
+                parsed_ts, causal_gran, ind_name
+            )
+            issues.extend(gap_issues)
 
         # 5. Hallucination signals
-        issues.extend(
+        halluc_issues, duplicate_pct, arithmetic_sequence_detected = (
             _check_hallucination_signals(values["value"], dtype or "continuous", ind_name)
+        )
+        issues.extend(halluc_issues)
+
+        per_indicator_health.append(
+            {
+                "indicator": ind_name,
+                "n_obs": n_obs,
+                "variance": variance,
+                "time_coverage_ratio": time_coverage_ratio,
+                "max_gap_ratio": max_gap_ratio,
+                "dtype_violations": dtype_violations,
+                "duplicate_pct": duplicate_pct,
+                "arithmetic_sequence_detected": arithmetic_sequence_detected,
+            }
         )
 
     # 6. Cross-indicator construct correlations
@@ -520,7 +581,11 @@ def validate_extraction(
     errors = [i for i in issues if i["severity"] == "error"]
     is_valid = len(errors) == 0
 
-    return {"is_valid": is_valid, "issues": issues}
+    return {
+        "is_valid": is_valid,
+        "issues": issues,
+        "per_indicator_health": per_indicator_health,
+    }
 
 
 @task(cache_policy=INPUTS)
