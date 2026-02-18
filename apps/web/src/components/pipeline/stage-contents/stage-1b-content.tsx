@@ -17,7 +17,7 @@ export default function Stage1bContent({ data }: { data: Stage1bData }) {
         constructs={spec.latent.constructs}
         edges={spec.latent.edges}
         indicators={spec.measurement.indicators}
-        height="min(500px, 60vh)"
+        height="min(600px, 70vh)"
       />
       <IndicatorTable indicators={spec.measurement.indicators} />
       {spec.identifiability && <IdentifiabilityPanel identifiability={spec.identifiability} />}

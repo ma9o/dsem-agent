@@ -16,7 +16,7 @@ export default function Stage1aContent({ data }: { data: Stage1aData }) {
         constructs={data.latent_model.constructs}
         edges={data.latent_model.edges}
         onNodeClick={setSelectedConstruct}
-        height="min(500px, 60vh)"
+        height="min(600px, 70vh)"
       />
       {selected && <ConstructDetailPanel construct={selected} />}
       <EdgeList edges={data.latent_model.edges} />

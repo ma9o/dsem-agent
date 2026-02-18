@@ -1,85 +1,117 @@
 import type { CausalEdge, Construct, Indicator } from "@causal-ssm/api-types";
-import dagre from "@dagrejs/dagre";
+import ELK, { type ElkNode } from "elkjs/lib/elk.bundled.js";
 import type { Edge, Node } from "@xyflow/react";
 
-interface LayoutResult {
+export interface LayoutResult {
   nodes: Node[];
   edges: Edge[];
 }
 
-export function layoutDag(
+const elk = new ELK();
+
+const CONSTRUCT_WIDTH = 200;
+const CONSTRUCT_HEIGHT = 60;
+const INDICATOR_WIDTH = 160;
+const INDICATOR_HEIGHT = 40;
+
+const ELK_OPTIONS: Record<string, string> = {
+  "elk.algorithm": "layered",
+  "elk.direction": "DOWN",
+  "elk.spacing.nodeNode": "120",
+  "elk.layered.spacing.nodeNodeBetweenLayers": "150",
+  "elk.spacing.edgeNode": "40",
+  "elk.spacing.edgeEdge": "20",
+  "elk.edgeRouting": "SPLINES",
+  "elk.layered.crossingMinimization.strategy": "LAYER_SWEEP",
+  "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF",
+};
+
+export async function layoutDag(
   constructs: Construct[],
   causalEdges: CausalEdge[],
   indicators?: Indicator[],
-): LayoutResult {
-  const g = new dagre.graphlib.Graph();
-  g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: "TB", nodesep: 80, ranksep: 100 });
+): Promise<LayoutResult> {
+  const children: ElkNode[] = [];
+  const elkEdges: Array<{ id: string; sources: string[]; targets: string[] }> = [];
 
-  // Add construct nodes
+  // Only contemporaneous edges define the hierarchy for layout.
+  // Lagged edges (temporal feedback) are overlaid after layout so they
+  // don't distort the layering with back-edges.
+  const contemporaneousEdges = causalEdges.filter((e) => !e.lagged);
+  const laggedEdges = causalEdges.filter((e) => e.lagged);
+
   for (const c of constructs) {
-    g.setNode(c.name, { width: 200, height: 60 });
+    children.push({ id: c.name, width: CONSTRUCT_WIDTH, height: CONSTRUCT_HEIGHT });
   }
 
-  // Add causal edges
-  for (const e of causalEdges) {
-    g.setEdge(e.cause, e.effect);
+  for (let i = 0; i < contemporaneousEdges.length; i++) {
+    const e = contemporaneousEdges[i];
+    elkEdges.push({ id: `causal-contemp-${i}`, sources: [e.cause], targets: [e.effect] });
   }
 
-  // Add indicator nodes if provided
   if (indicators) {
     for (const ind of indicators) {
-      g.setNode(ind.name, { width: 160, height: 40 });
-      g.setEdge(ind.construct_name, ind.name);
+      children.push({ id: ind.name, width: INDICATOR_WIDTH, height: INDICATOR_HEIGHT });
+      elkEdges.push({ id: `loading-${ind.name}`, sources: [ind.construct_name], targets: [ind.name] });
     }
   }
 
-  dagre.layout(g);
+  const graph: ElkNode = {
+    id: "root",
+    layoutOptions: ELK_OPTIONS,
+    children,
+    edges: elkEdges,
+  };
+
+  const layouted = await elk.layout(graph);
+
+  const posMap = new Map<string, { x: number; y: number }>();
+  for (const n of layouted.children ?? []) {
+    posMap.set(n.id, { x: n.x ?? 0, y: n.y ?? 0 });
+  }
 
   const nodes: Node[] = [];
 
   for (const c of constructs) {
-    const pos = g.node(c.name);
-    nodes.push({
-      id: c.name,
-      type: "construct",
-      position: { x: pos.x - 100, y: pos.y - 30 },
-      data: { ...c },
-    });
+    const pos = posMap.get(c.name);
+    if (!pos) continue;
+    nodes.push({ id: c.name, type: "construct", position: pos, data: { ...c } });
   }
 
   if (indicators) {
     for (const ind of indicators) {
-      const pos = g.node(ind.name);
-      nodes.push({
-        id: ind.name,
-        type: "indicator",
-        position: { x: pos.x - 80, y: pos.y - 20 },
-        data: { ...ind },
-      });
+      const pos = posMap.get(ind.name);
+      if (!pos) continue;
+      nodes.push({ id: ind.name, type: "indicator", position: pos, data: { ...ind } });
     }
   }
 
-  const edges: Edge[] = causalEdges.map((e, i) => ({
-    id: `causal-${i}`,
-    source: e.cause,
-    target: e.effect,
-    data: { ...e },
-    style: {
-      stroke: e.lagged ? "var(--edge-lagged)" : "var(--edge-contemporary)",
-      strokeWidth: 2,
-      strokeDasharray: e.lagged ? undefined : "5,5",
-    },
-    label: e.lagged ? "t-1 → t" : "t → t",
-    labelStyle: { fontSize: 10, fill: "var(--edge-label)" },
-    animated: !e.lagged,
-    markerEnd: {
-      type: "arrowclosed" as const,
-      color: e.lagged ? "var(--edge-lagged)" : "var(--edge-contemporary)",
-      width: 16,
-      height: 16,
-    },
-  }));
+  // Build edges — contemporaneous edges use smoothstep (orthogonal feel),
+  // lagged edges use bezier (curved arcs that float over the layout).
+  const edges: Edge[] = [];
+
+  for (let i = 0; i < causalEdges.length; i++) {
+    const e = causalEdges[i];
+    edges.push({
+      id: `causal-${i}`,
+      source: e.cause,
+      target: e.effect,
+      type: e.lagged ? "default" : "smoothstep",
+      data: { ...e },
+      style: {
+        stroke: e.lagged ? "var(--edge-lagged)" : "var(--edge-contemporary)",
+        strokeWidth: e.lagged ? 1.5 : 2,
+        strokeDasharray: e.lagged ? "6,4" : undefined,
+      },
+      animated: false,
+      markerEnd: {
+        type: "arrowclosed" as const,
+        color: e.lagged ? "var(--edge-lagged)" : "var(--edge-contemporary)",
+        width: 14,
+        height: 14,
+      },
+    });
+  }
 
   if (indicators) {
     for (const ind of indicators) {
@@ -87,6 +119,7 @@ export function layoutDag(
         id: `loading-${ind.name}`,
         source: ind.construct_name,
         target: ind.name,
+        type: "smoothstep",
         style: { stroke: "var(--edge-indicator)", strokeWidth: 1.5, strokeDasharray: "3,3" },
         markerEnd: {
           type: "arrowclosed" as const,

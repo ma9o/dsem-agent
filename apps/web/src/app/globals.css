@@ -50,8 +50,8 @@
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
   --radius: 0.625rem;
-  --edge-lagged: oklch(0.59 0.19 260);
-  --edge-contemporary: oklch(0.68 0.02 256);
+  --edge-lagged: oklch(0.55 0.18 260);
+  --edge-contemporary: oklch(0.45 0.12 160);
   --edge-indicator: oklch(0.65 0.16 290);
   --edge-label: oklch(0.45 0 0);
 }

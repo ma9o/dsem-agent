@@ -11,12 +11,12 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@dagrejs/dagre": "^2.0.4",
     "@causal-ssm/api-types": "workspace:*",
     "@tanstack/react-query": "^5.90.21",
     "@xyflow/react": "^12.10.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "elkjs": "^0.11.0",
     "lucide-react": "^0.564.0",
     "next": "16.1.6",
     "react": "19.2.3",
