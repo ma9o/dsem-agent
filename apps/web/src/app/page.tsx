@@ -7,7 +7,7 @@ import { MOCK_RUN_ID, isMockMode } from "@/lib/api/mock-provider";
 import { getDeploymentId, triggerRun } from "@/lib/api/prefect";
 import { ArrowRight, FileText, Loader2, Sparkles, Upload, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const EXAMPLE_QUESTIONS = [
   "How does my daily screen time affect my sleep quality and mood?",
@@ -28,6 +28,11 @@ export default function LandingPage() {
   const [question, setQuestion] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isMac, setIsMac] = useState(false);
+
+  useEffect(() => {
+    setIsMac(/Mac/.test(navigator.userAgent));
+  }, []);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -259,7 +264,7 @@ export default function LandingPage() {
           <p className="text-center text-xs text-muted-foreground/60">
             Press{" "}
             <kbd className="rounded border bg-secondary px-1 py-0.5 text-[10px] font-mono">
-              {typeof navigator !== "undefined" && /Mac/.test(navigator.userAgent) ? "⌘" : "Ctrl"}
+              {isMac ? "⌘" : "Ctrl"}
             </kbd>
             +
             <kbd className="rounded border bg-secondary px-1 py-0.5 text-[10px] font-mono">
