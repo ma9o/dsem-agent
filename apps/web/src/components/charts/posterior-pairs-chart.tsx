@@ -17,15 +17,29 @@ interface PosteriorPairsChartProps {
 }
 
 export function PosteriorPairsChart({ pair }: PosteriorPairsChartProps) {
-  const data = pair.x_values.map((x, i) => ({
-    x,
-    y: pair.y_values[i],
-  }));
+  const hasDivergent = pair.divergent && pair.divergent.some(Boolean);
+
+  const normal: { x: number; y: number }[] = [];
+  const divergent: { x: number; y: number }[] = [];
+
+  for (let i = 0; i < pair.x_values.length; i++) {
+    const point = { x: pair.x_values[i], y: pair.y_values[i] };
+    if (hasDivergent && pair.divergent![i]) {
+      divergent.push(point);
+    } else {
+      normal.push(point);
+    }
+  }
 
   return (
     <div className="space-y-1">
       <span className="text-xs font-mono text-muted-foreground">
         {pair.param_x} vs {pair.param_y}
+        {hasDivergent && (
+          <span className="ml-2 text-destructive">
+            ({divergent.length} divergent)
+          </span>
+        )}
       </span>
       <div className="h-36 w-full">
         <ResponsiveContainer width="100%" height="100%">
@@ -51,7 +65,10 @@ export function PosteriorPairsChart({ pair }: PosteriorPairsChartProps) {
                 ((value: number) => [formatNumber(value, 3)]) as any
               }
             />
-            <Scatter data={data} fill="var(--primary)" fillOpacity={0.3} r={2} />
+            <Scatter data={normal} fill="var(--primary)" fillOpacity={0.3} r={2} name="normal" />
+            {hasDivergent && (
+              <Scatter data={divergent} fill="var(--destructive)" fillOpacity={0.8} r={3} name="divergent" />
+            )}
           </ScatterChart>
         </ResponsiveContainer>
       </div>

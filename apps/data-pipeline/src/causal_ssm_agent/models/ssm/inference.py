@@ -127,6 +127,13 @@ class InferenceResult:
             if "accept_prob" in extra:
                 ap = extra["accept_prob"]
                 result["accept_prob_mean"] = float(jnp.mean(ap))
+            if "energy" in extra:
+                energy = extra["energy"]
+                # Reshape to (n_chains, n_draws) if possible for per-chain BFMI
+                n_ch = int(mcmc.num_chains) if hasattr(mcmc, "num_chains") else 1
+                if n_ch > 1 and energy.ndim == 1 and energy.shape[0] % n_ch == 0:
+                    energy = energy.reshape(n_ch, -1)
+                result["energy"] = _build_energy_diagnostics(energy)
         except Exception:
             pass
 
@@ -277,14 +284,15 @@ class InferenceResult:
         """Compute pairwise scatter data for joint posterior visualization.
 
         Selects up to max_params scalar parameters and returns thinned
-        pairwise samples for scatter matrix plots.
+        pairwise samples for scatter matrix plots. Includes per-sample
+        divergence flags when available (for highlighting in pairs plots).
 
         Args:
             max_params: Maximum number of parameters to include.
             max_samples: Maximum samples per pair (thinned evenly).
 
         Returns:
-            List of {param_x, param_y, x_values, y_values} dicts.
+            List of {param_x, param_y, x_values, y_values, divergent?} dicts.
         """
         # Collect scalar parameters
         scalars: list[tuple[str, jnp.ndarray]] = []
@@ -302,17 +310,32 @@ class InferenceResult:
         n_draws = scalars[0][1].shape[0] if scalars else 0
         step = max(1, n_draws // max_samples)
 
+        # Get divergence mask (flattened across chains) for highlighting
+        div_mask: list[bool] | None = None
+        mcmc = self.diagnostics.get("mcmc")
+        if mcmc is not None:
+            try:
+                extra = mcmc.get_extra_fields()
+                if "diverging" in extra:
+                    div_flat = extra["diverging"].reshape(-1)
+                    div_mask = [bool(v) for v in div_flat[::step]]
+            except Exception:
+                pass
+
         pairs: list[dict[str, Any]] = []
         for i in range(len(scalars)):
             for j in range(i + 1, len(scalars)):
                 name_x, vals_x = scalars[i]
                 name_y, vals_y = scalars[j]
-                pairs.append({
+                entry: dict[str, Any] = {
                     "param_x": name_x,
                     "param_y": name_y,
                     "x_values": [float(v) for v in vals_x[::step]],
                     "y_values": [float(v) for v in vals_y[::step]],
-                })
+                }
+                if div_mask is not None and any(div_mask):
+                    entry["divergent"] = div_mask
+                pairs.append(entry)
 
         return pairs
 
@@ -482,6 +505,60 @@ def _param_marginal(name: str, values: jnp.ndarray, n_bins: int = 50) -> dict[st
     }
 
 
+def _build_energy_diagnostics(energy: jnp.ndarray, n_bins: int = 40) -> dict[str, Any]:
+    """Build NUTS energy diagnostics (Betancourt 2017).
+
+    Computes marginal energy (E) and energy transition (dE) histograms.
+    When the marginal and transition distributions diverge, it indicates
+    the sampler is struggling to explore the target geometry.
+
+    Args:
+        energy: (n_draws,) or (n_chains, n_draws) NUTS energy values.
+        n_bins: Number of histogram bins.
+
+    Returns:
+        {energy_hist, energy_transition_hist, bfmi} where each hist has
+        {bin_centers, density} and bfmi is the Bayesian Fraction of
+        Missing Information per chain.
+    """
+    e_flat = energy.reshape(-1)
+
+    # Energy transition: dE = E[i+1] - E[i] (per chain for BFMI)
+    if energy.ndim == 2:
+        de_per_chain = jnp.diff(energy, axis=1)
+        de_flat = de_per_chain.reshape(-1)
+        # BFMI per chain: Var(dE) / Var(E), should be > 0.3
+        bfmi = [
+            float(jnp.var(de_per_chain[c]) / jnp.var(energy[c]))
+            if float(jnp.var(energy[c])) > 0
+            else 0.0
+            for c in range(energy.shape[0])
+        ]
+    else:
+        de_flat = jnp.diff(e_flat)
+        var_e = float(jnp.var(e_flat))
+        bfmi = [float(jnp.var(de_flat) / var_e) if var_e > 0 else 0.0]
+
+    def _hist(vals: jnp.ndarray) -> dict[str, list[float]]:
+        lo, hi = float(jnp.min(vals)), float(jnp.max(vals))
+        pad = (hi - lo) * 0.05 if hi > lo else 0.5
+        counts, edges = jnp.histogram(vals, bins=n_bins, range=(lo - pad, hi + pad))
+        bw = float(edges[1] - edges[0])
+        total = float(jnp.sum(counts))
+        density = counts / (total * bw) if total > 0 else counts
+        centers = (edges[:-1] + edges[1:]) / 2.0
+        return {
+            "bin_centers": [float(v) for v in centers],
+            "density": [float(v) for v in density],
+        }
+
+    return {
+        "energy_hist": _hist(e_flat),
+        "energy_transition_hist": _hist(de_flat),
+        "bfmi": bfmi,
+    }
+
+
 def fit(
     model: SSMModel,
     observations: jnp.ndarray,
@@ -628,7 +705,7 @@ def _fit_nuts(
     )
 
     rng_key = random.PRNGKey(seed)
-    mcmc.run(rng_key, observations, times, extra_fields=("diverging", "num_steps", "accept_prob"))
+    mcmc.run(rng_key, observations, times, extra_fields=("diverging", "num_steps", "accept_prob", "energy"))
 
     return InferenceResult(
         _samples=mcmc.get_samples(),

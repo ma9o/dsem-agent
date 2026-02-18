@@ -9,6 +9,7 @@ from numpyro.infer import MCMC, NUTS
 
 from causal_ssm_agent.models.ssm.inference import (
     InferenceResult,
+    _build_energy_diagnostics,
     _build_rank_histograms,
     _build_trace_data,
     _param_marginal,
@@ -35,7 +36,7 @@ def mcmc_result():
 
     kernel = NUTS(_toy_model)
     mcmc = MCMC(kernel, num_warmup=100, num_samples=200, num_chains=2)
-    mcmc.run(random.PRNGKey(1), x, y, extra_fields=("diverging", "num_steps", "accept_prob"))
+    mcmc.run(random.PRNGKey(1), x, y, extra_fields=("diverging", "num_steps", "accept_prob", "energy"))
 
     return InferenceResult(
         _samples=mcmc.get_samples(),
@@ -199,3 +200,49 @@ class TestPosteriorPairs:
             assert "param_y" in p
             assert len(p["x_values"]) == len(p["y_values"])
             assert len(p["x_values"]) <= 200
+
+    def test_divergent_field(self, mcmc_result):
+        pairs = mcmc_result.get_posterior_pairs()
+        # Toy model should converge — either no divergent key or all False
+        for p in pairs:
+            if "divergent" in p:
+                assert len(p["divergent"]) == len(p["x_values"])
+
+
+class TestBuildEnergyDiagnostics:
+    def test_energy_shape_2d(self):
+        energy = jnp.ones((2, 200))
+        result = _build_energy_diagnostics(energy, n_bins=20)
+        assert "energy_hist" in result
+        assert "energy_transition_hist" in result
+        assert "bfmi" in result
+        assert len(result["bfmi"]) == 2
+        assert len(result["energy_hist"]["bin_centers"]) == 20
+        assert len(result["energy_hist"]["density"]) == 20
+        assert len(result["energy_transition_hist"]["bin_centers"]) == 20
+
+    def test_energy_shape_1d(self):
+        energy = jnp.ones(400)
+        result = _build_energy_diagnostics(energy, n_bins=15)
+        assert len(result["bfmi"]) == 1
+        assert len(result["energy_hist"]["bin_centers"]) == 15
+
+    def test_bfmi_reasonable(self):
+        # Random energy => BFMI should be a positive finite number
+        key = random.PRNGKey(99)
+        energy = random.normal(key, (2, 500))
+        result = _build_energy_diagnostics(energy)
+        for b in result["bfmi"]:
+            assert b > 0
+            assert b < 10  # sanity bound
+
+
+class TestEnergyInMCMCDiagnostics:
+    def test_energy_present(self, mcmc_result):
+        diag = mcmc_result.get_mcmc_diagnostics()
+        assert "energy" in diag
+        energy = diag["energy"]
+        assert "energy_hist" in energy
+        assert "energy_transition_hist" in energy
+        assert "bfmi" in energy
+        assert len(energy["bfmi"]) == 2  # 2 chains

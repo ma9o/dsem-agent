@@ -109,6 +109,22 @@ export interface RankHistogram {
   chains: RankHistogramChain[];
 }
 
+/** NUTS energy histogram data (Betancourt 2017). */
+export interface EnergyHistogram {
+  bin_centers: number[];
+  density: number[];
+}
+
+/** NUTS energy diagnostics for detecting geometric pathologies. */
+export interface EnergyDiagnostics {
+  /** Marginal energy distribution histogram. */
+  energy_hist: EnergyHistogram;
+  /** Energy transition (dE) distribution histogram. */
+  energy_transition_hist: EnergyHistogram;
+  /** Bayesian Fraction of Missing Information per chain (should be > 0.3). */
+  bfmi: number[];
+}
+
 /** MCMC sampler-level diagnostics (NUTS/HMC). */
 export interface MCMCDiagnostics {
   per_parameter: MCMCParamDiagnostic[];
@@ -123,6 +139,8 @@ export interface MCMCDiagnostics {
   trace_data?: TraceData[];
   /** Rank histograms per parameter for mixing assessment. */
   rank_histograms?: RankHistogram[];
+  /** NUTS energy diagnostics (Betancourt 2017). */
+  energy?: EnergyDiagnostics;
 }
 
 /** SVI diagnostics (ELBO loss curve). */
@@ -180,4 +198,6 @@ export interface PosteriorPair {
   x_values: number[];
   /** Thinned y-axis samples. */
   y_values: number[];
+  /** Per-sample divergence flag (only present when divergences exist). */
+  divergent?: boolean[];
 }

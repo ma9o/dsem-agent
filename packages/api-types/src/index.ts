@@ -78,6 +78,8 @@ export type {
   TraceChain,
   RankHistogram,
   RankHistogramChain,
+  EnergyHistogram,
+  EnergyDiagnostics,
   LOODiagnostics,
   PosteriorMarginal,
   PosteriorPair,

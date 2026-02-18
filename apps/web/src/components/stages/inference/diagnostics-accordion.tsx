@@ -28,6 +28,7 @@ import type {
 } from "@causal-ssm/api-types";
 import { Check, X } from "lucide-react";
 import { ELBOLossChart } from "@/components/charts/elbo-loss-chart";
+import { EnergyChart } from "@/components/charts/energy-chart";
 import { LOOPITChart } from "@/components/charts/loo-pit-chart";
 import { MCMCDiagnosticsPanel } from "@/components/charts/mcmc-diagnostics-panel";
 import { ParetoKChart } from "@/components/charts/pareto-k-chart";
@@ -89,6 +90,7 @@ export function DiagnosticsAccordion({
 
   const hasTraces = mcmcDiagnostics?.trace_data && mcmcDiagnostics.trace_data.length > 0;
   const hasRankHists = mcmcDiagnostics?.rank_histograms && mcmcDiagnostics.rank_histograms.length > 0;
+  const hasEnergy = mcmcDiagnostics?.energy != null;
   const hasMarginals = posteriorMarginals && posteriorMarginals.length > 0;
   const hasPairs = posteriorPairs && posteriorPairs.length > 0;
 
@@ -111,6 +113,27 @@ export function DiagnosticsAccordion({
           </AccordionTrigger>
           <AccordionContent value="mcmc">
             <MCMCDiagnosticsPanel diagnostics={mcmcDiagnostics} />
+          </AccordionContent>
+        </AccordionItem>
+      )}
+
+      {/* NUTS Energy Diagnostics (Betancourt 2017) */}
+      {hasEnergy && (
+        <AccordionItem value="energy">
+          <AccordionTrigger value="energy" className="text-sm">
+            <span className="inline-flex items-center gap-1.5">
+              Energy Diagnostics
+              <StatTooltip explanation="NUTS energy diagnostics (Betancourt 2017). Compares marginal energy E and transition dE distributions. Large discrepancy or BFMI < 0.3 indicates the sampler struggles to explore the target geometry." />
+            </span>
+            <Badge
+              variant={Math.min(...mcmcDiagnostics!.energy!.bfmi) >= 0.3 ? "success" : "destructive"}
+              className="ml-2"
+            >
+              BFMI {Math.min(...mcmcDiagnostics!.energy!.bfmi) >= 0.3 ? "OK" : "Low"}
+            </Badge>
+          </AccordionTrigger>
+          <AccordionContent value="energy">
+            <EnergyChart energy={mcmcDiagnostics!.energy!} />
           </AccordionContent>
         </AccordionItem>
       )}
