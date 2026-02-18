@@ -9,6 +9,7 @@ import { Loader2 } from "lucide-react";
 import { useMemo } from "react";
 import { ActiveStageIndicator } from "./active-stage-indicator";
 import { CompletionSummary } from "./completion-summary";
+import { NewStagesNotification } from "./new-stages-notification";
 import { PipelineProgressBar } from "./progress-bar";
 import { StageSectionRouter } from "./stage-section-router";
 
@@ -66,6 +67,7 @@ export function AnalysisFeed({
         {!progress.isComplete && <ActiveStageIndicator stageId={progress.currentStage} />}
         {progress.isComplete && <CompletionSummary runId={runId} />}
       </div>
+      <NewStagesNotification progress={progress} />
       <BackToTop />
     </div>
   );

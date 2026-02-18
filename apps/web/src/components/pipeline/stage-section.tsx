@@ -3,7 +3,7 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import type { StageRunStatus } from "@/lib/hooks/use-run-events";
 import { AlertCircle, ChevronDown } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { StageHeader } from "./stage-header";
 
 function formatElapsed(ms: number): string {
@@ -38,22 +38,11 @@ export function StageSection({
   hasGate?: boolean;
   loadingHint?: string;
 }) {
-  const ref = useRef<HTMLElement>(null);
-  const hasScrolled = useRef(false);
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
-
-  useEffect(() => {
-    if (status === "running" && !hasScrolled.current && ref.current) {
-      hasScrolled.current = true;
-      setTimeout(() => {
-        ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 100);
-    }
-  }, [status]);
 
   // Expand when transitioning to completed
   useEffect(() => {
-    if (status === "completed" && !hasScrolled.current) {
+    if (status === "completed") {
       setCollapsed(false);
     }
   }, [status]);
@@ -62,7 +51,6 @@ export function StageSection({
 
   return (
     <section
-      ref={ref}
       id={id}
       className="animate-fade-in-up scroll-mt-28 rounded-lg border bg-card p-4 shadow-sm sm:p-6"
     >
