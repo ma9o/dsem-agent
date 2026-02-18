@@ -54,7 +54,7 @@ export function AnalysisFeed({
   return (
     <div>
       <PipelineProgressBar progress={progress} />
-      <div className="max-w-4xl mx-auto space-y-4 px-4 py-6 sm:space-y-6 sm:px-6">
+      <div className="max-w-6xl mx-auto space-y-4 px-4 py-6 sm:space-y-6 sm:px-6">
         {visibleStages.map((stage) => (
           <StageSectionRouter
             key={stage.id}
