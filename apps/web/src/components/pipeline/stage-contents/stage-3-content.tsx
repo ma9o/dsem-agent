@@ -1,6 +1,5 @@
 import { IndicatorHealthTable } from "@/components/stages/validation/indicator-health-table";
 import { IssueTable } from "@/components/stages/validation/issue-table";
-import { ValidationSummaryBanner } from "@/components/stages/validation/validation-summary-banner";
 import { HardGateAlert } from "@/components/ui/custom/hard-gate-alert";
 import type { Stage3Data } from "@causal-ssm/api-types";
 
@@ -9,7 +8,6 @@ export default function Stage3Content({ data }: { data: Stage3Data }) {
 
   return (
     <div className="space-y-4">
-      <ValidationSummaryBanner report={report} />
       {!report.is_valid && (
         <HardGateAlert
           title="Validation Failed — Pipeline Halted"
