@@ -3,6 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatNumber } from "@/lib/utils/format";
 import type { TreatmentEffect } from "@causal-ssm/api-types";
+import { ticks as d3Ticks, min as d3Min, max as d3Max } from "d3-array";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface ForestPlotPanelProps {
@@ -15,28 +16,6 @@ const AXIS_HEIGHT = 20;
 const CAP_HALF = 5;
 const DIAMOND_H = 5;
 const DIAMOND_W = 6;
-
-function niceAxisTicks(min: number, max: number, targetCount = 5): number[] {
-  const range = max - min;
-  const rawStep = range / targetCount;
-  const magnitude = 10 ** Math.floor(Math.log10(rawStep));
-  const residual = rawStep / magnitude;
-  const niceStep =
-    residual <= 1.5
-      ? magnitude
-      : residual <= 3
-        ? 2 * magnitude
-        : residual <= 7
-          ? 5 * magnitude
-          : 10 * magnitude;
-
-  const start = Math.ceil(min / niceStep) * niceStep;
-  const ticks: number[] = [];
-  for (let t = start; t <= max + niceStep * 0.01; t += niceStep) {
-    ticks.push(Math.round(t * 1e9) / 1e9);
-  }
-  return ticks;
-}
 
 interface HoverState {
   treatment: string;
@@ -54,15 +33,17 @@ export function ForestPlotPanel({ results }: ForestPlotPanelProps) {
 
   const { domainMin, domainMax } = useMemo(() => {
     const allVals = sorted.flatMap((r) => [r.ci_lower, r.ci_upper, 0]);
-    const pad = (Math.max(...allVals) - Math.min(...allVals)) * 0.15;
+    const lo = d3Min(allVals) ?? 0;
+    const hi = d3Max(allVals) ?? 0;
+    const pad = (hi - lo) * 0.15;
     return {
-      domainMin: Math.min(...allVals) - pad,
-      domainMax: Math.max(...allVals) + pad,
+      domainMin: lo - pad,
+      domainMax: hi + pad,
     };
   }, [sorted]);
 
   const ticks = useMemo(
-    () => niceAxisTicks(domainMin, domainMax),
+    () => d3Ticks(domainMin, domainMax, 5),
     [domainMin, domainMax],
   );
 
