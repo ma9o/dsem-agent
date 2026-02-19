@@ -40,7 +40,7 @@ export function PowerScalingScatter({ results }: PowerScalingScatterProps) {
   }
 
   return (
-    <div className="h-56 w-full">
+    <div className="min-h-56 h-full w-full">
       <ResponsiveContainer width="100%" height="100%">
         <ScatterChart margin={{ top: 10, right: 20, left: 10, bottom: 30 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />

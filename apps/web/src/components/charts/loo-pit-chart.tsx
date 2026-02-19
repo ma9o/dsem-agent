@@ -1,6 +1,5 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
 import { formatNumber } from "@/lib/utils/format";
 import type { LOODiagnostics } from "@causal-ssm/api-types";
 import {
@@ -30,20 +29,9 @@ export function LOOPITChart({ loo }: LOOPITChartProps) {
   }));
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3 flex-wrap">
-        <Badge variant="outline">ELPD = {formatNumber(loo.elpd_loo, 1)}</Badge>
-        <Badge variant="outline">p_loo = {formatNumber(loo.p_loo, 1)}</Badge>
-        <Badge variant="outline">SE = {formatNumber(loo.se, 1)}</Badge>
-        {loo.n_bad_k != null && (
-          <Badge variant={loo.n_bad_k === 0 ? "success" : "destructive"}>
-            {loo.n_bad_k === 0
-              ? "All Pareto k OK"
-              : `${loo.n_bad_k} bad Pareto k`}
-          </Badge>
-        )}
-      </div>
-      <div className="h-48 w-full">
+    <div className="space-y-2">
+      <span className="text-xs font-mono text-muted-foreground">LOO-PIT Calibration</span>
+      <div className="h-44 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />

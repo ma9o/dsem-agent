@@ -27,7 +27,8 @@ export function ParetoKChart({ loo }: ParetoKChartProps) {
 
   return (
     <div className="space-y-2">
-      <div className="h-40 w-full">
+      <span className="text-xs font-mono text-muted-foreground">Pareto k per Observation</span>
+      <div className="h-44 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <ScatterChart margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
