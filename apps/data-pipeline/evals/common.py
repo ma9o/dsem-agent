@@ -70,6 +70,15 @@ class EvalQuestion:
     def has_model_spec(self) -> bool:
         return (self.dir / "model_spec.json").exists()
 
+    @property
+    def has_priors(self) -> bool:
+        return (self.dir / "priors.json").exists()
+
+    @property
+    def has_full_spec(self) -> bool:
+        """Has model_spec + priors + causal_spec (all Stage 4 artifacts)."""
+        return self.has_model_spec and self.has_priors and self.has_causal_spec
+
     # ── loaders ──
 
     def load_latent_model(self) -> dict:
@@ -89,6 +98,17 @@ class EvalQuestion:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w") as f:
             json.dump(spec, f, indent=2)
+        return path
+
+    def load_priors(self) -> dict:
+        with (self.dir / "priors.json").open() as f:
+            return json.load(f)
+
+    def save_priors(self, priors: dict) -> Path:
+        path = self.dir / "priors.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w") as f:
+            json.dump(priors, f, indent=2)
         return path
 
 
@@ -131,6 +151,11 @@ def get_questions_with_model_spec() -> list[EvalQuestion]:
 def get_questions_with_model_spec_and_causal_spec() -> list[EvalQuestion]:
     """Return questions that have both model_spec.json and causal_spec.json."""
     return [q for q in discover_questions() if q.has_model_spec and q.has_causal_spec]
+
+
+def get_questions_with_full_spec() -> list[EvalQuestion]:
+    """Return questions that have model_spec + priors + causal_spec."""
+    return [q for q in discover_questions() if q.has_full_spec]
 
 
 def select_question(questions: list[EvalQuestion], selector: str) -> EvalQuestion:

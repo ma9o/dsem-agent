@@ -621,7 +621,11 @@ class SSMModelBuilder:
         # Falls back to first-order (already stored above) if not embeddable
         if dt_diag_raw and ssm_spec:
             self._try_exact_logm_conversion(
-                ssm_priors, ssm_spec, dt_diag_raw, dt_offdiag_raw, dt_values,
+                ssm_priors,
+                ssm_spec,
+                dt_diag_raw,
+                dt_offdiag_raw,
+                dt_values,
             )
         else:
             # Diagnostic: warn when first-order approximation may be inaccurate
@@ -672,7 +676,8 @@ class SSMModelBuilder:
             logger.info(
                 "Mixed observation intervals (%.1f–%.1f days) across parameters. "
                 "Cannot apply exact matrix logarithm; using first-order approximation.",
-                dt_min, dt_max,
+                dt_min,
+                dt_max,
             )
             self._warn_first_order_approximation(ssm_priors)
             return
@@ -777,7 +782,9 @@ class SSMModelBuilder:
         logger.info(
             "Exact matrix logarithm DT->CT conversion succeeded for %dx%d system "
             "(dt=%.1f days). Drift eigenvalues: %s",
-            n, n, dt,
+            n,
+            n,
+            dt,
             [f"{ev.real:.4f}" for ev in A_eigenvalues],
         )
 
@@ -880,12 +887,8 @@ class SSMModelBuilder:
                 min(implied_timescale_days, expected_lag_days), 1e-10
             )
             if ratio > 5.0:
-                cause_name = (
-                    ssm_spec.latent_names[ci] if ssm_spec.latent_names else f"latent_{ci}"
-                )
-                effect_name = (
-                    ssm_spec.latent_names[ei] if ssm_spec.latent_names else f"latent_{ei}"
-                )
+                cause_name = ssm_spec.latent_names[ci] if ssm_spec.latent_names else f"latent_{ci}"
+                effect_name = ssm_spec.latent_names[ei] if ssm_spec.latent_names else f"latent_{ei}"
                 logger.warning(
                     "Drift rate for %s->%s implies timescale %.1f days, "
                     "but edge lag suggests %.1f days (%.0fx mismatch). "
@@ -1221,3 +1224,46 @@ class SSMModelBuilder:
                     }
                 )
         return pl.DataFrame(summary_data)
+
+
+def build_ssm_builder(
+    model_spec: ModelSpec | dict,
+    priors: dict[str, PriorProposal] | dict[str, dict],
+    raw_data: pl.DataFrame,
+    causal_spec: dict | None = None,
+    sampler_config: dict | None = None,
+) -> SSMModelBuilder:
+    """Single canonical entry point for constructing a ready-to-use SSMModelBuilder.
+
+    Encapsulates the repeated pattern of:
+        builder = SSMModelBuilder(...)
+        X = pivot_to_wide(raw_data)
+        builder.build_model(X)
+
+    Args:
+        model_spec: Model specification (dict or ModelSpec)
+        priors: Prior proposals by parameter name
+        raw_data: Raw timestamped data (long format)
+        causal_spec: CausalSpec dict for DAG-constrained masks
+        sampler_config: Override sampler configuration
+
+    Returns:
+        A fully built SSMModelBuilder (model constructed, ready for fit/sample)
+
+    Raises:
+        ValueError: If raw_data is empty
+    """
+    from causal_ssm_agent.utils.data import pivot_to_wide
+
+    if raw_data.is_empty():
+        raise ValueError("Cannot build SSM model from empty data")
+
+    builder = SSMModelBuilder(
+        model_spec=model_spec,
+        priors=priors,
+        causal_spec=causal_spec,
+        sampler_config=sampler_config,
+    )
+    X = pivot_to_wide(raw_data)
+    builder.build_model(X)
+    return builder

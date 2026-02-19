@@ -11,6 +11,7 @@ Detects:
 """
 
 import logging
+from typing import Any
 
 import polars as pl
 from prefect import flow, task
@@ -28,10 +29,11 @@ def parametric_id_task(
     n_grid: int = 20,
     confidence: float = 0.95,
     causal_spec: dict | None = None,
+    builder: Any = None,
 ) -> dict:
     """Run parametric identifiability checks via profile likelihood.
 
-    1. Build SSMModel from spec + priors
+    1. Build SSMModel from spec + priors (or reuse provided builder)
     2. Prepare data (pivot raw -> wide)
     3. Call profile_likelihood()
     4. Return result summary
@@ -43,28 +45,28 @@ def parametric_id_task(
         n_grid: Number of grid points for profile likelihood
         confidence: Confidence level for chi-squared threshold
         causal_spec: CausalSpec dict for DAG-constrained masks
+        builder: Pre-built SSMModelBuilder (avoids rebuilding)
 
     Returns:
         Dict with parametric ID diagnostics
     """
     import jax.numpy as jnp
 
-    from causal_ssm_agent.models.ssm_builder import SSMModelBuilder
+    from causal_ssm_agent.models.ssm_builder import build_ssm_builder
     from causal_ssm_agent.utils.parametric_id import profile_likelihood
 
     try:
-        builder = SSMModelBuilder(model_spec=model_spec, priors=priors, causal_spec=causal_spec)
-
-        if raw_data.is_empty():
-            return {"checked": False, "error": "No data available"}
-
-        X = pivot_to_wide(raw_data)
-
-        # Build the model
-        builder.build_model(X)
+        if builder is None:
+            builder = build_ssm_builder(
+                model_spec=model_spec,
+                priors=priors,
+                raw_data=raw_data,
+                causal_spec=causal_spec,
+            )
         ssm_model = builder._model
 
         # Extract observations and times
+        X = pivot_to_wide(raw_data)
         observations = jnp.array(X.drop("time").to_numpy(), dtype=jnp.float32)
         times = jnp.array(X["time"].to_numpy(), dtype=jnp.float32)
         T = int(times.shape[0])
@@ -128,6 +130,7 @@ def parametric_id_task(
 def stage4b_parametric_id_flow(
     stage4_result: dict,
     raw_data: pl.DataFrame,
+    builder: Any = None,
 ) -> dict:
     """Stage 4b: Parametric identifiability check.
 
@@ -137,6 +140,7 @@ def stage4b_parametric_id_flow(
     Args:
         stage4_result: Output from stage4_orchestrated_flow
         raw_data: Raw timestamped data (indicator, value, timestamp)
+        builder: Pre-built SSMModelBuilder (avoids rebuilding)
 
     Returns:
         stage4_result augmented with 'parametric_id' key
@@ -145,7 +149,9 @@ def stage4b_parametric_id_flow(
     priors = stage4_result["priors"]
     causal_spec = stage4_result.get("causal_spec")
 
-    id_result = parametric_id_task(model_spec, priors, raw_data, causal_spec=causal_spec)
+    id_result = parametric_id_task(
+        model_spec, priors, raw_data, causal_spec=causal_spec, builder=builder
+    )
 
     return {
         **stage4_result,

@@ -99,13 +99,16 @@ async def causal_inference_pipeline(
     preprocess_result = preprocess_raw_input(user_id)
     lines = preprocess_result["lines"]
 
-    persist_web_result("stage-0", {
-        "source_type": preprocess_result["source_type"],
-        "source_label": preprocess_result["source_label"],
-        "n_records": preprocess_result["n_records"],
-        "date_range": preprocess_result["date_range"],
-        "sample": preprocess_result["sample"],
-    })
+    persist_web_result(
+        "stage-0",
+        {
+            "source_type": preprocess_result["source_type"],
+            "source_label": preprocess_result["source_label"],
+            "n_records": preprocess_result["n_records"],
+            "date_range": preprocess_result["date_range"],
+            "sample": preprocess_result["sample"],
+        },
+    )
 
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 1a: Propose latent model (theory only, no data)
@@ -172,7 +175,9 @@ async def causal_inference_pipeline(
         if not treatments:
             gate_1b_failed = True
             if gates_overridden:
-                print("⚠️  GATE 1b OVERRIDDEN: No identifiable treatments, continuing with empty list")
+                print(
+                    "⚠️  GATE 1b OVERRIDDEN: No identifiable treatments, continuing with empty list"
+                )
 
     gate_1b_overridden = gates_overridden and gate_1b_failed
 
@@ -238,22 +243,23 @@ async def causal_inference_pipeline(
     # Persist stage-2 web data
     sample_rows = raw_data_result.head(20).to_dicts() if n_observations > 0 else []
     per_ind_counts = (
-        dict(raw_data_result.group_by("indicator").len().iter_rows())
-        if n_observations > 0
-        else {}
+        dict(raw_data_result.group_by("indicator").len().iter_rows()) if n_observations > 0 else {}
     )
-    persist_web_result("stage-2", {
-        "workers": [
-            {"worker_id": i, "status": "completed", "n_extractions": 0, "chunk_size": 0}
-            for i in range(len(worker_chunks))
-        ],
-        "combined_extractions_sample": [
-            {k: str(v) if v is not None else None for k, v in row.items()}
-            for row in sample_rows
-        ],
-        "total_extractions": n_observations,
-        "per_indicator_counts": per_ind_counts,
-    })
+    persist_web_result(
+        "stage-2",
+        {
+            "workers": [
+                {"worker_id": i, "status": "completed", "n_extractions": 0, "chunk_size": 0}
+                for i in range(len(worker_chunks))
+            ],
+            "combined_extractions_sample": [
+                {k: str(v) if v is not None else None for k, v in row.items()}
+                for row in sample_rows
+            ],
+            "total_extractions": n_observations,
+            "per_indicator_counts": per_ind_counts,
+        },
+    )
 
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 3: Validate Extraction
@@ -364,18 +370,38 @@ async def causal_inference_pipeline(
         f"- **Model built**: {model_info.get('model_built', 'unknown')}\n",
     )
 
-    persist_web_result("stage-4", {
-        "model_spec": model_spec,
-        "priors": list(stage4_result.get("priors", {}).values()),
-        "llm_trace": stage4_result.get("llm_trace"),
-        "prior_predictive_samples": stage4_result.get("prior_predictive_samples"),
-    })
+    persist_web_result(
+        "stage-4",
+        {
+            "model_spec": model_spec,
+            "priors": list(stage4_result.get("priors", {}).values()),
+            "llm_trace": stage4_result.get("llm_trace"),
+            "prior_predictive_samples": stage4_result.get("prior_predictive_samples"),
+        },
+    )
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # Pre-build SSMModelBuilder once for downstream stages
+    # ══════════════════════════════════════════════════════════════════════════
+    from causal_ssm_agent.models.ssm_builder import build_ssm_builder
+
+    try:
+        builder = build_ssm_builder(
+            model_spec=stage4_result["model_spec"],
+            priors=stage4_result["priors"],
+            raw_data=data_for_model,
+            causal_spec=stage4_result.get("causal_spec"),
+        )
+    except Exception:
+        builder = None  # stages will build their own
 
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 4b: Parametric Identifiability Diagnostics
     # ══════════════════════════════════════════════════════════════════════════
     print("\n=== Stage 4b: Parametric Identifiability ===")
-    stage4_result = stage4b_parametric_id_flow(stage4_result, raw_data=data_for_model)
+    stage4_result = stage4b_parametric_id_flow(
+        stage4_result, raw_data=data_for_model, builder=builder
+    )
 
     gate_4b_failed = False
     gate_4b_overridden = False
@@ -456,7 +482,9 @@ async def causal_inference_pipeline(
         intervention_results = gpu_result["intervention_results"]
     else:
         # ── Local path: run stage 5 tasks via Prefect ──
-        fitted = fit_model(stage4_result, data_for_model, sampler_config=sampler_config)
+        fitted = fit_model(
+            stage4_result, data_for_model, sampler_config=sampler_config, builder=builder
+        )
 
         # Post-fit power-scaling sensitivity diagnostic
         power_scaling = run_power_scaling(fitted, data_for_model)

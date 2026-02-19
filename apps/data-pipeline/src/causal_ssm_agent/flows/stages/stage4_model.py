@@ -18,8 +18,6 @@ import logging
 import polars as pl
 from prefect import flow, task
 
-from causal_ssm_agent.utils.data import pivot_to_wide
-
 logger = logging.getLogger(__name__)
 
 
@@ -288,20 +286,15 @@ def build_model_task(
     Returns:
         Dict with model_built status and builder info
     """
-    from causal_ssm_agent.models.ssm_builder import SSMModelBuilder
+    from causal_ssm_agent.models.ssm_builder import build_ssm_builder
 
     try:
-        builder = SSMModelBuilder(model_spec=model_spec, priors=priors, causal_spec=causal_spec)
-
-        # Convert raw data to wide format for model building
-        if raw_data.is_empty():
-            return {
-                "model_built": False,
-                "error": "No data available",
-            }
-
-        X = pivot_to_wide(raw_data)
-        builder.build_model(X)
+        builder = build_ssm_builder(
+            model_spec=model_spec,
+            priors=priors,
+            raw_data=raw_data,
+            causal_spec=causal_spec,
+        )
 
         return {
             "model_built": True,
@@ -376,35 +369,10 @@ async def stage4_orchestrated_flow(
     # When an unobserved confounder is marginalized (handled by the ID strategy),
     # its observed children have correlated innovations in the SSM. We add
     # correlation parameters so the noise covariance is correctly specified.
-    id_status = causal_spec.get("identifiability", {})
-    if id_status:
-        from causal_ssm_agent.utils.identifiability import (
-            get_correlation_pairs_from_marginalization,
-        )
+    from causal_ssm_agent.utils.identifiability import inject_marginalized_correlations
 
-        cor_pairs = get_correlation_pairs_from_marginalization(
-            causal_spec.get("latent", {}),
-            causal_spec.get("measurement", {}),
-            id_status,
-        )
-        existing_names = {p.get("name") for p in parameter_specs}
-        for s1, s2, confounder in cor_pairs:
-            name = f"cor_{s1}_{s2}"
-            if name not in existing_names:
-                parameter_specs.append(
-                    {
-                        "name": name,
-                        "role": "correlation",
-                        "constraint": "correlation",
-                        "description": (
-                            f"Residual correlation between {s1} and {s2} "
-                            f"(marginalized confounder: {confounder})"
-                        ),
-                        "search_context": "",
-                    }
-                )
-                existing_names.add(name)
-        model_spec["parameters"] = parameter_specs
+    inject_marginalized_correlations(model_spec, causal_spec)
+    parameter_specs = model_spec.get("parameters", [])
 
     # Build a lookup from parameter name -> spec dict
     param_spec_by_name = {ps.get("name", f"param_{i}"): ps for i, ps in enumerate(parameter_specs)}
