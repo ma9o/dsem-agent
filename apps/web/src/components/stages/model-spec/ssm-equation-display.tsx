@@ -56,10 +56,10 @@ function distName(dist: string): string {
   return map[dist] ?? `\\text{${dist}}`;
 }
 
-/** Build a single observation-model line using compact μ notation. */
+/** Build a single observation-model line with per-variable μ subscript. */
 function likelihoodLine(lik: LikelihoodSpec): string {
   const v = `\\text{${textify(lik.variable)}}`;
-  const mu = linkInverse(lik.link, "\\mu_i");
+  const mu = linkInverse(lik.link, `\\mu_{${v}}`);
   const d = distName(lik.distribution);
 
   if (lik.distribution === "gaussian" || lik.distribution === "student_t") {
@@ -162,7 +162,7 @@ export function SSMEquationDisplay({ likelihoods, parameters, priors }: SsmEquat
   const predictorDef =
     likelihoods.length > 0
       ? tex(
-          String.raw`\mu_i(t) = \boldsymbol{\lambda}_i^\top \boldsymbol{\eta}(t)`,
+          String.raw`\mu_v(t) = \boldsymbol{\lambda}_v^\top \boldsymbol{\eta}(t)`,
         )
       : null;
 
