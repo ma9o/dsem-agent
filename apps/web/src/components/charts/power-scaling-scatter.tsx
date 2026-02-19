@@ -1,5 +1,6 @@
 "use client";
 
+import { diagnosisLabel } from "@/lib/constants/charts";
 import { formatNumber } from "@/lib/utils/format";
 import type { PowerScalingResult } from "@causal-ssm/api-types";
 import {
@@ -24,11 +25,6 @@ const diagnosisColor: Record<string, string> = {
   prior_data_conflict: "var(--destructive)",
 };
 
-const diagnosisLabel: Record<string, string> = {
-  well_identified: "Well Identified",
-  prior_dominated: "Prior Dominated",
-  prior_data_conflict: "Prior-Data Conflict",
-};
 
 export function PowerScalingScatter({ results }: PowerScalingScatterProps) {
   // Group by diagnosis for coloring

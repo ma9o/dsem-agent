@@ -1,5 +1,6 @@
 "use client";
 
+import { CHAIN_COLORS } from "@/lib/constants/charts";
 import { formatNumber } from "@/lib/utils/format";
 import type { TraceData } from "@causal-ssm/api-types";
 import {
@@ -12,12 +13,6 @@ import {
   YAxis,
 } from "recharts";
 
-const CHAIN_COLORS = [
-  "var(--primary)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-];
 
 interface TracePlotProps {
   trace: TraceData;

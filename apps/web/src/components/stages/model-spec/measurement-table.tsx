@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { InfoTable } from "@/components/ui/info-table";
 import { StatTooltip } from "@/components/ui/stat-tooltip";
 import { formatNumber } from "@/lib/utils/format";
+import { buildHistogram } from "@/lib/utils/histogram";
 import type { Extraction, LikelihoodSpec } from "@causal-ssm/api-types";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import {
@@ -25,29 +26,6 @@ export interface MeasurementRow {
   priorSamples?: number[];
 }
 
-// ── Histogram helpers (moved from observation-model-card) ─
-
-function buildHistogram(
-  values: number[],
-  nBins: number,
-): Array<{ binCenter: number; count: number }> {
-  if (values.length === 0) return [];
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  const binWidth = range / nBins;
-
-  const bins = Array.from({ length: nBins }, (_, i) => ({
-    binCenter: Math.round((min + (i + 0.5) * binWidth) * 100) / 100,
-    count: 0,
-  }));
-
-  for (const v of values) {
-    const idx = Math.min(Math.floor((v - min) / binWidth), nBins - 1);
-    bins[idx].count++;
-  }
-  return bins;
-}
 
 function buildCountFrequency(values: number[]): Array<{ binCenter: number; count: number }> {
   const freq = new Map<number, number>();

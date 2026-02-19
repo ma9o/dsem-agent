@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { HeaderWithTooltip, InfoTable } from "@/components/ui/info-table";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
+import { diagnosisLabel } from "@/lib/constants/charts";
 import { formatNumber } from "@/lib/utils/format";
 import type { PowerScalingResult } from "@causal-ssm/api-types";
 
@@ -11,11 +12,6 @@ const diagnosisBadgeVariant: Record<string, "success" | "warning" | "destructive
   prior_data_conflict: "destructive",
 };
 
-const diagnosisLabel: Record<string, string> = {
-  well_identified: "Well Identified",
-  prior_dominated: "Prior Dominated",
-  prior_data_conflict: "Prior-Data Conflict",
-};
 
 const col = createColumnHelper<PowerScalingResult>();
 

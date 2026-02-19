@@ -2,6 +2,7 @@
 
 import { Badge } from "@/components/ui/badge";
 import { formatNumber } from "@/lib/utils/format";
+import { buildHistogram } from "@/lib/utils/histogram";
 import type { PPCTestStat } from "@causal-ssm/api-types";
 import {
   Bar,
@@ -18,26 +19,6 @@ interface PPCTestStatChartProps {
   stat: PPCTestStat;
 }
 
-function buildHistogram(values: number[], nBins: number = 20) {
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  const binWidth = range / nBins;
-
-  const bins = Array.from({ length: nBins }, (_, i) => ({
-    x: min + (i + 0.5) * binWidth,
-    count: 0,
-    binStart: min + i * binWidth,
-    binEnd: min + (i + 1) * binWidth,
-  }));
-
-  for (const v of values) {
-    const idx = Math.min(Math.floor((v - min) / binWidth), nBins - 1);
-    bins[idx].count++;
-  }
-
-  return bins;
-}
 
 export function PPCTestStatChart({ stat }: PPCTestStatChartProps) {
   const bins = buildHistogram(stat.rep_values);
@@ -58,7 +39,7 @@ export function PPCTestStatChart({ stat }: PPCTestStatChartProps) {
           <BarChart data={bins} margin={{ top: 5, right: 15, left: 5, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
             <XAxis
-              dataKey="x"
+              dataKey="binCenter"
               type="number"
               domain={["dataMin", "dataMax"]}
               tick={{ fontSize: 10 }}
