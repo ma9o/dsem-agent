@@ -11,10 +11,10 @@ import { cn } from "@/lib/utils/cn";
 import type { LLMTrace, TraceMessage } from "@causal-ssm/api-types";
 import { Bot, ChevronRight, Clock, Cpu, Wrench } from "lucide-react";
 
-function formatTokens(n: number): string {
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-  return String(n);
-}
+const compactNumber = new Intl.NumberFormat("en", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
 
 function TraceSummary({ trace }: { trace: LLMTrace }) {
   const { usage } = trace;
@@ -25,11 +25,11 @@ function TraceSummary({ trace }: { trace: LLMTrace }) {
         {trace.model}
       </Badge>
       <span className="text-muted-foreground">
-        {formatTokens(usage.input_tokens)} in / {formatTokens(usage.output_tokens)} out
+        {compactNumber.format(usage.input_tokens)} in / {compactNumber.format(usage.output_tokens)} out
       </span>
       {usage.reasoning_tokens ? (
         <span className="text-muted-foreground">
-          ({formatTokens(usage.reasoning_tokens)} reasoning)
+          ({compactNumber.format(usage.reasoning_tokens)} reasoning)
         </span>
       ) : null}
       <span className="ml-auto flex items-center gap-1 text-muted-foreground">
