@@ -152,6 +152,59 @@ function parseFixedEffect(
   return null;
 }
 
+/** Parse a cor_<s1>_<s2> parameter name into its two states. */
+function parseCorrelation(
+  name: string,
+  knownStates: string[],
+): { s1: string; s2: string } | null {
+  const body = name.replace(/^cor_/, "");
+  for (const state1 of [...knownStates].sort((a, b) => b.length - a.length)) {
+    if (body.startsWith(`${state1}_`)) {
+      const rest = body.slice(state1.length + 1);
+      if (knownStates.includes(rest)) {
+        return { s1: state1, s2: rest };
+      }
+    }
+  }
+  return null;
+}
+
+/** Extract the marginalized confounder name from a correlation parameter description. */
+function extractConfounder(description: string): string | null {
+  const m = description.match(/marginalized confounder:\s*(.+?)\)/);
+  return m ? m[1] : null;
+}
+
+/** Build LaTeX lines for correlated errors from correlation parameters. */
+function correlatedErrorLines(
+  parameters: ParameterSpec[],
+): { latex: string; annotations: { s1: string; s2: string; confounder: string | null }[] } | null {
+  const corParams = parameters.filter((p) => p.role === "correlation");
+  if (corParams.length === 0) return null;
+
+  const states = stateNames(parameters);
+  const lines: string[] = [];
+  const annotations: { s1: string; s2: string; confounder: string | null }[] = [];
+
+  for (const p of corParams) {
+    const parsed = parseCorrelation(p.name, states);
+    if (!parsed) continue;
+    const { s1, s2 } = parsed;
+    const t1 = `\\text{${textify(s1)}}`;
+    const t2 = `\\text{${textify(s2)}}`;
+    lines.push(
+      `\\text{Corr}(\\varepsilon_{${t1}},\\, \\varepsilon_{${t2}}) &= \\psi_{${t1},\\,${t2}}`,
+    );
+    annotations.push({ s1, s2, confounder: extractConfounder(p.description ?? "") });
+  }
+
+  if (lines.length === 0) return null;
+  return {
+    latex: tex(`\\begin{aligned}\n${lines.join(" \\\\\n")}\n\\end{aligned}`),
+    annotations,
+  };
+}
+
 /** Build concrete per-state transition LaTeX lines from actual parameters. */
 function concreteTransitionLines(parameters: ParameterSpec[]): string[] {
   const states = stateNames(parameters);
@@ -208,6 +261,9 @@ export function SSMEquationDisplay({ likelihoods, parameters, priors }: SsmEquat
 \end{aligned}`,
   );
 
+  // --- Correlated errors (from marginalized confounders) ---
+  const corrInfo = correlatedErrorLines(parameters);
+
   // --- Observation model ---
   const predictorDef =
     likelihoods.length > 0
@@ -253,6 +309,30 @@ export function SSMEquationDisplay({ likelihoods, parameters, priors }: SsmEquat
             <div className="mt-2 overflow-x-auto rounded-md border border-dashed bg-muted/15 px-4 py-3">
               <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Generic form (reference)</p>
               <div dangerouslySetInnerHTML={{ __html: genericTransitionLatex }} />
+            </div>
+          </section>
+        )}
+
+        {/* Correlated errors */}
+        {corrInfo && (
+          <section>
+            <h4 className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Correlated Errors
+              <StatTooltip explanation="When an unobserved confounder is marginalized out (via front-door, IV, or other nonparametric identification), its effect is absorbed into residual noise. This induces correlation between the error terms of the confounder's observed children." />
+            </h4>
+            <div className="overflow-x-auto rounded-md border bg-muted/30 px-4 py-3">
+              <div dangerouslySetInnerHTML={{ __html: corrInfo.latex }} />
+              {corrInfo.annotations.some((a) => a.confounder) && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {corrInfo.annotations
+                    .filter((a) => a.confounder)
+                    .map(
+                      (a) =>
+                        `ψ(${textify(a.s1)}, ${textify(a.s2)}): marginalized ${textify(a.confounder!)}`,
+                    )
+                    .join("; ")}
+                </p>
+              )}
             </div>
           </section>
         )}
