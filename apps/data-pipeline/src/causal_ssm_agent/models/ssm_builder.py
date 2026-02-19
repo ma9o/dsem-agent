@@ -49,7 +49,7 @@ _ROLE_TO_SSM: dict[ParameterRole, tuple[str, dict]] = {
     ParameterRole.FIXED_EFFECT: ("drift_offdiag", {"mu": 0.0, "sigma": 0.5}),
     ParameterRole.RESIDUAL_SD: ("diffusion_diag", {"sigma": 1.0}),
     ParameterRole.LOADING: ("lambda_free", {"mu": 0.5, "sigma": 0.5}),
-    ParameterRole.CORRELATION: ("drift_offdiag", {"mu": 0.0, "sigma": 0.5}),
+    ParameterRole.CORRELATION: ("diffusion_offdiag", {"mu": 0.0, "sigma": 0.5}),
 }
 
 # Fallback keyword matching for parameters without a role in the ModelSpec
@@ -59,7 +59,7 @@ _KEYWORD_RULES: list[tuple[list[str], str, dict]] = [
     (["beta"], "drift_offdiag", {"mu": 0.0, "sigma": 0.5}),
     (["sigma", "sd"], "diffusion_diag", {"sigma": 1.0}),
     (["lambda", "loading"], "lambda_free", {"mu": 0.5, "sigma": 0.5}),
-    (["cor"], "drift_offdiag", {"mu": 0.0, "sigma": 0.5}),
+    (["cor"], "diffusion_offdiag", {"mu": 0.0, "sigma": 0.5}),
 ]
 
 
@@ -294,12 +294,17 @@ class SSMModelBuilder:
             latent_names, manifest_cols, n_latent, n_manifest
         )
 
+        # Enable off-diagonal diffusion when correlation parameters exist
+        # (marginalized confounders induce correlated process noise)
+        has_correlation = any(p.role == ParameterRole.CORRELATION for p in model_spec.parameters)
+        diffusion_mode: str = "free" if has_correlation else "diag"
+
         return SSMSpec(
             n_latent=n_latent,
             n_manifest=n_manifest,
             lambda_mat=lambda_mat,
             drift="free",
-            diffusion="diag",
+            diffusion=diffusion_mode,
             cint="free",  # Enable CINT for non-zero asymptotic means
             manifest_means=None,  # Will be zeros
             manifest_var="diag",
@@ -480,8 +485,8 @@ class SSMModelBuilder:
         dt_values: list[float] = []
 
         # Build index maps from masks if available
-        offdiag_param_index, lambda_param_index, diag_param_index = self._build_prior_index_maps(
-            ssm_spec, model_spec
+        offdiag_param_index, lambda_param_index, diag_param_index, diffusion_offdiag_param_index = (
+            self._build_prior_index_maps(ssm_spec, model_spec)
         )
 
         for param_name, prior_spec in priors.items():
@@ -543,6 +548,12 @@ class SSMModelBuilder:
                 continue
             if param_name in lambda_param_index:
                 attr, idx = lambda_param_index[param_name]
+                per_element.setdefault(attr, []).append((idx, normalized))
+                continue
+            # Correlation → diffusion off-diagonal (no DT-to-CT transform needed;
+            # diffusion Cholesky elements are already continuous-time)
+            if param_name in diffusion_offdiag_param_index:
+                attr, idx = diffusion_offdiag_param_index[param_name]
                 per_element.setdefault(attr, []).append((idx, normalized))
                 continue
 
@@ -891,34 +902,41 @@ class SSMModelBuilder:
         self,
         ssm_spec: SSMSpec | None,
         model_spec: ModelSpec | dict | None,
-    ) -> tuple[dict[str, tuple[str, int]], dict[str, tuple[str, int]], dict[str, tuple[str, int]]]:
+    ) -> tuple[
+        dict[str, tuple[str, int]],
+        dict[str, tuple[str, int]],
+        dict[str, tuple[str, int]],
+        dict[str, tuple[str, int]],
+    ]:
         """Build parameter name → (SSMPriors field, array index) maps.
 
         Uses drift_mask and lambda_mask to determine which array position
         each causal parameter occupies, so per-element priors align with
-        the sampling order in _sample_drift/_sample_lambda.
+        the sampling order in _sample_drift/_sample_lambda/_sample_diffusion.
 
         Returns:
-            (offdiag_param_index, lambda_param_index, diag_param_index) —
+            (offdiag_param_index, lambda_param_index, diag_param_index,
+             diffusion_offdiag_param_index) —
             all are {param_name: (ssm_field, index)} dicts. Empty if no
             spec/masks.
         """
         offdiag_index: dict[str, tuple[str, int]] = {}
         lambda_index: dict[str, tuple[str, int]] = {}
         diag_index: dict[str, tuple[str, int]] = {}
+        diffusion_offdiag_index: dict[str, tuple[str, int]] = {}
 
         if ssm_spec is None:
-            return offdiag_index, lambda_index, diag_index
+            return offdiag_index, lambda_index, diag_index, diffusion_offdiag_index
 
         # Parse model_spec for parameter names + roles
         if not model_spec:
-            return offdiag_index, lambda_index, diag_index
+            return offdiag_index, lambda_index, diag_index, diffusion_offdiag_index
         if isinstance(model_spec, dict):
             spec_obj = ModelSpec.model_validate(model_spec)
         elif isinstance(model_spec, ModelSpec):
             spec_obj = model_spec
         else:
-            return offdiag_index, lambda_index, diag_index
+            return offdiag_index, lambda_index, diag_index, diffusion_offdiag_index
 
         latent_names = ssm_spec.latent_names or []
         latent_idx_map = {name: i for i, name in enumerate(latent_names)}
@@ -996,7 +1014,42 @@ class SSMModelBuilder:
                 if pos in positions:
                     lambda_index[p.name] = ("lambda_free", positions.index(pos))
 
-        return offdiag_index, lambda_index, diag_index
+        # --- Diffusion off-diagonal index (correlation parameters) ---
+        # Lower-triangular positions matching _sample_diffusion ordering:
+        # for i in range(n): for j in range(i): position (i, j)
+        if ssm_spec.diffusion == "free":
+            n = ssm_spec.n_latent
+            lower_positions: list[tuple[int, int]] = []
+            for i in range(n):
+                for j in range(i):
+                    lower_positions.append((i, j))
+
+            latent_name_set = set(latent_idx_map.keys())
+            for p in spec_obj.parameters:
+                if p.role != ParameterRole.CORRELATION:
+                    continue
+                # Convention: parameter name "cor_<state1>_<state2>"
+                compound = p.name.removeprefix("cor_")
+                result = _split_compound_name(compound, latent_name_set, latent_name_set)
+                if result is None:
+                    logger.warning(
+                        "Could not parse CORRELATION parameter '%s' into "
+                        "(state1, state2) from known latents %s",
+                        p.name,
+                        sorted(latent_name_set),
+                    )
+                    continue
+                s1_name, s2_name = result
+                idx1, idx2 = latent_idx_map[s1_name], latent_idx_map[s2_name]
+                # Lower-triangular: larger index first
+                pos = (max(idx1, idx2), min(idx1, idx2))
+                if pos in lower_positions:
+                    diffusion_offdiag_index[p.name] = (
+                        "diffusion_offdiag",
+                        lower_positions.index(pos),
+                    )
+
+        return offdiag_index, lambda_index, diag_index, diffusion_offdiag_index
 
     def build_model(
         self,

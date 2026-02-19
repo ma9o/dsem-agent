@@ -287,10 +287,7 @@ class SSMModel:
             if n_lower > 0:
                 diff_lower = numpyro.sample(
                     "diffusion_lower",
-                    dist.Normal(
-                        self.priors.diffusion_offdiag["mu"],
-                        self.priors.diffusion_offdiag["sigma"],
-                    ).expand([n_lower]),
+                    _make_prior_batch(self.priors.diffusion_offdiag, n_lower),
                 )
             else:
                 diff_lower = jnp.array([])
