@@ -4,6 +4,10 @@ import { RetryIndicator } from "@/components/stages/model-spec/retry-indicator";
 import { SSMEquationDisplay } from "@/components/stages/model-spec/ssm-equation-display";
 import type { Extraction } from "@causal-ssm/api-types";
 import type { Stage4Data } from "@causal-ssm/api-types";
+import { BookOpen } from "lucide-react";
+
+const FUNCTIONAL_SPEC_URL =
+  "https://github.com/ma9o/causal-ssm-agent/blob/master/apps/data-pipeline/docs/modeling/functional_spec.md#15-parameter-roles-and-constraints";
 
 export default function Stage4Content({
   data,
@@ -21,7 +25,18 @@ export default function Stage4Content({
       />
       {extractions && extractions.length > 0 && (
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold">Measurement Model</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold">Measurement Model</h3>
+            <a
+              href={FUNCTIONAL_SPEC_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+              Parameter roles &amp; constraints
+            </a>
+          </div>
           <MeasurementTable
             likelihoods={data.model_spec.likelihoods}
             extractions={extractions}

@@ -3,10 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatTooltip } from "@/components/ui/stat-tooltip";
 import type { LikelihoodSpec, ParameterSpec, PriorProposal } from "@causal-ssm/api-types";
 import katex from "katex";
-import { ArrowDown, BookOpen } from "lucide-react";
-
-const FUNCTIONAL_SPEC_URL =
-  "https://github.com/ma9o/causal-ssm-agent/blob/master/apps/data-pipeline/docs/modeling/functional_spec.md#15-parameter-roles-and-constraints";
+import { ArrowDown } from "lucide-react";
 
 interface SsmEquationDisplayProps {
   likelihoods: LikelihoodSpec[];
@@ -180,18 +177,7 @@ export function SSMEquationDisplay({ likelihoods, parameters, priors }: SsmEquat
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base">SSM Equations</CardTitle>
-          <a
-            href={FUNCTIONAL_SPEC_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <BookOpen className="h-3.5 w-3.5" />
-            Parameter roles &amp; constraints
-          </a>
-        </div>
+        <CardTitle className="text-base">SSM Equations</CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
         {/* State dynamics */}
