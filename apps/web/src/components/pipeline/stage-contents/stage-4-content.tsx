@@ -1,5 +1,4 @@
-import { LikelihoodTable } from "@/components/stages/model-spec/likelihood-table";
-import { ObservationModelCard } from "@/components/stages/model-spec/observation-model-card";
+import { MeasurementTable } from "@/components/stages/model-spec/measurement-table";
 import { ParameterTable } from "@/components/stages/model-spec/parameter-table";
 import { PriorTable } from "@/components/stages/model-spec/prior-table";
 import { RetryIndicator } from "@/components/stages/model-spec/retry-indicator";
@@ -21,20 +20,14 @@ export default function Stage4Content({
         parameters={data.model_spec.parameters}
         priors={data.priors}
       />
-      <LikelihoodTable likelihoods={data.model_spec.likelihoods} />
       {extractions && extractions.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-sm font-semibold">Measurement Model</h3>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {data.model_spec.likelihoods.map((lik) => (
-              <ObservationModelCard
-                key={lik.variable}
-                likelihood={lik}
-                extractions={extractions.filter((e) => e.indicator === lik.variable)}
-                priorSamples={data.prior_predictive_samples?.[lik.variable]}
-              />
-            ))}
-          </div>
+          <MeasurementTable
+            likelihoods={data.model_spec.likelihoods}
+            extractions={extractions}
+            priorPredictiveSamples={data.prior_predictive_samples}
+          />
         </div>
       )}
       <ParameterTable parameters={data.model_spec.parameters} />
