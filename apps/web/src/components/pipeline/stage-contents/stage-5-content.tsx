@@ -24,8 +24,10 @@ export default function Stage5Content({ data }: { data: Stage5Data }) {
   return (
     <div className="space-y-4">
       {mock && <MockMethodSwitcher baseData={data} onDataChange={setActiveData} />}
-      <TreatmentRankingTable results={activeData.intervention_results} />
-      <ForestPlotPanel results={activeData.intervention_results} />
+      <div className="grid gap-4 xl:grid-cols-2">
+        <TreatmentRankingTable results={activeData.intervention_results} />
+        <ForestPlotPanel results={activeData.intervention_results} />
+      </div>
       <DiagnosticsAccordion
         powerScaling={activeData.power_scaling}
         ppc={activeData.ppc}

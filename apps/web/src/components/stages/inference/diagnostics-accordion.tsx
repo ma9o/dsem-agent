@@ -52,15 +52,12 @@ export function DiagnosticsAccordion({
   posteriorMarginals,
   posteriorPairs,
 }: DiagnosticsAccordionProps) {
-  // Determine which sections to open by default
-  const defaultOpen = ["power-scaling", "ppc"];
-  if (mcmcDiagnostics) defaultOpen.push("mcmc");
-  if (sviDiagnostics) defaultOpen.push("svi");
-  if (ppc.overlays?.length) defaultOpen.push("ppc-overlays");
-  if (ppc.test_stats?.length) defaultOpen.push("ppc-stats");
-  if (looDiagnostics) defaultOpen.push("loo");
+  const hasTraces = mcmcDiagnostics?.trace_data && mcmcDiagnostics.trace_data.length > 0;
+  const hasRankHists = mcmcDiagnostics?.rank_histograms && mcmcDiagnostics.rank_histograms.length > 0;
+  const hasEnergy = mcmcDiagnostics?.energy != null;
+  const hasMarginals = posteriorMarginals && posteriorMarginals.length > 0;
+  const hasPairs = posteriorPairs && posteriorPairs.length > 0;
 
-  // Deduplicate overlay variables for grouped display
   const overlayVars = ppc.overlays ?? [];
   const testStatsByVar = new Map<string, typeof ppc.test_stats>();
   for (const ts of ppc.test_stats ?? []) {
@@ -69,98 +66,67 @@ export function DiagnosticsAccordion({
     testStatsByVar.set(ts.variable, existing);
   }
 
-  const hasTraces = mcmcDiagnostics?.trace_data && mcmcDiagnostics.trace_data.length > 0;
-  const hasRankHists = mcmcDiagnostics?.rank_histograms && mcmcDiagnostics.rank_histograms.length > 0;
-  const hasEnergy = mcmcDiagnostics?.energy != null;
-  const hasMarginals = posteriorMarginals && posteriorMarginals.length > 0;
-  const hasPairs = posteriorPairs && posteriorPairs.length > 0;
+  // Build paired trace + rank histogram data per parameter
+  const mcmcParamPairs = (() => {
+    if (!hasTraces && !hasRankHists) return [];
+    const traceByParam = new Map(
+      (mcmcDiagnostics?.trace_data ?? []).map((t) => [t.parameter, t]),
+    );
+    const rankByParam = new Map(
+      (mcmcDiagnostics?.rank_histograms ?? []).map((h) => [h.parameter, h]),
+    );
+    const params = new Set([...traceByParam.keys(), ...rankByParam.keys()]);
+    return Array.from(params).map((param) => ({
+      parameter: param,
+      trace: traceByParam.get(param),
+      rank: rankByParam.get(param),
+    }));
+  })();
+
+  // All sections default open
+  const defaultOpen = ["mcmc", "svi", "loo", "posteriors", "power-scaling", "ppc"];
 
   return (
     <Accordion defaultOpen={defaultOpen}>
-      {/* MCMC Convergence Diagnostics */}
+      {/* ── MCMC Diagnostics (convergence + energy + traces + rank histograms) ── */}
       {mcmcDiagnostics && (
         <AccordionItem value="mcmc">
           <AccordionTrigger value="mcmc" className="text-sm">
-            <span className="inline-flex items-center gap-1.5">
-              MCMC Convergence
-              <StatTooltip explanation="Chain mixing and convergence diagnostics: R-hat, effective sample size (bulk + tail), MCSE, divergences, and tree depth from NUTS/HMC." />
+            <span className="inline-flex items-center gap-1.5 flex-wrap">
+              MCMC Diagnostics
+              <StatTooltip explanation="Chain convergence (R-hat, ESS, MCSE), energy diagnostics, trace plots, and rank histograms for NUTS/HMC sampling." />
+              <Badge
+                variant={mcmcDiagnostics.num_divergences === 0 ? "success" : "destructive"}
+              >
+                {mcmcDiagnostics.num_divergences === 0 ? "Converged" : `${mcmcDiagnostics.num_divergences} divergences`}
+              </Badge>
             </span>
-            <Badge
-              variant={mcmcDiagnostics.num_divergences === 0 ? "success" : "destructive"}
-              className="ml-2"
-            >
-              {mcmcDiagnostics.num_divergences === 0 ? "Converged" : `${mcmcDiagnostics.num_divergences} divergences`}
-            </Badge>
           </AccordionTrigger>
           <AccordionContent value="mcmc">
-            <MCMCDiagnosticsPanel diagnostics={mcmcDiagnostics} />
-          </AccordionContent>
-        </AccordionItem>
-      )}
+            <div className="space-y-4">
+              <MCMCDiagnosticsPanel diagnostics={mcmcDiagnostics} />
+              {hasEnergy && <EnergyChart energy={mcmcDiagnostics.energy!} />}
 
-      {/* NUTS Energy Diagnostics (Betancourt 2017) */}
-      {hasEnergy && (
-        <AccordionItem value="energy">
-          <AccordionTrigger value="energy" className="text-sm">
-            <span className="inline-flex items-center gap-1.5">
-              Energy Diagnostics
-              <StatTooltip explanation="NUTS energy diagnostics (Betancourt 2017). Compares marginal energy E and transition dE distributions. Large discrepancy or BFMI < 0.3 indicates the sampler struggles to explore the target geometry." />
-            </span>
-            <Badge
-              variant={Math.min(...mcmcDiagnostics!.energy!.bfmi) >= 0.3 ? "success" : "destructive"}
-              className="ml-2"
-            >
-              BFMI {Math.min(...mcmcDiagnostics!.energy!.bfmi) >= 0.3 ? "OK" : "Low"}
-            </Badge>
-          </AccordionTrigger>
-          <AccordionContent value="energy">
-            <EnergyChart energy={mcmcDiagnostics!.energy!} />
-          </AccordionContent>
-        </AccordionItem>
-      )}
-
-      {/* Trace Plots */}
-      {hasTraces && (
-        <AccordionItem value="traces">
-          <AccordionTrigger value="traces" className="text-sm">
-            <span className="inline-flex items-center gap-1.5">
-              Trace Plots
-              <StatTooltip explanation="MCMC chain trajectories over sampling iterations. Well-mixed chains should look like 'hairy caterpillars' with no trends or stuck regions." />
-            </span>
-            <Badge variant="outline" className="ml-2">
-              {mcmcDiagnostics!.trace_data!.length} params
-            </Badge>
-          </AccordionTrigger>
-          <AccordionContent value="traces">
-            <div className="grid gap-4 sm:grid-cols-2">
-              {mcmcDiagnostics!.trace_data!.map((trace) => (
-                <TracePlot key={trace.parameter} trace={trace} />
-              ))}
+              {/* Paired trace + rank histogram per parameter */}
+              {mcmcParamPairs.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Per-parameter traces & rank histograms
+                  </h4>
+                  {mcmcParamPairs.map(({ parameter, trace, rank }) => (
+                    <div key={parameter} className="grid gap-4 sm:grid-cols-2">
+                      {trace && <TracePlot trace={trace} />}
+                      {rank && <RankHistogram histogram={rank} />}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </AccordionContent>
         </AccordionItem>
       )}
 
-      {/* Rank Histograms */}
-      {hasRankHists && (
-        <AccordionItem value="rank-hists">
-          <AccordionTrigger value="rank-hists" className="text-sm">
-            <span className="inline-flex items-center gap-1.5">
-              Rank Histograms
-              <StatTooltip explanation="Rank histograms (Vehtari et al. 2021). Samples are ranked across all chains and binned per chain. Uniform histograms indicate good mixing." />
-            </span>
-          </AccordionTrigger>
-          <AccordionContent value="rank-hists">
-            <div className="grid gap-4 sm:grid-cols-2">
-              {mcmcDiagnostics!.rank_histograms!.map((hist) => (
-                <RankHistogram key={hist.parameter} histogram={hist} />
-              ))}
-            </div>
-          </AccordionContent>
-        </AccordionItem>
-      )}
-
-      {/* SVI ELBO Loss Curve */}
+      {/* ── ELBO Convergence (SVI only) ── */}
       {sviDiagnostics && (
         <AccordionItem value="svi">
           <AccordionTrigger value="svi" className="text-sm">
@@ -175,169 +141,166 @@ export function DiagnosticsAccordion({
         </AccordionItem>
       )}
 
-      {/* LOO-CV Diagnostics */}
+      {/* ── LOO Cross-Validation (PIT + Pareto-K side by side) ── */}
       {looDiagnostics && (
         <AccordionItem value="loo">
           <AccordionTrigger value="loo" className="text-sm">
-            <span className="inline-flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-1.5 flex-wrap">
               LOO Cross-Validation
               <StatTooltip explanation="Leave-one-out cross-validation via Pareto-smoothed importance sampling. Assesses predictive accuracy and identifies influential observations." />
+              <Badge
+                variant={
+                  looDiagnostics.n_bad_k != null && looDiagnostics.n_bad_k === 0
+                    ? "success"
+                    : "warning"
+                }
+              >
+                ELPD = {formatNumber(looDiagnostics.elpd_loo, 1)}
+              </Badge>
             </span>
-            <Badge
-              variant={
-                looDiagnostics.n_bad_k != null && looDiagnostics.n_bad_k === 0
-                  ? "success"
-                  : "warning"
-              }
-              className="ml-2"
-            >
-              ELPD = {formatNumber(looDiagnostics.elpd_loo, 1)}
-            </Badge>
           </AccordionTrigger>
           <AccordionContent value="loo">
-            <div className="space-y-4">
-              {looDiagnostics.loo_pit && <LOOPITChart loo={looDiagnostics} />}
-              {looDiagnostics.pareto_k && <ParetoKChart loo={looDiagnostics} />}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="outline">ELPD = {formatNumber(looDiagnostics.elpd_loo, 1)}</Badge>
+                <Badge variant="outline">p_loo = {formatNumber(looDiagnostics.p_loo, 1)}</Badge>
+                <Badge variant="outline">SE = {formatNumber(looDiagnostics.se, 1)}</Badge>
+                {looDiagnostics.n_bad_k != null && (
+                  <Badge variant={looDiagnostics.n_bad_k === 0 ? "success" : "destructive"}>
+                    {looDiagnostics.n_bad_k === 0 ? "All Pareto k OK" : `${looDiagnostics.n_bad_k} bad Pareto k`}
+                  </Badge>
+                )}
+              </div>
+              <div className="grid gap-4 lg:grid-cols-2">
+                {looDiagnostics.loo_pit && <LOOPITChart loo={looDiagnostics} />}
+                {looDiagnostics.pareto_k && <ParetoKChart loo={looDiagnostics} />}
+              </div>
             </div>
           </AccordionContent>
         </AccordionItem>
       )}
 
-      {/* Posterior Marginals */}
-      {hasMarginals && (
+      {/* ── Posterior Exploration (marginals + pairs) ── */}
+      {(hasMarginals || hasPairs) && (
         <AccordionItem value="posteriors">
           <AccordionTrigger value="posteriors" className="text-sm">
-            <span className="inline-flex items-center gap-1.5">
-              Posterior Distributions
-              <StatTooltip explanation="Marginal posterior density for each parameter with 94% HDI. Vertical line shows the posterior mean." />
+            <span className="inline-flex items-center gap-1.5 flex-wrap">
+              Posterior Exploration
+              <StatTooltip explanation="Marginal posterior densities with 94% HDI, and pairwise scatter plots revealing parameter correlations and identifiability issues." />
             </span>
-            <Badge variant="outline" className="ml-2">
-              {posteriorMarginals!.length} params
-            </Badge>
           </AccordionTrigger>
           <AccordionContent value="posteriors">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {posteriorMarginals!.map((m) => (
-                <PosteriorDensityChart key={m.parameter} marginal={m} />
-              ))}
-            </div>
-          </AccordionContent>
-        </AccordionItem>
-      )}
-
-      {/* Posterior Pairs */}
-      {hasPairs && (
-        <AccordionItem value="pairs">
-          <AccordionTrigger value="pairs" className="text-sm">
-            <span className="inline-flex items-center gap-1.5">
-              Posterior Pairs
-              <StatTooltip explanation="Pairwise scatter plots of posterior samples. Reveals correlations and potential identifiability issues between parameters." />
-            </span>
-            <Badge variant="outline" className="ml-2">
-              {posteriorPairs!.length} pairs
-            </Badge>
-          </AccordionTrigger>
-          <AccordionContent value="pairs">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {posteriorPairs!.map((p) => (
-                <PosteriorPairsChart key={`${p.param_x}-${p.param_y}`} pair={p} />
-              ))}
-            </div>
-          </AccordionContent>
-        </AccordionItem>
-      )}
-
-      {/* Power Scaling Section */}
-      <AccordionItem value="power-scaling">
-        <AccordionTrigger value="power-scaling" className="text-sm">
-          <span className="inline-flex items-center gap-1.5">
-            Power Scaling Diagnostics
-            <StatTooltip explanation="Tests whether posteriors are driven by data (good) or priors (concerning). Scales the likelihood and prior to detect sensitivity." />
-          </span>
-          <Badge
-            variant={
-              powerScaling.every((p) => p.diagnosis === "well_identified") ? "success" : "warning"
-            }
-            className="ml-2"
-          >
-            {powerScaling.filter((p) => p.diagnosis === "well_identified").length}/
-            {powerScaling.length} OK
-          </Badge>
-        </AccordionTrigger>
-        <AccordionContent value="power-scaling">
-          <div className="space-y-4">
-            {powerScaling.length >= 2 && <PowerScalingScatter results={powerScaling} />}
-            <PowerScalingTable results={powerScaling} />
-          </div>
-        </AccordionContent>
-      </AccordionItem>
-
-      {/* PPC Warnings Table */}
-      <AccordionItem value="ppc">
-        <AccordionTrigger value="ppc" className="text-sm">
-          <span className="inline-flex items-center gap-1.5">
-            Posterior Predictive Checks
-            <StatTooltip explanation="Simulates data from the fitted model and compares to observed data. Failures suggest model misspecification." />
-          </span>
-          <Badge variant={ppc.overall_passed ? "success" : "destructive"} className="ml-2">
-            {ppc.overall_passed ? "Passed" : "Failed"}
-          </Badge>
-        </AccordionTrigger>
-        <AccordionContent value="ppc">
-          <PPCWarningsTable warnings={ppc.per_variable_warnings} />
-        </AccordionContent>
-      </AccordionItem>
-
-      {/* PPC Ribbon Overlays (Gabry's ppc_dens_overlay) */}
-      {overlayVars.length > 0 && (
-        <AccordionItem value="ppc-overlays">
-          <AccordionTrigger value="ppc-overlays" className="text-sm">
-            <span className="inline-flex items-center gap-1.5">
-              PPC Overlay Plots
-              <StatTooltip explanation="Observed data (solid line) vs posterior predictive quantile bands and individual y_rep draws. The shaded regions show where the model expects data to fall." />
-            </span>
-            <Badge variant="outline" className="ml-2">
-              {overlayVars.length} variable{overlayVars.length !== 1 && "s"}
-            </Badge>
-          </AccordionTrigger>
-          <AccordionContent value="ppc-overlays">
-            <div className="space-y-6">
-              {overlayVars.map((ov) => (
-                <div key={ov.variable}>
-                  <h4 className="mb-2 text-sm font-medium">{ov.variable}</h4>
-                  <PPCRibbonChart overlay={ov} />
-                </div>
-              ))}
-            </div>
-          </AccordionContent>
-        </AccordionItem>
-      )}
-
-      {/* PPC Test Statistics (Gabry's ppc_stat) */}
-      {testStatsByVar.size > 0 && (
-        <AccordionItem value="ppc-stats">
-          <AccordionTrigger value="ppc-stats" className="text-sm">
-            <span className="inline-flex items-center gap-1.5">
-              PPC Test Statistics
-              <StatTooltip explanation="Distribution of test statistics (mean, sd, min, max) across posterior predictive draws. The vertical line shows the observed value. Extreme p-values suggest misspecification." />
-            </span>
-          </AccordionTrigger>
-          <AccordionContent value="ppc-stats">
-            <div className="space-y-6">
-              {Array.from(testStatsByVar.entries()).map(([variable, stats]) => (
-                <div key={variable}>
-                  <h4 className="mb-3 text-sm font-medium">{variable}</h4>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    {stats.map((s) => (
-                      <PPCTestStatChart key={`${s.variable}-${s.stat_name}`} stat={s} />
+            <div className="space-y-4">
+              {hasMarginals && (
+                <div>
+                  <h4 className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Marginal distributions
+                  </h4>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {posteriorMarginals!.map((m) => (
+                      <PosteriorDensityChart key={m.parameter} marginal={m} />
                     ))}
                   </div>
                 </div>
-              ))}
+              )}
+              {hasPairs && (
+                <div>
+                  <h4 className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Pairwise correlations
+                  </h4>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {posteriorPairs!.map((p) => (
+                      <PosteriorPairsChart key={`${p.param_x}-${p.param_y}`} pair={p} />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </AccordionContent>
         </AccordionItem>
       )}
+
+      {/* ── Power Scaling (scatter + table side by side) ── */}
+      <AccordionItem value="power-scaling">
+        <AccordionTrigger value="power-scaling" className="text-sm">
+          <span className="inline-flex items-center gap-1.5 flex-wrap">
+            Power Scaling Diagnostics
+            <StatTooltip explanation="Tests whether posteriors are driven by data (good) or priors (concerning). Scales the likelihood and prior to detect sensitivity." />
+            <Badge
+              variant={
+                powerScaling.every((p) => p.diagnosis === "well_identified") ? "success" : "warning"
+              }
+            >
+              {powerScaling.filter((p) => p.diagnosis === "well_identified").length}/
+              {powerScaling.length} OK
+            </Badge>
+          </span>
+        </AccordionTrigger>
+        <AccordionContent value="power-scaling">
+          {powerScaling.length >= 2 ? (
+            <div className="grid gap-4 lg:grid-cols-2">
+              <PowerScalingScatter results={powerScaling} />
+              <PowerScalingTable results={powerScaling} />
+            </div>
+          ) : (
+            <PowerScalingTable results={powerScaling} />
+          )}
+        </AccordionContent>
+      </AccordionItem>
+
+      {/* ── Posterior Predictive Checks (warnings + overlays + test stats) ── */}
+      <AccordionItem value="ppc">
+        <AccordionTrigger value="ppc" className="text-sm">
+          <span className="inline-flex items-center gap-1.5 flex-wrap">
+            Posterior Predictive Checks
+            <StatTooltip explanation="Simulates data from the fitted model and compares to observed data. Includes per-variable warnings, overlay plots, and test statistics." />
+            <Badge variant={ppc.overall_passed ? "success" : "destructive"}>
+              {ppc.overall_passed ? "Passed" : "Failed"}
+            </Badge>
+          </span>
+        </AccordionTrigger>
+        <AccordionContent value="ppc">
+          <div className="space-y-6">
+            <PPCWarningsTable warnings={ppc.per_variable_warnings} />
+
+            {overlayVars.length > 0 && (
+              <div>
+                <h4 className="mb-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Overlay plots
+                </h4>
+                <div className="space-y-6">
+                  {overlayVars.map((ov) => (
+                    <div key={ov.variable}>
+                      <h5 className="mb-2 text-sm font-medium">{ov.variable}</h5>
+                      <PPCRibbonChart overlay={ov} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {testStatsByVar.size > 0 && (
+              <div>
+                <h4 className="mb-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Test statistics
+                </h4>
+                <div className="space-y-6">
+                  {Array.from(testStatsByVar.entries()).map(([variable, stats]) => (
+                    <div key={variable}>
+                      <h5 className="mb-3 text-sm font-medium">{variable}</h5>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        {stats.map((s) => (
+                          <PPCTestStatChart key={`${s.variable}-${s.stat_name}`} stat={s} />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </AccordionContent>
+      </AccordionItem>
     </Accordion>
   );
 }
