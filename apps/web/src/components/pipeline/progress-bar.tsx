@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { PipelineProgress } from "@/lib/hooks/use-run-events";
 import { STAGES } from "@causal-ssm/api-types";
@@ -10,26 +11,26 @@ export function PipelineProgressBar({ progress }: { progress: PipelineProgress |
   const completed = STAGES.filter((s) => progress.stages[s.id] === "completed").length;
 
   return (
-    <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-sm border-b px-3 py-2.5 sm:px-4 sm:py-3">
+    <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-sm border-b px-4 py-2.5 sm:px-6 sm:py-3">
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-1.5">
           <Link
             href="/"
-            className="text-sm font-semibold tracking-tight hover:opacity-80 transition-opacity"
+            className="text-base font-semibold tracking-tight hover:opacity-80 transition-opacity"
           >
             Causal Inference Pipeline
           </Link>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-muted-foreground">
+            <span className="text-sm font-medium text-muted-foreground">
               {completed}/{STAGES.length} stages
             </span>
             {progress.isComplete && (
-              <span className="animate-fade-in text-xs font-medium text-success">
+              <Badge variant="success" className="animate-fade-in">
                 Complete
-              </span>
+              </Badge>
             )}
             {progress.isFailed && (
-              <span className="text-xs font-medium text-destructive">Failed</span>
+              <Badge variant="destructive">Failed</Badge>
             )}
           </div>
         </div>
@@ -40,41 +41,42 @@ export function PipelineProgressBar({ progress }: { progress: PipelineProgress |
 
             return (
               <Tooltip
-                key={stage.id}
-                content={
-                  <div className="flex items-center gap-1.5 text-xs whitespace-nowrap">
-                    {status === "completed" && <Check className="h-3 w-3 text-success" />}
-                    {status === "running" && <Loader2 className="h-3 w-3 animate-spin" />}
-                    {status === "failed" && <X className="h-3 w-3 text-destructive" />}
-                    <span>
-                      {stage.number}. {stage.label}
-                    </span>
-                  </div>
-                }
-              >
-                <button
-                  type="button"
-                  disabled={!isClickable}
-                  className="group relative flex-1"
-                  onClick={() => {
-                    if (!isClickable) return;
-                    document
-                      .getElementById(stage.id)
-                      ?.scrollIntoView({ behavior: "smooth", block: "start" });
-                  }}
+                  key={stage.id}
+                  triggerClassName="flex-1"
+                  content={
+                    <div className="flex items-center gap-1.5 text-xs whitespace-nowrap">
+                      {status === "completed" && <Check className="h-3 w-3 text-success" />}
+                      {status === "running" && <Loader2 className="h-3 w-3 animate-spin" />}
+                      {status === "failed" && <X className="h-3 w-3 text-destructive" />}
+                      <span>
+                        {stage.number}. {stage.label}
+                      </span>
+                    </div>
+                  }
                 >
-                  <div
-                    className={`h-2 rounded-full transition-all duration-500 ${
-                      status === "completed"
-                        ? "bg-success"
-                        : status === "running"
-                          ? "bg-primary animate-pulse-subtle"
-                          : status === "failed"
-                            ? "bg-destructive"
-                            : "bg-secondary"
-                    } ${isClickable ? "group-hover:opacity-80 cursor-pointer" : "cursor-default"}`}
-                  />
-                </button>
+                  <button
+                    type="button"
+                    disabled={!isClickable}
+                    className="group relative w-full"
+                    onClick={() => {
+                      if (!isClickable) return;
+                      document
+                        .getElementById(stage.id)
+                        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }}
+                  >
+                    <div
+                      className={`h-1 rounded-full transition-all duration-500 ${
+                        status === "completed"
+                          ? "bg-success"
+                          : status === "running"
+                            ? "bg-primary animate-pulse-subtle"
+                            : status === "failed"
+                              ? "bg-destructive"
+                              : "bg-secondary"
+                      } ${isClickable ? "group-hover:opacity-80 cursor-pointer" : "cursor-default"}`}
+                    />
+                  </button>
               </Tooltip>
             );
           })}

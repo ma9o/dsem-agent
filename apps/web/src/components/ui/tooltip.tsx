@@ -8,10 +8,12 @@ export function Tooltip({
   children,
   content,
   className,
+  triggerClassName,
 }: {
   children: ReactNode;
   content: ReactNode;
   className?: string;
+  triggerClassName?: string;
 }) {
   const [show, setShow] = useState(false);
   const [coords, setCoords] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
@@ -55,7 +57,7 @@ export function Tooltip({
   return (
     <div
       ref={triggerRef}
-      className="relative inline-flex"
+      className={cn("relative inline-flex", triggerClassName)}
       onMouseEnter={handleEnter}
       onMouseLeave={handleLeave}
     >
