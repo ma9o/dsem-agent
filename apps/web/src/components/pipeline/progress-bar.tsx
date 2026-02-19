@@ -57,14 +57,9 @@ export function PipelineProgressBar({
             <span className="text-sm font-medium text-muted-foreground">
               {completed}/{STAGES.length} stages
             </span>
-            {progress.isComplete && !hasGateFailure && !hasGateOverride && (
+            {progress.isComplete && !hasGateFailure && (
               <Badge variant="success" className="animate-fade-in">
                 Complete
-              </Badge>
-            )}
-            {progress.isComplete && !hasGateFailure && hasGateOverride && (
-              <Badge variant="destructive" className="animate-fade-in">
-                Complete (with overrides)
               </Badge>
             )}
             {(progress.isFailed || hasGateFailure) && (
