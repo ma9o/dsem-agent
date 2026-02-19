@@ -18,7 +18,7 @@ function DensitySparkline({ prior }: { prior: PriorProposal }) {
   return (
     <div className="h-16 w-36">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 2, right: 4, left: -16, bottom: 0 }}>
+        <AreaChart data={data} margin={{ top: 2, right: 4, left: 0, bottom: 0 }}>
           <XAxis
             dataKey="x"
             type="number"
@@ -28,13 +28,7 @@ function DensitySparkline({ prior }: { prior: PriorProposal }) {
             tickLine={false}
             axisLine={{ stroke: "var(--border)" }}
           />
-          <YAxis
-            tick={{ fontSize: 9 }}
-            tickFormatter={(v: number) => formatNumber(v, 2)}
-            tickLine={false}
-            axisLine={false}
-            width={36}
-          />
+          <YAxis hide />
           <RechartsTooltip
             formatter={(v: number) => [formatNumber(v, 4), "density"]}
             labelFormatter={(l: number) => `x = ${formatNumber(l, 3)}`}
