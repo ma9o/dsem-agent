@@ -91,7 +91,7 @@ export function DiagnosticsAccordion({
       {/* ── MCMC Diagnostics (convergence + energy + traces + rank histograms) ── */}
       {mcmcDiagnostics && (
         <AccordionItem value="mcmc">
-          <AccordionTrigger value="mcmc" className="text-sm">
+          <AccordionTrigger className="text-sm">
             <span className="inline-flex items-center gap-1.5 flex-wrap">
               MCMC Diagnostics
               <StatTooltip explanation="Chain convergence (R-hat, ESS, MCSE), energy diagnostics, trace plots, and rank histograms for NUTS/HMC sampling." />
@@ -102,7 +102,7 @@ export function DiagnosticsAccordion({
               </Badge>
             </span>
           </AccordionTrigger>
-          <AccordionContent value="mcmc">
+          <AccordionContent>
             <div className="space-y-4">
               <MCMCDiagnosticsPanel diagnostics={mcmcDiagnostics} />
               {hasEnergy && <EnergyChart energy={mcmcDiagnostics.energy!} />}
@@ -129,13 +129,13 @@ export function DiagnosticsAccordion({
       {/* ── ELBO Convergence (SVI only) ── */}
       {sviDiagnostics && (
         <AccordionItem value="svi">
-          <AccordionTrigger value="svi" className="text-sm">
+          <AccordionTrigger className="text-sm">
             <span className="inline-flex items-center gap-1.5">
               ELBO Convergence
               <StatTooltip explanation="Evidence Lower Bound loss over SVI optimization steps. Should decrease and plateau." />
             </span>
           </AccordionTrigger>
-          <AccordionContent value="svi">
+          <AccordionContent>
             <ELBOLossChart diagnostics={sviDiagnostics} />
           </AccordionContent>
         </AccordionItem>
@@ -144,7 +144,7 @@ export function DiagnosticsAccordion({
       {/* ── LOO Cross-Validation (PIT + Pareto-K side by side) ── */}
       {looDiagnostics && (
         <AccordionItem value="loo">
-          <AccordionTrigger value="loo" className="text-sm">
+          <AccordionTrigger className="text-sm">
             <span className="inline-flex items-center gap-1.5 flex-wrap">
               LOO Cross-Validation
               <StatTooltip explanation="Leave-one-out cross-validation via Pareto-smoothed importance sampling. Assesses predictive accuracy and identifies influential observations." />
@@ -159,7 +159,7 @@ export function DiagnosticsAccordion({
               </Badge>
             </span>
           </AccordionTrigger>
-          <AccordionContent value="loo">
+          <AccordionContent>
             <div className="space-y-3">
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="outline">ELPD = {formatNumber(looDiagnostics.elpd_loo, 1)}</Badge>
@@ -183,13 +183,13 @@ export function DiagnosticsAccordion({
       {/* ── Posterior Exploration (marginals + pairs) ── */}
       {(hasMarginals || hasPairs) && (
         <AccordionItem value="posteriors">
-          <AccordionTrigger value="posteriors" className="text-sm">
+          <AccordionTrigger className="text-sm">
             <span className="inline-flex items-center gap-1.5 flex-wrap">
               Posterior Exploration
               <StatTooltip explanation="Marginal posterior densities with 94% HDI, and pairwise scatter plots revealing parameter correlations and identifiability issues." />
             </span>
           </AccordionTrigger>
-          <AccordionContent value="posteriors">
+          <AccordionContent>
             <div className="space-y-4">
               {hasMarginals && (
                 <div>
@@ -222,7 +222,7 @@ export function DiagnosticsAccordion({
 
       {/* ── Power Scaling (scatter + table side by side) ── */}
       <AccordionItem value="power-scaling">
-        <AccordionTrigger value="power-scaling" className="text-sm">
+        <AccordionTrigger className="text-sm">
           <span className="inline-flex items-center gap-1.5 flex-wrap">
             Power Scaling Diagnostics
             <StatTooltip explanation="Tests whether posteriors are driven by data (good) or priors (concerning). Scales the likelihood and prior to detect sensitivity." />
@@ -236,7 +236,7 @@ export function DiagnosticsAccordion({
             </Badge>
           </span>
         </AccordionTrigger>
-        <AccordionContent value="power-scaling">
+        <AccordionContent>
           {powerScaling.length >= 2 ? (
             <div className="grid gap-4 lg:grid-cols-2">
               <PowerScalingScatter results={powerScaling} />
@@ -250,7 +250,7 @@ export function DiagnosticsAccordion({
 
       {/* ── Posterior Predictive Checks (warnings + overlays + test stats) ── */}
       <AccordionItem value="ppc">
-        <AccordionTrigger value="ppc" className="text-sm">
+        <AccordionTrigger className="text-sm">
           <span className="inline-flex items-center gap-1.5 flex-wrap">
             Posterior Predictive Checks
             <StatTooltip explanation="Simulates data from the fitted model and compares to observed data. Includes per-variable warnings, overlay plots, and test statistics." />
@@ -259,7 +259,7 @@ export function DiagnosticsAccordion({
             </Badge>
           </span>
         </AccordionTrigger>
-        <AccordionContent value="ppc">
+        <AccordionContent>
           <div className="space-y-6">
             <PPCWarningsTable warnings={ppc.per_variable_warnings} />
 

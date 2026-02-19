@@ -43,14 +43,14 @@ function TraceSummary({ trace }: { trace: LLMTrace }) {
 function SystemMessage({ msg }: { msg: TraceMessage }) {
   return (
     <Accordion>
-      <AccordionItem value="system" className="border-l-2 border-muted-foreground/30 border-b-0">
-        <AccordionTrigger value="system" className="py-2 text-xs text-muted-foreground">
+      <AccordionItem value="system" className="border-l-2 border-muted-foreground/30 !border-b-0">
+        <AccordionTrigger className="py-2 text-xs text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <ChevronRight className="h-3 w-3" />
             System prompt
           </span>
         </AccordionTrigger>
-        <AccordionContent value="system">
+        <AccordionContent>
           <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-muted/50 p-2 text-[11px]">
             {msg.content}
           </pre>
@@ -83,14 +83,13 @@ function AssistantMessage({ msg, idx }: { msg: TraceMessage; idx: number }) {
 
       {msg.reasoning && (
         <Accordion>
-          <AccordionItem value={`reasoning-${idx}`} className="border-l-2 border-amber-400/50 border-b-0">
+          <AccordionItem value={`reasoning-${idx}`} className="border-l-2 border-amber-400/50 !border-b-0">
             <AccordionTrigger
-              value={`reasoning-${idx}`}
               className="py-1.5 text-[11px] text-amber-600 dark:text-amber-400"
             >
               Thinking
             </AccordionTrigger>
-            <AccordionContent value={`reasoning-${idx}`}>
+            <AccordionContent>
               <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-amber-50/50 p-2 text-[11px] dark:bg-amber-950/20">
                 {msg.reasoning}
               </pre>
@@ -141,11 +140,11 @@ function ToolMessage({ msg, idx }: { msg: TraceMessage; idx: number }) {
         </Badge>
       </div>
       <Accordion>
-        <AccordionItem value={`tool-${idx}`} className="border-b-0">
-          <AccordionTrigger value={`tool-${idx}`} className="py-1 text-[11px] text-muted-foreground">
+        <AccordionItem value={`tool-${idx}`} className="!border-b-0">
+          <AccordionTrigger className="py-1 text-[11px] text-muted-foreground">
             Result
           </AccordionTrigger>
-          <AccordionContent value={`tool-${idx}`}>
+          <AccordionContent>
             <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded bg-muted/50 p-2 text-[11px]">
               {msg.tool_result || msg.content}
             </pre>

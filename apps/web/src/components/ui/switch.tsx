@@ -1,18 +1,30 @@
+"use client";
+
 import { cn } from "@/lib/utils/cn";
-import type { InputHTMLAttributes } from "react";
-import { forwardRef } from "react";
+import * as SwitchPrimitive from "@radix-ui/react-switch";
+import { type ComponentPropsWithoutRef, type ElementRef, forwardRef } from "react";
 
-export interface SwitchProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "type"> {}
-
-export const Switch = forwardRef<HTMLInputElement, SwitchProps>(
-  ({ className, ...props }, ref) => {
-    return (
-      <label className={cn("relative inline-flex cursor-pointer items-center", className)}>
-        <input type="checkbox" className="peer sr-only" ref={ref} {...props} />
-        <div className="h-5 w-9 rounded-full bg-secondary transition-colors peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background peer-disabled:cursor-not-allowed peer-disabled:opacity-50" />
-        <div className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-background shadow-sm transition-transform peer-checked:translate-x-4" />
-      </label>
-    );
-  },
-);
+export const Switch = forwardRef<
+  ElementRef<typeof SwitchPrimitive.Root>,
+  ComponentPropsWithoutRef<typeof SwitchPrimitive.Root>
+>(({ className, ...props }, ref) => (
+  <SwitchPrimitive.Root
+    ref={ref}
+    className={cn(
+      "peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors",
+      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+      "disabled:cursor-not-allowed disabled:opacity-50",
+      "data-[state=checked]:bg-primary data-[state=unchecked]:bg-secondary",
+      className,
+    )}
+    {...props}
+  >
+    <SwitchPrimitive.Thumb
+      className={cn(
+        "pointer-events-none block h-4 w-4 rounded-full bg-background shadow-sm transition-transform",
+        "data-[state=checked]:translate-x-4 data-[state=unchecked]:translate-x-0",
+      )}
+    />
+  </SwitchPrimitive.Root>
+));
 Switch.displayName = "Switch";

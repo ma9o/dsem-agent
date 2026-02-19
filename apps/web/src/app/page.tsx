@@ -9,6 +9,7 @@ import { generateSessionCode } from "@/lib/session-code";
 import { Switch } from "@/components/ui/switch";
 import { ArrowRight, FileText, Loader2, RotateCcw, ShieldAlert, Sparkles, Upload, X } from "lucide-react";
 import { useRouter } from "next/navigation";
+import prettyBytes from "pretty-bytes";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const EXAMPLE_QUESTIONS = [
@@ -18,12 +19,6 @@ const EXAMPLE_QUESTIONS = [
 ];
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 export default function LandingPage() {
   const router = useRouter();
@@ -57,7 +52,7 @@ export default function LandingPage() {
       return `Invalid file type "${ext}". Please upload a ZIP or JSON file.`;
     }
     if (f.size > MAX_FILE_SIZE) {
-      return `File too large (${formatFileSize(f.size)}). Maximum size is ${formatFileSize(MAX_FILE_SIZE)}.`;
+      return `File too large (${prettyBytes(f.size)}). Maximum size is ${prettyBytes(MAX_FILE_SIZE)}.`;
     }
     return null;
   }, []);
@@ -231,7 +226,7 @@ export default function LandingPage() {
                   <FileText className="h-6 w-6 text-primary" />
                   <div>
                     <p className="text-sm font-medium">{file.name}</p>
-                    <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
+                    <p className="text-xs text-muted-foreground">{prettyBytes(file.size)}</p>
                   </div>
                   <button
                     type="button"
@@ -256,7 +251,7 @@ export default function LandingPage() {
                     </button>
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground/60">
-                    ZIP or JSON, up to {formatFileSize(MAX_FILE_SIZE)}
+                    ZIP or JSON, up to {prettyBytes(MAX_FILE_SIZE)}
                   </p>
                 </>
               )}
@@ -287,7 +282,7 @@ export default function LandingPage() {
             </div>
             <Switch
               checked={overrideGates}
-              onChange={(e) => setOverrideGates(e.target.checked)}
+              onCheckedChange={setOverrideGates}
             />
           </CardContent>
         </Card>
