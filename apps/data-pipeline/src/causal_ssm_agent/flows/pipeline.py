@@ -54,11 +54,12 @@ RESULT_STORAGE = Path("results")
     result_serializer="pickle",
 )
 async def causal_inference_pipeline(
-    query_file: str,
+    query_file: str | None = None,
     user_id: str = "test_user",
     inference_method: str | None = None,
     enable_literature: bool | None = None,
     override_gates: bool | None = None,
+    query: str | None = None,
 ):
     """
     Main causal inference pipeline.
@@ -72,6 +73,7 @@ async def causal_inference_pipeline(
         inference_method: Override inference method ("svi" or "nuts", default from config)
         enable_literature: Override literature search (default from config)
         override_gates: Continue past stage failures instead of halting (default from config)
+        query: Raw query text (used by web UI). If provided, takes precedence over query_file.
     """
     # Resolve effective override_gates setting
     from causal_ssm_agent.utils.config import get_config
@@ -84,8 +86,13 @@ async def causal_inference_pipeline(
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 0: Preprocess raw input and load question
     # ══════════════════════════════════════════════════════════════════════════
-    question = load_query(query_file)
-    print(f"Query: {query_file}")
+    if query:
+        question = query.strip()
+    elif query_file:
+        question = load_query(query_file)
+    else:
+        raise ValueError("Either 'query' (raw text) or 'query_file' (filename) must be provided")
+    print(f"Query source: {'raw text' if query else query_file}")
     print(f"Question: {question[:100]}..." if len(question) > 100 else f"Question: {question}")
 
     print(f"\n=== Stage 0: Preprocess (user: {user_id}) ===")
