@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatTooltip } from "@/components/ui/stat-tooltip";
 import type { LikelihoodSpec, ParameterSpec, PriorProposal } from "@causal-ssm/api-types";
 import katex from "katex";
-import { ArrowDown } from "lucide-react";
 
 interface SsmEquationDisplayProps {
   likelihoods: LikelihoodSpec[];
@@ -189,37 +188,9 @@ export function SSMEquationDisplay({ likelihoods, parameters, priors }: SsmEquat
             </h4>
             <Badge variant="outline">Linear-Gaussian Dynamics</Badge>
           </div>
-          <div className="grid gap-3 md:grid-cols-[1fr,auto]">
-            {/* Main equations */}
-            <div className="overflow-x-auto rounded-md border bg-muted/30 px-4 py-3">
-              <div dangerouslySetInnerHTML={{ __html: transitionLatex }} />
-              {stateVecLatex && <div dangerouslySetInnerHTML={{ __html: stateVecLatex }} />}
-            </div>
-            {/* Discretization aside */}
-            <div className="flex flex-col items-center gap-2 rounded-md border border-dashed bg-muted/15 px-4 py-3 text-center md:max-w-56">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Continuous-time
-              </span>
-              <div
-                className="text-xs [&_.katex]:text-xs"
-                dangerouslySetInnerHTML={{ __html: tex(
-                  String.raw`\mathrm{d}\boldsymbol{\eta} = (\mathbf{A}\boldsymbol{\eta} + \mathbf{c})\,\mathrm{d}t + \mathbf{G}\,\mathrm{d}\mathbf{W}`,
-                ) }}
-              />
-              <div className="flex flex-col items-center gap-0.5 text-muted-foreground">
-                <ArrowDown className="h-4 w-4" />
-                <span className="text-[10px] leading-tight">
-                  exact discretization at&nbsp;&Delta;t
-                </span>
-              </div>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Discrete-time
-              </span>
-              <p className="text-[11px] leading-snug text-muted-foreground">
-                The pipeline specifies dynamics in continuous time, then discretizes exactly to the
-                observation interval to obtain the AR(1) transition used for estimation.
-              </p>
-            </div>
+          <div className="overflow-x-auto rounded-md border bg-muted/30 px-4 py-3">
+            <div dangerouslySetInnerHTML={{ __html: transitionLatex }} />
+            {stateVecLatex && <div dangerouslySetInnerHTML={{ __html: stateVecLatex }} />}
           </div>
         </section>
 
