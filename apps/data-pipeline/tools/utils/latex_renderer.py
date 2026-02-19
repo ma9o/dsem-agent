@@ -56,7 +56,7 @@ _MEASUREMENT_TEMPLATES: dict[str, str] = {
 
 _PRIOR_TEMPLATES: dict[str, str] = {
     "fixed_effect": r"{symbol} \sim \mathcal{{N}}(0,\,1)",
-    "ar_coefficient": r"{symbol} \sim \text{{Beta}}(2,\,2)",
+    "ar_coefficient": r"{symbol} \sim \text{{Uniform}}(-1,\,1)",
     "residual_sd": r"{symbol} \sim \text{{HalfNormal}}(1)",
     "loading": r"{symbol} \sim \text{{HalfNormal}}(1)",
     "random_intercept_sd": r"{symbol} \sim \text{{HalfNormal}}(0.5)",

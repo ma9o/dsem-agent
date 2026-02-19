@@ -506,10 +506,12 @@ class SSMModelBuilder:
                     dt = float(ref_days)
                 else:
                     dt = self._get_construct_dt_days(construct_name)
-                mu_ar = max(0.001, min(normalized.get("mu", 0.5), 0.999))
+                mu_ar = max(-0.999, min(normalized.get("mu", 0.5), 0.999))
+                if abs(mu_ar) < 0.001:
+                    mu_ar = 0.001  # avoid log(0)
                 sigma_ar = normalized.get("sigma", 0.2)
-                mu_drift = -math.log(mu_ar) / dt
-                sigma_drift = sigma_ar / (mu_ar * dt)  # delta method
+                mu_drift = -math.log(abs(mu_ar)) / dt
+                sigma_drift = sigma_ar / (abs(mu_ar) * dt)  # delta method
                 per_element.setdefault(attr, []).append(
                     (idx, {"mu": mu_drift, "sigma": sigma_drift})
                 )
@@ -621,7 +623,11 @@ class SSMModelBuilder:
         # Falls back to first-order (already stored above) if not embeddable
         if dt_diag_raw and ssm_spec:
             self._try_exact_logm_conversion(
-                ssm_priors, ssm_spec, dt_diag_raw, dt_offdiag_raw, dt_values,
+                ssm_priors,
+                ssm_spec,
+                dt_diag_raw,
+                dt_offdiag_raw,
+                dt_values,
             )
         else:
             # Diagnostic: warn when first-order approximation may be inaccurate
@@ -672,7 +678,8 @@ class SSMModelBuilder:
             logger.info(
                 "Mixed observation intervals (%.1f–%.1f days) across parameters. "
                 "Cannot apply exact matrix logarithm; using first-order approximation.",
-                dt_min, dt_max,
+                dt_min,
+                dt_max,
             )
             self._warn_first_order_approximation(ssm_priors)
             return
@@ -740,7 +747,8 @@ class SSMModelBuilder:
                     # Scale sigma by ratio of exact to first-order
                     if idx in dt_diag_raw:
                         rho_mu, _rho_sigma = dt_diag_raw[idx]
-                        first_order_mu = -math.log(max(0.001, min(rho_mu, 0.999))) / dt
+                        rho_abs = max(0.001, min(abs(rho_mu), 0.999))
+                        first_order_mu = -math.log(rho_abs) / dt
                         if abs(first_order_mu) > 1e-10:
                             ratio = abs(float(A_exact[idx, idx])) / first_order_mu
                             if isinstance(sigma_arr, list) and idx < len(sigma_arr):
@@ -777,7 +785,9 @@ class SSMModelBuilder:
         logger.info(
             "Exact matrix logarithm DT->CT conversion succeeded for %dx%d system "
             "(dt=%.1f days). Drift eigenvalues: %s",
-            n, n, dt,
+            n,
+            n,
+            dt,
             [f"{ev.real:.4f}" for ev in A_eigenvalues],
         )
 
@@ -880,12 +890,8 @@ class SSMModelBuilder:
                 min(implied_timescale_days, expected_lag_days), 1e-10
             )
             if ratio > 5.0:
-                cause_name = (
-                    ssm_spec.latent_names[ci] if ssm_spec.latent_names else f"latent_{ci}"
-                )
-                effect_name = (
-                    ssm_spec.latent_names[ei] if ssm_spec.latent_names else f"latent_{ei}"
-                )
+                cause_name = ssm_spec.latent_names[ci] if ssm_spec.latent_names else f"latent_{ci}"
+                effect_name = ssm_spec.latent_names[ei] if ssm_spec.latent_names else f"latent_{ei}"
                 logger.warning(
                     "Drift rate for %s->%s implies timescale %.1f days, "
                     "but edge lag suggests %.1f days (%.0fx mismatch). "

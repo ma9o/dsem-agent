@@ -110,10 +110,10 @@ Each parameter in the SSM has a **role** (its function in the model) and a **con
 
 | Role | Default constraint | Rationale |
 |------|-------------------|-----------|
-| `ar_coefficient` | `unit_interval` | Stationarity; negative AR rare in behavioral data |
+| `ar_coefficient` | `correlation` | Stationarity requires ρ ∈ (−1, 1); negative values indicate oscillatory dynamics |
 | `fixed_effect` | `none` | Effect sizes can be positive or negative |
 | `residual_sd` | `positive` | Standard deviations are non-negative by definition |
-| `loading` | `positive` | Sign convention: all loadings positive |
+| `loading` | `positive` or `none` | LLM decides: `positive` for reference indicator (sign identification), `none` if negative loadings are plausible |
 | `correlation` | `correlation` | Bounded by definition |
 
 ---
@@ -127,7 +127,7 @@ For parameters not fully determined by rules, we use LLM elicitation following r
 | Parameter | LLM provides | Rule constraint |
 |-----------|--------------|-----------------|
 | Cross-lag β | Mean, SD | None (domain knowledge) |
-| AR ρ | Mean, SD | Bounded to [0, 1] |
+| AR ρ | Mean, SD | Bounded to (−1, 1) for stationarity |
 | Residual σ² | Scale | Must be positive (Exponential/HalfNormal) |
 
 **2.2 Elicitation Protocol (AutoElicit-style)**

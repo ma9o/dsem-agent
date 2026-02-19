@@ -67,7 +67,7 @@ def simple_model_spec() -> dict:
             {
                 "name": "rho_mood",
                 "role": "ar_coefficient",
-                "constraint": "unit_interval",
+                "constraint": "correlation",
                 "description": "AR(1) coefficient for mood",
                 "search_context": "mood autocorrelation daily",
             },
@@ -253,17 +253,19 @@ class TestDefaultPriors:
         prior = get_default_prior(param)
         assert prior.distribution == "HalfNormal"
 
-    def test_default_prior_unit_interval(self):
-        """Unit interval constraint yields Beta."""
+    def test_default_prior_ar_coefficient(self):
+        """AR coefficient with correlation constraint yields Uniform(-1, 1)."""
         param = ParameterSpec(
             name="rho_x",
             role=ParameterRole.AR_COEFFICIENT,
-            constraint=ParameterConstraint.UNIT_INTERVAL,
+            constraint=ParameterConstraint.CORRELATION,
             description="AR coefficient",
             search_context="",
         )
         prior = get_default_prior(param)
-        assert prior.distribution == "Beta"
+        assert prior.distribution == "Uniform"
+        assert prior.params["lower"] == -1.0
+        assert prior.params["upper"] == 1.0
 
     def test_default_prior_correlation(self):
         """Correlation constraint yields Uniform(-1, 1)."""
@@ -292,7 +294,6 @@ class TestDefaultPriors:
         assert prior.distribution == "Normal"
 
 
-
 # --- AutoElicit Tests ---
 
 
@@ -303,8 +304,7 @@ class TestAutoElicit:
         """GMM with unimodal data falls back to simple pooling."""
         # All samples identical -> GMM should select K=1 -> simple pooling
         samples = [
-            RawPriorSample(paraphrase_id=i, mu=0.3, sigma=0.1, reasoning="")
-            for i in range(5)
+            RawPriorSample(paraphrase_id=i, mu=0.3, sigma=0.1, reasoning="") for i in range(5)
         ]
 
         result = aggregate_prior_samples(samples)
@@ -473,7 +473,7 @@ class TestDomainValidation:
         issues = validate_model_spec(spec)
         assert len(issues) == 1
         assert issues[0]["severity"] == "warning"
-        assert "unit_interval" in issues[0]["issue"]
+        assert "correlation" in issues[0]["issue"]
 
     def test_wrong_distribution_for_dtype(self):
         """Normal for binary dtype is flagged when indicators provided."""
@@ -499,8 +499,14 @@ class TestDomainValidation:
             assert dist in VALID_LINKS_FOR_DISTRIBUTION, f"Missing link rule for {dist}"
 
     def test_all_roles_have_constraint_rules(self):
-        """Every ParameterRole member has an entry in EXPECTED_CONSTRAINT_FOR_ROLE."""
+        """Every ParameterRole except LOADING has an entry in EXPECTED_CONSTRAINT_FOR_ROLE.
+
+        LOADING is excluded because its constraint depends on context
+        (positive for reference indicators, none for others).
+        """
         for role in ParameterRole:
+            if role == ParameterRole.LOADING:
+                continue
             assert role in EXPECTED_CONSTRAINT_FOR_ROLE, f"Missing constraint rule for {role}"
 
 
@@ -548,7 +554,7 @@ class TestPriorPredictiveValidation:
                 {
                     "name": "rho_x",
                     "role": "ar_coefficient",
-                    "constraint": "unit_interval",
+                    "constraint": "correlation",
                     "description": "AR coeff",
                     "search_context": "",
                 }
@@ -896,14 +902,14 @@ class TestSSMPriorConversion:
                 {
                     "name": "rho_mood",
                     "role": "ar_coefficient",
-                    "constraint": "unit_interval",
+                    "constraint": "correlation",
                     "description": "",
                     "search_context": "",
                 },
                 {
                     "name": "rho_stress",
                     "role": "ar_coefficient",
-                    "constraint": "unit_interval",
+                    "constraint": "correlation",
                     "description": "",
                     "search_context": "",
                 },
@@ -945,7 +951,7 @@ class TestSSMPriorConversion:
                 {
                     "name": "rho_heart_rate",
                     "role": "ar_coefficient",
-                    "constraint": "unit_interval",
+                    "constraint": "correlation",
                     "description": "",
                     "search_context": "",
                 },
@@ -1004,14 +1010,14 @@ class TestSSMPriorConversion:
                 {
                     "name": "rho_mood",
                     "role": "ar_coefficient",
-                    "constraint": "unit_interval",
+                    "constraint": "correlation",
                     "description": "",
                     "search_context": "",
                 },
                 {
                     "name": "rho_stress",
                     "role": "ar_coefficient",
-                    "constraint": "unit_interval",
+                    "constraint": "correlation",
                     "description": "",
                     "search_context": "",
                 },
@@ -1067,14 +1073,14 @@ class TestSSMPriorConversion:
                 {
                     "name": "rho_heart_rate",
                     "role": "ar_coefficient",
-                    "constraint": "unit_interval",
+                    "constraint": "correlation",
                     "description": "",
                     "search_context": "",
                 },
                 {
                     "name": "rho_activity",
                     "role": "ar_coefficient",
-                    "constraint": "unit_interval",
+                    "constraint": "correlation",
                     "description": "",
                     "search_context": "",
                 },
