@@ -3,7 +3,6 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import type { StageRunStatus } from "@/lib/hooks/use-run-events";
 import type { GateOverride } from "@causal-ssm/api-types";
-import { Badge } from "@/components/ui/badge";
 import { AlertCircle, ChevronDown } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { StageHeader } from "./stage-header";
@@ -28,6 +27,7 @@ export function StageSection({
   elapsedMs,
   hasGate = false,
   gateOverridden,
+  gateFailed = false,
   loadingHint,
 }: {
   id?: string;
@@ -40,6 +40,7 @@ export function StageSection({
   elapsedMs?: number;
   hasGate?: boolean;
   gateOverridden?: GateOverride;
+  gateFailed?: boolean;
   loadingHint?: string;
 }) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
@@ -51,23 +52,25 @@ export function StageSection({
     }
   }, [status]);
 
-  const isCollapsible = status === "completed";
+  // Gate-failed stages should not be collapsible — the failure must remain visible
+  const isCollapsible = status === "completed" && !gateFailed;
 
   return (
     <section
       id={id}
-      className="animate-fade-in-up scroll-mt-28 rounded-lg border bg-card p-4 shadow-sm sm:p-6"
+      className={`animate-fade-in-up scroll-mt-28 rounded-lg border bg-card p-4 shadow-sm sm:p-6 ${
+        gateFailed ? "border-destructive/40" : ""
+      }`}
     >
       <div
         className={isCollapsible ? "flex items-start gap-3 cursor-pointer" : ""}
         onClick={isCollapsible ? () => setCollapsed((c) => !c) : undefined}
       >
         <div className="flex-1 min-w-0">
-          <StageHeader number={number} title={title} status={status} hasGate={hasGate} gateOverridden={gateOverridden} context={context} hideBadge={isCollapsible} />
+          <StageHeader number={number} title={title} status={status} hasGate={hasGate} gateOverridden={gateOverridden} gateFailed={gateFailed} context={context} />
         </div>
         {isCollapsible && (
           <div className="flex shrink-0 items-center gap-2 pt-1">
-            <Badge variant="success">Complete</Badge>
             {elapsedMs !== undefined && (
               <span className="text-xs text-muted-foreground/60 font-mono">
                 {formatElapsed(elapsedMs)}

@@ -118,20 +118,25 @@ export function StageSectionRouter({
   const { data: stageData } = useStageData<{ context?: string; llm_trace?: LLMTrace; gate_overridden?: GateOverride; gate_failed?: boolean }>(runId, stage.id, isCompleted);
 
   const gateFailed = stageData?.gate_failed ?? false;
+  const gateOverridden = stageData?.gate_overridden ?? undefined;
 
-  // Sync gate failure state into pipeline progress so the progress bar can reflect it
+  // Sync gate failure / override state into pipeline progress so the progress bar can reflect it
   useEffect(() => {
-    if (!gateFailed) return;
+    if (!gateFailed && !gateOverridden) return;
     queryClient.setQueryData<PipelineProgress>(["pipeline", runId, "status"], (old) => {
       if (!old) return old;
-      if (old.gateFailures[stage.id]) return old; // already set
+      const alreadySet =
+        (gateFailed && old.gateFailures[stage.id]) ||
+        (!gateFailed && gateOverridden && old.gateOverrides[stage.id]);
+      if (alreadySet) return old;
       return {
         ...old,
-        gateFailures: { ...old.gateFailures, [stage.id]: true },
-        isFailed: true,
+        gateFailures: gateFailed ? { ...old.gateFailures, [stage.id]: true } : old.gateFailures,
+        gateOverrides: gateOverridden ? { ...old.gateOverrides, [stage.id]: true } : old.gateOverrides,
+        isFailed: gateFailed ? true : old.isFailed,
       };
     });
-  }, [gateFailed, queryClient, runId, stage.id]);
+  }, [gateFailed, gateOverridden, queryClient, runId, stage.id]);
 
   const section = (
     <StageSection

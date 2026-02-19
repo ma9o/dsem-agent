@@ -17,6 +17,7 @@ export interface PipelineProgress {
   stages: Record<StageId, StageRunStatus>;
   timings: Partial<Record<StageId, StageTiming>>;
   gateFailures: Partial<Record<StageId, boolean>>;
+  gateOverrides: Partial<Record<StageId, boolean>>;
   currentStage: StageId | null;
   isComplete: boolean;
   isFailed: boolean;
@@ -25,7 +26,7 @@ export interface PipelineProgress {
 function initialProgress(): PipelineProgress {
   const stages = {} as Record<StageId, StageRunStatus>;
   for (const s of STAGES) stages[s.id] = "pending";
-  return { stages, timings: {}, gateFailures: {}, currentStage: null, isComplete: false, isFailed: false };
+  return { stages, timings: {}, gateFailures: {}, gateOverrides: {}, currentStage: null, isComplete: false, isFailed: false };
 }
 
 const MAX_RECONNECT_ATTEMPTS = 10;
@@ -57,6 +58,8 @@ export function useRunEvents(runId: string | null) {
         return {
           stages,
           timings,
+          gateFailures: prev.gateFailures,
+          gateOverrides: prev.gateOverrides,
           currentStage: status === "running" ? stageId : prev.currentStage,
           isComplete: completedAll,
           isFailed: anyFailed,

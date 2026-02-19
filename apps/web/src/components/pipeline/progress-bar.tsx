@@ -9,6 +9,8 @@ export function PipelineProgressBar({ progress }: { progress: PipelineProgress |
   if (!progress) return null;
 
   const completed = STAGES.filter((s) => progress.stages[s.id] === "completed").length;
+  const hasGateFailure = Object.values(progress.gateFailures).some(Boolean);
+  const hasGateOverride = Object.values(progress.gateOverrides).some(Boolean);
 
   return (
     <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-sm border-b px-4 py-2.5 sm:px-6 sm:py-3">
@@ -24,20 +26,47 @@ export function PipelineProgressBar({ progress }: { progress: PipelineProgress |
             <span className="text-sm font-medium text-muted-foreground">
               {completed}/{STAGES.length} stages
             </span>
-            {progress.isComplete && (
+            {progress.isComplete && !hasGateFailure && !hasGateOverride && (
               <Badge variant="success" className="animate-fade-in">
                 Complete
               </Badge>
             )}
-            {progress.isFailed && (
-              <Badge variant="destructive">Failed</Badge>
+            {progress.isComplete && !hasGateFailure && hasGateOverride && (
+              <Badge variant="destructive" className="animate-fade-in">
+                Complete (with overrides)
+              </Badge>
+            )}
+            {(progress.isFailed || hasGateFailure) && (
+              <Badge variant="destructive">
+                {hasGateFailure ? "Blocked" : "Failed"}
+              </Badge>
             )}
           </div>
         </div>
         <div className="flex items-center gap-1.5">
           {STAGES.map((stage) => {
             const status = progress.stages[stage.id];
+            const isGateFailed = progress.gateFailures[stage.id] ?? false;
+            const isGateOverridden = progress.gateOverrides[stage.id] ?? false;
             const isClickable = status !== "pending";
+
+            const tooltipIcon = isGateFailed || status === "failed" || isGateOverridden
+              ? <X className="h-3 w-3 text-destructive" />
+              : status === "completed"
+                  ? <Check className="h-3 w-3 text-success" />
+                  : status === "running"
+                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                    : null;
+
+            const tooltipSuffix = isGateFailed ? " (blocked)" : isGateOverridden ? " (overridden)" : "";
+
+            const segmentColor = isGateFailed || status === "failed" || isGateOverridden
+              ? "bg-destructive"
+              : status === "completed"
+                  ? "bg-success"
+                  : status === "running"
+                    ? "bg-primary animate-pulse-subtle"
+                    : "bg-secondary";
 
             return (
               <Tooltip
@@ -45,11 +74,10 @@ export function PipelineProgressBar({ progress }: { progress: PipelineProgress |
                   triggerClassName="flex-1"
                   content={
                     <div className="flex items-center gap-1.5 text-xs whitespace-nowrap">
-                      {status === "completed" && <Check className="h-3 w-3 text-success" />}
-                      {status === "running" && <Loader2 className="h-3 w-3 animate-spin" />}
-                      {status === "failed" && <X className="h-3 w-3 text-destructive" />}
+                      {tooltipIcon}
                       <span>
                         {stage.number}. {stage.label}
+                        {tooltipSuffix}
                       </span>
                     </div>
                   }
@@ -66,15 +94,7 @@ export function PipelineProgressBar({ progress }: { progress: PipelineProgress |
                     }}
                   >
                     <div
-                      className={`h-1 rounded-full transition-all duration-500 ${
-                        status === "completed"
-                          ? "bg-success"
-                          : status === "running"
-                            ? "bg-primary animate-pulse-subtle"
-                            : status === "failed"
-                              ? "bg-destructive"
-                              : "bg-secondary"
-                      } ${isClickable ? "group-hover:opacity-80 cursor-pointer" : "cursor-default"}`}
+                      className={`h-1 rounded-full transition-all duration-500 ${segmentColor} ${isClickable ? "group-hover:opacity-80 cursor-pointer" : "cursor-default"}`}
                     />
                   </button>
               </Tooltip>
