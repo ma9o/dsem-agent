@@ -5,10 +5,12 @@ export function HardGateAlert({
   title,
   explanation,
   suggestion,
+  children,
 }: {
   title: string;
   explanation: string;
   suggestion?: string;
+  children?: React.ReactNode;
 }) {
   return (
     <Alert variant="destructive" className="border-2">
@@ -16,6 +18,7 @@ export function HardGateAlert({
       <AlertTitle className="text-base font-semibold">{title}</AlertTitle>
       <AlertDescription className="mt-2 space-y-2">
         <p>{explanation}</p>
+        {children}
         {suggestion && <p className="font-medium text-sm">Suggestion: {suggestion}</p>}
       </AlertDescription>
     </Alert>
