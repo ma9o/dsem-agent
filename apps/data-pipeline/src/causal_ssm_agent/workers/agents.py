@@ -2,12 +2,10 @@
 
 import asyncio
 import logging
-from pathlib import Path
 
-from dotenv import load_dotenv
 from inspect_ai.model import get_model
 
-from causal_ssm_agent.utils.config import get_config
+from causal_ssm_agent.utils.config import get_config  # also loads .env
 from causal_ssm_agent.utils.llm import make_worker_generate_fn
 
 from .core import (
@@ -16,9 +14,6 @@ from .core import (
 )
 
 logger = logging.getLogger(__name__)
-
-# Load environment variables from .env file (for API keys)
-load_dotenv(Path(__file__).parent.parent.parent.parent / ".env")
 
 
 async def process_chunk_async(

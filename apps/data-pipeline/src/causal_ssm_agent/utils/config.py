@@ -7,8 +7,13 @@ from functools import lru_cache
 from pathlib import Path
 
 import yaml
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
+
+# Centralized .env loading — all modules that need env vars import from config.py
+# (or from modules that import config.py), so this runs once at import time.
+load_dotenv(Path(__file__).parent.parent.parent.parent / ".env")
 
 
 @dataclass(frozen=True)

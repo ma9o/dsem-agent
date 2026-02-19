@@ -2,13 +2,10 @@ import logging
 from pathlib import Path
 
 import polars as pl
-from dotenv import load_dotenv
 
-from causal_ssm_agent.utils.config import get_config
+from causal_ssm_agent.utils.config import get_config  # also loads .env
 
 logger = logging.getLogger(__name__)
-
-load_dotenv(Path(__file__).parent.parent.parent.parent / ".env")
 
 DATA_DIR = Path(__file__).parent.parent.parent.parent / "data"
 RAW_DIR = DATA_DIR / "raw"
@@ -43,30 +40,6 @@ def load_lines(path: Path) -> list[str]:
         return [line.strip() for line in f if line.strip()]
 
 
-def load_text_chunks(path: Path, chunk_size: int | None = None) -> list[str]:
-    """
-    Load text chunks from a preprocessed file.
-
-    Each chunk is a group of contiguous lines joined by newlines.
-
-    Args:
-        path: Path to preprocessed file (one record per line)
-        chunk_size: Lines per chunk (default: CHUNK_SIZE from .env)
-
-    Returns:
-        List of chunks, where each chunk is multiple lines joined together
-    """
-    chunk_size = chunk_size or CHUNK_SIZE
-    lines = load_lines(path)
-
-    chunks = []
-    for i in range(0, len(lines), chunk_size):
-        batch = lines[i : i + chunk_size]
-        chunks.append("\n".join(batch))
-
-    return chunks
-
-
 def chunk_lines(lines: list[str], chunk_size: int) -> list[str]:
     """Group lines into chunks joined by newlines.
 
@@ -82,6 +55,21 @@ def chunk_lines(lines: list[str], chunk_size: int) -> list[str]:
         batch = lines[i : i + chunk_size]
         chunks.append("\n".join(batch))
     return chunks
+
+
+def load_text_chunks(path: Path, chunk_size: int | None = None) -> list[str]:
+    """Load text chunks from a preprocessed file.
+
+    Each chunk is a group of contiguous lines joined by newlines.
+
+    Args:
+        path: Path to preprocessed file (one record per line)
+        chunk_size: Lines per chunk (default: CHUNK_SIZE from config)
+
+    Returns:
+        List of chunks, where each chunk is multiple lines joined together
+    """
+    return chunk_lines(load_lines(path), chunk_size or CHUNK_SIZE)
 
 
 def sample_chunks(

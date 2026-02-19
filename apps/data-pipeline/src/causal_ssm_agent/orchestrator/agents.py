@@ -5,21 +5,14 @@ Two-stage approach following Anderson & Gerbing (1988):
 2. Measurement Model (Stage 1b) - operationalize constructs into indicators, WITH DATA
 """
 
-from pathlib import Path
-
-from dotenv import load_dotenv
 from inspect_ai.model import get_model
 
-from causal_ssm_agent.utils.config import get_config
+from causal_ssm_agent.utils.config import get_config  # also loads .env
 from causal_ssm_agent.utils.llm import make_orchestrator_generate_fn
 
 from .schemas import CausalSpec, LatentModel, MeasurementModel
 from .stage1a import run_stage1a
 from .stage1b import run_stage1b
-
-# Load environment variables from .env file (for API keys)
-load_dotenv(Path(__file__).parent.parent.parent.parent / ".env")
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # STAGE 1a: LATENT MODEL (theory-driven, no data)
