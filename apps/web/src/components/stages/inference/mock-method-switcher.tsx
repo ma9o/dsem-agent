@@ -7,9 +7,9 @@ import type { Stage5Data } from "@causal-ssm/api-types";
 type InferenceMethod = "svi" | "nuts_da" | "particle_filter";
 
 const METHODS: { id: InferenceMethod; label: string; disabled: boolean }[] = [
-  { id: "svi", label: "SVI", disabled: false },
   { id: "nuts_da", label: "NUTS-DA", disabled: false },
   { id: "particle_filter", label: "Particle Filter", disabled: true },
+  { id: "svi", label: "SVI", disabled: false },
 ];
 
 interface MockMethodSwitcherProps {
