@@ -190,7 +190,7 @@ export function SSMEquationDisplay({ likelihoods, parameters, priors }: SsmEquat
               State Dynamics
               <StatTooltip explanation="Continuous-time stochastic differential equation governing how the latent states η(t) evolve. A encodes autoregressive persistence (diagonal) and cross-construct causal effects (off-diagonal). G scales the Wiener process noise." />
             </h4>
-            <Badge variant="outline">Linear Gaussian</Badge>
+            <Badge variant="outline">Linear-Gaussian Dynamics</Badge>
           </div>
           <div className="overflow-x-auto rounded-md border bg-muted/30 px-4 py-3">
             <div dangerouslySetInnerHTML={{ __html: sdeLatex }} />
