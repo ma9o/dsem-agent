@@ -78,6 +78,16 @@ function likelihoodLine(lik: LikelihoodSpec): string {
 
 /** Parse a parameter name into Greek letter + subscript. */
 function paramSymbol(name: string): string {
+  // Initial state parameters: t0_mean_X → μ_{0,X}, t0_sd_X → σ_{0,X}
+  if (name.startsWith("t0_mean_")) {
+    const state = name.slice("t0_mean_".length);
+    return `\\mu_{0,\\,\\text{${textify(state)}}}`;
+  }
+  if (name.startsWith("t0_sd_")) {
+    const state = name.slice("t0_sd_".length);
+    return `\\sigma_{0,\\,\\text{${textify(state)}}}`;
+  }
+
   const greekMap: Record<string, string> = {
     beta: "\\beta",
     rho: "\\rho",
@@ -222,6 +232,14 @@ function concreteTransitionLines(parameters: ParameterSpec[]): string[] {
   }
 
   const lines: string[] = [];
+
+  // Initial state lines first
+  for (const state of states) {
+    const s = `\\text{${textify(state)}}`;
+    lines.push(`\\eta_{${s}}(0) &\\sim \\mathcal{N}(\\mu_{0,${s}},\\; \\sigma_{0,${s}}^{2})`);
+  }
+
+  // Transition lines
   for (const state of states) {
     const s = `\\text{${textify(state)}}`;
     let rhs = `\\rho_{${s}} \\, \\eta_{${s}}(t\\!-\\!1)`;
