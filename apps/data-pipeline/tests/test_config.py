@@ -51,7 +51,6 @@ FULL_YAML = {
         "max_tokens": 4096,
         "timeout": 300,
         "reasoning_effort": "low",
-        "reasoning_tokens": 1024,
     },
     "pipeline": {"max_prior_retries": 5},
 }
@@ -136,7 +135,6 @@ class TestLoadConfigDefaults:
         assert cfg.llm.max_tokens == 65536
         assert cfg.llm.timeout == 900
         assert cfg.llm.reasoning_effort == "high"
-        assert cfg.llm.reasoning_tokens == 32768
 
         # Pipeline defaults
         assert cfg.pipeline.max_prior_retries == 3
@@ -268,7 +266,7 @@ class TestGetGenerateConfigReadsConfig:
 
     def test_get_generate_config_reads_config(self):
         custom_llm = LLMConfig(
-            max_tokens=1024, timeout=60, reasoning_effort="low", reasoning_tokens=512
+            max_tokens=1024, timeout=60, reasoning_effort="low"
         )
         mock_cfg = MagicMock()
         mock_cfg.llm = custom_llm
@@ -281,7 +279,6 @@ class TestGetGenerateConfigReadsConfig:
         assert gc.max_tokens == 1024
         assert gc.timeout == 60
         assert gc.reasoning_effort == "low"
-        assert gc.reasoning_tokens == 512
 
 
 class TestGetDefaultSamplerConfigReadsConfig:

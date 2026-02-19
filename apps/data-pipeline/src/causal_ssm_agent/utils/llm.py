@@ -133,15 +133,15 @@ def _build_trace(all_messages: list["ChatMessage"], output: ModelOutput) -> LLMT
     )
 
 
-# Type aliases for generate functions
-OrchestratorGenerateFn = Callable[
-    [list, list | None, list[str] | None],  # (messages, tools, follow_ups)
-    Awaitable[str],
-]
-WorkerGenerateFn = Callable[
-    [list, list | None],  # (messages, tools)
-    Awaitable[str],
-]
+# ---------------------------------------------------------------------------
+# Type aliases for generate functions (unified)
+# ---------------------------------------------------------------------------
+
+GenerateFn = Callable[..., Awaitable[str]]
+
+# Backward-compatible aliases
+OrchestratorGenerateFn = GenerateFn
+WorkerGenerateFn = GenerateFn
 
 
 def get_generate_config() -> GenerateConfig:
@@ -178,14 +178,20 @@ def dict_messages_to_chat(messages: list[dict]) -> list["ChatMessage"]:
     return chat_messages
 
 
-def make_orchestrator_generate_fn(
+# ---------------------------------------------------------------------------
+# Generate function factory (unified for orchestrator and worker)
+# ---------------------------------------------------------------------------
+
+
+def make_generate_fn(
     model: Model,
     config: GenerateConfig | None = None,
     trace_capture: dict | None = None,
-) -> OrchestratorGenerateFn:
-    """Create a generate function for orchestrator stages (1a, 1b).
+) -> GenerateFn:
+    """Create a generate function for LLM calls.
 
-    The returned function has signature: (messages, tools, follow_ups) -> str
+    The returned function has signature: (messages, tools=None, follow_ups=None) -> str
+    Works for both orchestrator stages (with follow_ups) and worker stages (without).
 
     Args:
         model: The model to use for generation
@@ -198,7 +204,11 @@ def make_orchestrator_generate_fn(
     if config is None:
         config = get_generate_config()
 
-    async def generate(messages: list, tools: list | None, follow_ups: list[str] | None) -> str:
+    async def generate(
+        messages: list,
+        tools: list | None = None,
+        follow_ups: list[str] | None = None,
+    ) -> str:
         chat_messages = dict_messages_to_chat(messages)
 
         if follow_ups or tools:
@@ -217,37 +227,9 @@ def make_orchestrator_generate_fn(
     return generate
 
 
-def make_worker_generate_fn(
-    model: Model,
-    config: GenerateConfig | None = None,
-    trace_capture: dict | None = None,
-) -> WorkerGenerateFn:
-    """Create a generate function for worker extraction.
-
-    The returned function has signature: (messages, tools) -> str
-
-    Args:
-        model: The model to use for generation
-        config: Optional generation config (uses get_generate_config() if None)
-        trace_capture: Optional dict for capturing the LLM trace
-
-    Returns:
-        An async function that handles multi-turn generation with tools
-    """
-    if config is None:
-        config = get_generate_config()
-
-    async def generate(messages: list, tools: list | None) -> str:
-        chat_messages = dict_messages_to_chat(messages)
-        return await multi_turn_generate(
-            messages=chat_messages,
-            model=model,
-            tools=tools or [],
-            config=config,
-            trace_capture=trace_capture,
-        )
-
-    return generate
+# Backward-compatible aliases
+make_orchestrator_generate_fn = make_generate_fn
+make_worker_generate_fn = make_generate_fn
 
 
 def parse_json_response(content: str) -> dict:
@@ -268,46 +250,95 @@ def parse_json_response(content: str) -> dict:
         raise ValueError(f"Failed to parse model response as JSON: {e}") from e
 
 
-@tool
-def validate_latent_model_tool():
-    """Tool for validating latent model JSON (Stage 1a)."""
-
-    async def execute(structure_json: str) -> str:
-        """
-        Validate a latent model and return all validation errors.
-
-        Args:
-            structure_json: The JSON string containing the latent model to validate.
-
-        Returns:
-            "VALID" if the structure passes validation, otherwise a list of all errors found.
-        """
-        from causal_ssm_agent.orchestrator.schemas import validate_latent_model
-
-        try:
-            data = json.loads(structure_json)
-        except json.JSONDecodeError as e:
-            return f"JSON parse error: {e}"
-
-        _structure, errors = validate_latent_model(data)
-
-        if not errors:
-            return "VALID"
-
-        return "VALIDATION ERRORS:\n" + "\n".join(f"- {e}" for e in errors)
-
-    return execute
+# ---------------------------------------------------------------------------
+# Shared validation logic for all validation tools
+# ---------------------------------------------------------------------------
 
 
-def make_validate_measurement_model_tool(latent_model: "LatentModel") -> Tool:
+def _validate_json_and_format(
+    json_str: str,
+    validate_fn: Callable[[dict], tuple[Any, list[str]]],
+    capture: dict | None = None,
+    capture_key: str | None = None,
+    capture_result: bool = False,
+) -> str:
+    """Parse JSON, validate, and format errors.
+
+    Args:
+        json_str: Raw JSON string to parse
+        validate_fn: (data_dict) -> (validated_result_or_None, error_list)
+        capture: Optional dict to store successful results in
+        capture_key: Key under which to store in capture dict
+        capture_result: If True, store the validated result; if False, store raw data
+    """
+    try:
+        data = json.loads(json_str)
+    except json.JSONDecodeError as e:
+        return f"JSON parse error: {e}"
+
+    result, errors = validate_fn(data)
+
+    if not errors:
+        if capture is not None and capture_key:
+            capture[capture_key] = result if capture_result else data
+        return "VALID"
+
+    return "VALIDATION ERRORS:\n" + "\n".join(f"- {e}" for e in errors)
+
+
+# ---------------------------------------------------------------------------
+# Validation tool factories
+# ---------------------------------------------------------------------------
+
+
+def make_validate_latent_model_tool() -> tuple[Tool, dict]:
+    """Create a validation tool for latent model JSON that captures the last valid result.
+
+    Returns:
+        Tuple of (tool, capture_dict). After generate_loop, check
+        capture["latent"] for the last validated LatentModel dict (or None).
+    """
+    capture: dict = {}
+
+    @tool
+    def validate_latent_model_tool():
+        """Tool for validating latent model JSON (Stage 1a)."""
+
+        async def execute(structure_json: str) -> str:
+            """
+            Validate a latent model and return all validation errors.
+
+            Args:
+                structure_json: The JSON string containing the latent model to validate.
+
+            Returns:
+                "VALID" if the structure passes validation, otherwise a list of all errors found.
+            """
+            from causal_ssm_agent.orchestrator.schemas import validate_latent_model
+
+            return _validate_json_and_format(
+                structure_json,
+                validate_latent_model,
+                capture=capture,
+                capture_key="latent",
+            )
+
+        return execute
+
+    return validate_latent_model_tool(), capture
+
+
+def make_validate_measurement_model_tool(latent_model: "LatentModel") -> tuple[Tool, dict]:
     """Create a validation tool for measurement model, bound to a latent model.
 
     Args:
         latent_model: The latent model to validate against
 
     Returns:
-        A tool function that validates measurement model JSON
+        Tuple of (tool, capture_dict). After generate_loop, check
+        capture["measurement"] for the last validated measurement dict (or None).
     """
+    capture: dict = {}
 
     @tool
     def validate_measurement_model_tool():
@@ -325,28 +356,20 @@ def make_validate_measurement_model_tool(latent_model: "LatentModel") -> Tool:
             """
             from causal_ssm_agent.orchestrator.schemas import validate_measurement_model
 
-            try:
-                data = json.loads(measurement_json)
-            except json.JSONDecodeError as e:
-                return f"JSON parse error: {e}"
-
-            _model, errors = validate_measurement_model(data, latent_model)
-
-            if not errors:
-                return "VALID"
-
-            return "VALIDATION ERRORS:\n" + "\n".join(f"- {e}" for e in errors)
+            return _validate_json_and_format(
+                measurement_json,
+                lambda data: validate_measurement_model(data, latent_model),
+                capture=capture,
+                capture_key="measurement",
+            )
 
         return execute
 
-    return validate_measurement_model_tool()
+    return validate_measurement_model_tool(), capture
 
 
 def make_validate_model_spec_tool(causal_spec: dict) -> tuple[Tool, dict]:
     """Create a validation tool for model spec, bound to a causal spec.
-
-    The tool captures the last valid ModelSpec so the caller can retrieve it
-    directly without needing the LLM to re-output the JSON.
 
     Args:
         causal_spec: The full CausalSpec dict (to extract indicators for dtype checking)
@@ -355,7 +378,9 @@ def make_validate_model_spec_tool(causal_spec: dict) -> tuple[Tool, dict]:
         Tuple of (tool, capture_dict). After generate_loop, check
         capture["spec"] for the last validated ModelSpec (or None).
     """
-    indicators = causal_spec.get("measurement", {}).get("indicators", [])
+    from causal_ssm_agent.utils.causal_spec import get_indicators
+
+    indicators = get_indicators(causal_spec)
     capture: dict = {}
 
     @tool
@@ -374,25 +399,20 @@ def make_validate_model_spec_tool(causal_spec: dict) -> tuple[Tool, dict]:
             """
             from causal_ssm_agent.orchestrator.schemas_model import validate_model_spec_dict
 
-            try:
-                data = json.loads(model_spec_json)
-            except json.JSONDecodeError as e:
-                return f"JSON parse error: {e}"
-
-            spec, errors = validate_model_spec_dict(data, indicators=indicators or None)
-
-            if not errors:
-                capture["spec"] = spec
-                return "VALID"
-
-            return "VALIDATION ERRORS:\n" + "\n".join(f"- {e}" for e in errors)
+            return _validate_json_and_format(
+                model_spec_json,
+                lambda data: validate_model_spec_dict(data, indicators=indicators or None),
+                capture=capture,
+                capture_key="spec",
+                capture_result=True,
+            )
 
         return execute
 
     return validate_model_spec_tool(), capture
 
 
-def make_worker_tools(schema: dict) -> list[Tool]:
+def make_worker_tools(schema: dict) -> tuple[list[Tool], dict]:
     """Create the standard toolset for worker agents.
 
     This is the single source of truth for worker tools.
@@ -402,24 +422,24 @@ def make_worker_tools(schema: dict) -> list[Tool]:
         schema: The model schema dict to validate extractions against
 
     Returns:
-        List of tools: [validate_extractions, parse_date, calculate]
+        Tuple of (tools_list, capture_dict). After generate_loop, check
+        capture["output"] for the last validated worker output dict (or None).
     """
-    return [
-        make_validate_worker_output_tool(schema),
-        parse_date(),
-        calculate(),
-    ]
+    tool, capture = make_validate_worker_output_tool(schema)
+    return [tool, parse_date(), calculate()], capture
 
 
-def make_validate_worker_output_tool(schema: dict) -> Tool:
+def make_validate_worker_output_tool(schema: dict) -> tuple[Tool, dict]:
     """Create a validation tool for worker output, bound to a specific schema.
 
     Args:
         schema: The model schema dict to validate extractions against
 
     Returns:
-        A tool function that validates worker output JSON
+        Tuple of (tool, capture_dict). After generate_loop, check
+        capture["output"] for the last validated worker output dict (or None).
     """
+    capture: dict = {}
 
     @tool
     def validate_extractions():
@@ -437,23 +457,16 @@ def make_validate_worker_output_tool(schema: dict) -> Tool:
             """
             from causal_ssm_agent.workers.schemas import validate_worker_output
 
-            # Parse JSON first
-            try:
-                data = json.loads(output_json)
-            except json.JSONDecodeError as e:
-                return f"JSON parse error: {e}"
-
-            # Validate and collect all errors
-            _output, errors = validate_worker_output(data, schema)
-
-            if not errors:
-                return "VALID"
-
-            return "VALIDATION ERRORS:\n" + "\n".join(f"- {e}" for e in errors)
+            return _validate_json_and_format(
+                output_json,
+                lambda data: validate_worker_output(data, schema),
+                capture=capture,
+                capture_key="output",
+            )
 
         return execute
 
-    return validate_extractions()
+    return validate_extractions(), capture
 
 
 @tool
@@ -525,6 +538,11 @@ def parse_date():
         return f"Could not parse date: {date_string}"
 
     return execute
+
+
+# ---------------------------------------------------------------------------
+# Multi-turn generation
+# ---------------------------------------------------------------------------
 
 
 async def multi_turn_generate(
@@ -606,3 +624,21 @@ async def multi_turn_generate(
             trace_capture["trace"] = _build_trace(messages, response)
 
         return last_nonempty
+
+
+# ---------------------------------------------------------------------------
+# Trace capture helper
+# ---------------------------------------------------------------------------
+
+
+def attach_trace(output: dict, trace_capture: dict) -> None:
+    """Attach LLM trace to output dict if available.
+
+    Replaces the repeated boilerplate:
+        trace = trace_capture.get("trace")
+        if trace is not None:
+            out["llm_trace"] = trace.to_dict()
+    """
+    trace = trace_capture.get("trace")
+    if trace is not None:
+        output["llm_trace"] = trace.to_dict()

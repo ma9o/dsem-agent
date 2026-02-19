@@ -8,8 +8,8 @@ from dataclasses import dataclass
 
 from causal_ssm_agent.utils.llm import (
     OrchestratorGenerateFn,
+    make_validate_latent_model_tool,
     parse_json_response,
-    validate_latent_model_tool,
 )
 
 from .prompts import latent_model
@@ -67,13 +67,19 @@ async def run_stage1a(
     msgs = Stage1aMessages(question)
 
     # Step 1: Initial proposal with self-review
+    # The tool captures the last valid LatentModel so we don't depend
+    # on the final completion being valid JSON (the review follow-up
+    # may return prose or empty).
     proposal_msgs = msgs.proposal_messages()
-    tools = [validate_latent_model_tool()]
+    tool, capture = make_validate_latent_model_tool()
 
-    completion = await generate(proposal_msgs, tools, [latent_model.REVIEW])
+    completion = await generate(proposal_msgs, [tool], [latent_model.REVIEW])
 
-    # Parse latent model
-    latent = parse_json_response(completion)
+    # Prefer the captured result from the validation tool
+    latent = capture.get("latent")
+    if latent is None:
+        # Fallback: try parsing the final completion directly
+        latent = parse_json_response(completion)
     LatentModel.model_validate(latent)  # Validate schema
 
     return Stage1aResult(latent_model=latent)

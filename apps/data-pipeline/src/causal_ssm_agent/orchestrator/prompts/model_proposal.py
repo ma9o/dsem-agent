@@ -106,6 +106,8 @@ The underlying model is a **continuous-time** state-space model (CT-SSM). Time i
 ## Validation Tool
 
 You have access to `validate_model_spec` tool. Use it to validate your JSON. Keep validating until you get "VALID".
+
+IMPORTANT: Once you get "VALID", STOP. Do not output anything else — the validated result is already saved by the tool. Any additional output will be ignored.
 """
 
 USER = """\
@@ -148,8 +150,10 @@ Output your specification as JSON.
 
 def format_constructs(causal_spec: dict) -> str:
     """Format constructs for the prompt."""
+    from causal_ssm_agent.utils.causal_spec import get_constructs
+
     lines = []
-    for construct in causal_spec.get("latent", {}).get("constructs", []):
+    for construct in get_constructs(causal_spec):
         name = construct.get("name", "?")
         role = construct.get("role", "?")
         temporal = construct.get("temporal_status", "?")
@@ -164,8 +168,10 @@ def format_constructs(causal_spec: dict) -> str:
 
 def format_edges(causal_spec: dict) -> str:
     """Format causal edges for the prompt."""
+    from causal_ssm_agent.utils.causal_spec import get_edges
+
     lines = []
-    for edge in causal_spec.get("latent", {}).get("edges", []):
+    for edge in get_edges(causal_spec):
         cause = edge.get("cause", "?")
         effect = edge.get("effect", "?")
         lagged = "lagged" if edge.get("lagged", True) else "contemporaneous"
@@ -178,8 +184,10 @@ def format_edges(causal_spec: dict) -> str:
 
 def format_indicators(causal_spec: dict) -> str:
     """Format indicators for the prompt."""
+    from causal_ssm_agent.utils.causal_spec import get_indicators
+
     lines = []
-    for indicator in causal_spec.get("measurement", {}).get("indicators", []):
+    for indicator in get_indicators(causal_spec):
         name = indicator.get("name", "?")
         construct = indicator.get("construct_name", "?")
         dtype = indicator.get("measurement_dtype", "?")

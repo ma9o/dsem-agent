@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 import polars as pl
 
+from causal_ssm_agent.utils.causal_spec import get_indicators, get_outcome_construct
 from causal_ssm_agent.utils.llm import (
     WorkerGenerateFn,
     make_worker_tools,
@@ -32,9 +33,8 @@ def _format_indicators(causal_spec: dict) -> str:
 
     Shows: name, dtype, how_to_measure
     """
-    indicators = causal_spec.get("measurement", {}).get("indicators", [])
     lines = []
-    for ind in indicators:
+    for ind in get_indicators(causal_spec):
         name = ind.get("name", "unknown")
         how_to_measure = ind.get("how_to_measure", "")
         dtype = ind.get("measurement_dtype", "")
@@ -45,10 +45,9 @@ def _format_indicators(causal_spec: dict) -> str:
 
 def _get_outcome_description(causal_spec: dict) -> str:
     """Get the description of the outcome variable."""
-    constructs = causal_spec.get("latent", {}).get("constructs", [])
-    for c in constructs:
-        if c.get("is_outcome"):
-            return c.get("description", c.get("name", "outcome"))
+    outcome = get_outcome_construct(causal_spec)
+    if outcome:
+        return outcome.get("description", outcome.get("name", "outcome"))
     return "Not specified"
 
 
@@ -103,14 +102,19 @@ async def run_worker_extraction(
     msgs = WorkerMessages(question, causal_spec, chunk)
 
     # Build messages and tools
+    # The validation tool captures the last valid output so we don't depend
+    # on the final completion being valid JSON.
     extraction_msgs = msgs.extraction_messages()
-    tools = make_worker_tools(causal_spec)
+    tools, capture = make_worker_tools(causal_spec)
 
     # Generate extraction
     completion = await generate(extraction_msgs, tools)
 
-    # Parse and validate
-    data = parse_json_response(completion)
+    # Prefer the captured result from the validation tool
+    data = capture.get("output")
+    if data is None:
+        # Fallback: try parsing the final completion directly
+        data = parse_json_response(completion)
     output = WorkerOutput.model_validate(data)
     dataframe = output.to_dataframe()
 

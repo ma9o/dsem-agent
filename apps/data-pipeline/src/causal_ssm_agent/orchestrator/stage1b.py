@@ -223,13 +223,19 @@ async def run_stage1b(
     latent = LatentModel.model_validate(latent_model)
 
     # Step 1: Initial proposal with self-review
+    # The tool captures the last valid MeasurementModel so we don't depend
+    # on the final completion being valid JSON (the review follow-up
+    # may return prose or empty).
     proposal_msgs = msgs.proposal_messages()
-    tools = [make_validate_measurement_model_tool(latent)]
+    tool, capture = make_validate_measurement_model_tool(latent)
 
-    completion = await generate(proposal_msgs, tools, [measurement_model.REVIEW])
+    completion = await generate(proposal_msgs, [tool], [measurement_model.REVIEW])
 
-    # Parse measurement model
-    measurement = parse_json_response(completion)
+    # Prefer the captured result from the validation tool
+    measurement = capture.get("measurement")
+    if measurement is None:
+        # Fallback: try parsing the final completion directly
+        measurement = parse_json_response(completion)
     MeasurementModel.model_validate(measurement)  # Validate schema
 
     # Step 2: Check identifiability
