@@ -6,9 +6,9 @@ across 5 dimensions: likelihoods, link functions, AR structure, model clock,
 and parameter constraints.
 
 Usage:
-    inspect eval evals/eval5_functional_spec.py --model anthropic/claude-sonnet-4-5-20250929
-    inspect eval evals/eval5_functional_spec.py --model google/vertex/gemini-3-flash-preview
-    inspect eval evals/eval5_functional_spec.py -T questions=1
+    inspect eval evals/single_model/eval4_functional_spec.py --model anthropic/claude-sonnet-4-5-20250929
+    inspect eval evals/single_model/eval4_functional_spec.py --model google/vertex/gemini-3-flash-preview
+    inspect eval evals/single_model/eval4_functional_spec.py -T questions=1
 """
 
 import json
@@ -17,8 +17,13 @@ from collections import Counter
 from pathlib import Path
 
 # Add project root to path for evals.common import
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from evals.common import (
+    get_questions_with_causal_spec,
+    select_question,
+    select_questions,
+)
 from inspect_ai import Task, task
 from inspect_ai.dataset import MemoryDataset, Sample
 from inspect_ai.model import get_model
@@ -32,11 +37,6 @@ from causal_ssm_agent.orchestrator.schemas_model import (
 )
 from causal_ssm_agent.orchestrator.stage4_orchestrator import propose_model_spec
 from causal_ssm_agent.utils.llm import make_orchestrator_generate_fn
-from evals.common import (
-    get_questions_with_causal_spec,
-    select_question,
-    select_questions,
-)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Dataset

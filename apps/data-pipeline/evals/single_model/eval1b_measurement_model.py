@@ -9,18 +9,24 @@ Uses the same core logic as production (via run_stage1b), just with
 a different model configuration.
 
 Usage:
-    inspect eval evals/eval1b_measurement_model.py --model openrouter/anthropic/claude-sonnet-4
-    inspect eval evals/eval1b_measurement_model.py --model openrouter/google/gemini-2.5-pro-preview-06-05
+    inspect eval evals/single_model/eval1b_measurement_model.py --model openrouter/anthropic/claude-sonnet-4
+    inspect eval evals/single_model/eval1b_measurement_model.py --model openrouter/google/gemini-2.5-pro-preview-06-05
 """
 
 import sys
 from pathlib import Path
 
 # Add project root to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import json
 
+from evals.common import (
+    get_questions_with_latent_model,
+    get_sample_chunks_orchestrator,
+    load_eval_config,
+    select_questions,
+)
 from inspect_ai import Task, task
 from inspect_ai.dataset import MemoryDataset, Sample
 from inspect_ai.model import get_model
@@ -32,12 +38,6 @@ from causal_ssm_agent.orchestrator.schemas import LatentModel, MeasurementModel
 from causal_ssm_agent.orchestrator.stage1b import Stage1bResult, run_stage1b
 from causal_ssm_agent.utils.effects import get_all_treatments, get_outcome_from_latent_model
 from causal_ssm_agent.utils.llm import make_orchestrator_generate_fn
-from evals.common import (
-    get_questions_with_latent_model,
-    get_sample_chunks_orchestrator,
-    load_eval_config,
-    select_questions,
-)
 
 # Load config for models
 _CONFIG = load_eval_config()

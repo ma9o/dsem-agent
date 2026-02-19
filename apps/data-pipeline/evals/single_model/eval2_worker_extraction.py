@@ -7,19 +7,24 @@ Uses the same core logic as production (via run_worker_extraction), just with
 a different model configuration.
 
 Usage:
-    inspect eval evals/eval2_worker_extraction.py --model google/vertex/gemini-3-flash-preview
-    inspect eval evals/eval2_worker_extraction.py --model openrouter/anthropic/claude-haiku-4.5
-    inspect eval evals/eval2_worker_extraction.py -T question=4
+    inspect eval evals/single_model/eval2_worker_extraction.py --model google/vertex/gemini-3-flash-preview
+    inspect eval evals/single_model/eval2_worker_extraction.py --model openrouter/anthropic/claude-haiku-4.5
+    inspect eval evals/single_model/eval2_worker_extraction.py -T question=4
 """
 
 import sys
 from pathlib import Path
 
 # Add project root to path for evals.common import
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import json
 
+from evals.common import (
+    get_questions_with_causal_spec,
+    get_sample_chunks_worker,
+    select_question,
+)
 from inspect_ai import Task, task
 from inspect_ai.dataset import MemoryDataset, Sample
 from inspect_ai.model import get_model
@@ -30,11 +35,6 @@ from causal_ssm_agent.utils.llm import make_worker_generate_fn
 from causal_ssm_agent.workers.core import WorkerResult, run_worker_extraction
 from causal_ssm_agent.workers.prompts.extraction import SYSTEM
 from causal_ssm_agent.workers.schemas import _get_indicator_info
-from evals.common import (
-    get_questions_with_causal_spec,
-    get_sample_chunks_worker,
-    select_question,
-)
 
 # Worker models for parallel execution
 # Using reasoning-capable models with thinking budget

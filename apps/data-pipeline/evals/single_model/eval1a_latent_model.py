@@ -9,18 +9,23 @@ Uses the same core logic as production (via run_stage1a), just with
 a different model configuration.
 
 Usage:
-    inspect eval evals/eval1a_latent_model.py --model openrouter/anthropic/claude-sonnet-4
-    inspect eval evals/eval1a_latent_model.py --model openrouter/google/gemini-2.5-pro-preview
+    inspect eval evals/single_model/eval1a_latent_model.py --model openrouter/anthropic/claude-sonnet-4
+    inspect eval evals/single_model/eval1a_latent_model.py --model openrouter/google/gemini-2.5-pro-preview
 """
 
 import sys
 from pathlib import Path
 
 # Add project root to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import json
 
+from evals.common import (
+    discover_questions,
+    load_eval_config,
+    select_questions,
+)
 from inspect_ai import Task, task
 from inspect_ai.dataset import MemoryDataset, Sample
 from inspect_ai.model import get_model
@@ -32,11 +37,6 @@ from causal_ssm_agent.orchestrator.schemas import LatentModel
 from causal_ssm_agent.orchestrator.scoring import _count_rule_points
 from causal_ssm_agent.orchestrator.stage1a import Stage1aResult, run_stage1a
 from causal_ssm_agent.utils.llm import make_orchestrator_generate_fn
-from evals.common import (
-    discover_questions,
-    load_eval_config,
-    select_questions,
-)
 
 # Load config for models
 _CONFIG = load_eval_config()
