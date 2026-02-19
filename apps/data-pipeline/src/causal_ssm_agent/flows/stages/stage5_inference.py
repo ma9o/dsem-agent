@@ -20,6 +20,7 @@ def fit_model(
     stage4_result: dict,
     raw_data: pl.DataFrame,
     sampler_config: dict | None = None,
+    builder: Any = None,
 ) -> Any:
     """Fit the SSM model to data.
 
@@ -28,29 +29,28 @@ def fit_model(
             model_spec, priors, and model_info
         raw_data: Raw timestamped data (indicator, value, timestamp)
         sampler_config: Override sampler configuration (None uses config defaults)
+        builder: Pre-built SSMModelBuilder (avoids rebuilding)
 
     Returns:
         Fitted model results
 
     NOTE: Uses NumPyro SSM implementation.
     """
-    from causal_ssm_agent.models.ssm_builder import SSMModelBuilder
+    from causal_ssm_agent.models.ssm_builder import build_ssm_builder
 
     model_spec = stage4_result.get("model_spec", {})
     priors = stage4_result.get("priors", {})
     causal_spec = stage4_result.get("causal_spec")
 
     try:
-        builder = SSMModelBuilder(
-            model_spec=model_spec,
-            priors=priors,
-            sampler_config=sampler_config,
-            causal_spec=causal_spec,
-        )
-
-        # Convert data to wide format
-        if raw_data.is_empty():
-            return {"fitted": False, "error": "No data available"}
+        if builder is None:
+            builder = build_ssm_builder(
+                model_spec=model_spec,
+                priors=priors,
+                raw_data=raw_data,
+                causal_spec=causal_spec,
+                sampler_config=sampler_config,
+            )
 
         X = pivot_to_wide(raw_data)
 

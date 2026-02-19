@@ -1224,3 +1224,46 @@ class SSMModelBuilder:
                     }
                 )
         return pl.DataFrame(summary_data)
+
+
+def build_ssm_builder(
+    model_spec: ModelSpec | dict,
+    priors: dict[str, PriorProposal] | dict[str, dict],
+    raw_data: pl.DataFrame,
+    causal_spec: dict | None = None,
+    sampler_config: dict | None = None,
+) -> SSMModelBuilder:
+    """Single canonical entry point for constructing a ready-to-use SSMModelBuilder.
+
+    Encapsulates the repeated pattern of:
+        builder = SSMModelBuilder(...)
+        X = pivot_to_wide(raw_data)
+        builder.build_model(X)
+
+    Args:
+        model_spec: Model specification (dict or ModelSpec)
+        priors: Prior proposals by parameter name
+        raw_data: Raw timestamped data (long format)
+        causal_spec: CausalSpec dict for DAG-constrained masks
+        sampler_config: Override sampler configuration
+
+    Returns:
+        A fully built SSMModelBuilder (model constructed, ready for fit/sample)
+
+    Raises:
+        ValueError: If raw_data is empty
+    """
+    from causal_ssm_agent.utils.data import pivot_to_wide
+
+    if raw_data.is_empty():
+        raise ValueError("Cannot build SSM model from empty data")
+
+    builder = SSMModelBuilder(
+        model_spec=model_spec,
+        priors=priors,
+        causal_spec=causal_spec,
+        sampler_config=sampler_config,
+    )
+    X = pivot_to_wide(raw_data)
+    builder.build_model(X)
+    return builder

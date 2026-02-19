@@ -334,6 +334,7 @@ def measurement_adherence_scorer():
         try:
             # Find JSON in response
             import re
+
             json_match = re.search(r"\{[\s\S]*\}", completion)
             if not json_match:
                 return Score(

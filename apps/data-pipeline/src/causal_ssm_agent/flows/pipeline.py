@@ -381,10 +381,27 @@ async def causal_inference_pipeline(
     )
 
     # ══════════════════════════════════════════════════════════════════════════
+    # Pre-build SSMModelBuilder once for downstream stages
+    # ══════════════════════════════════════════════════════════════════════════
+    from causal_ssm_agent.models.ssm_builder import build_ssm_builder
+
+    try:
+        builder = build_ssm_builder(
+            model_spec=stage4_result["model_spec"],
+            priors=stage4_result["priors"],
+            raw_data=data_for_model,
+            causal_spec=stage4_result.get("causal_spec"),
+        )
+    except Exception:
+        builder = None  # stages will build their own
+
+    # ══════════════════════════════════════════════════════════════════════════
     # Stage 4b: Parametric Identifiability Diagnostics
     # ══════════════════════════════════════════════════════════════════════════
     print("\n=== Stage 4b: Parametric Identifiability ===")
-    stage4_result = stage4b_parametric_id_flow(stage4_result, raw_data=data_for_model)
+    stage4_result = stage4b_parametric_id_flow(
+        stage4_result, raw_data=data_for_model, builder=builder
+    )
 
     gate_4b_failed = False
     gate_4b_overridden = False
@@ -465,7 +482,9 @@ async def causal_inference_pipeline(
         intervention_results = gpu_result["intervention_results"]
     else:
         # ── Local path: run stage 5 tasks via Prefect ──
-        fitted = fit_model(stage4_result, data_for_model, sampler_config=sampler_config)
+        fitted = fit_model(
+            stage4_result, data_for_model, sampler_config=sampler_config, builder=builder
+        )
 
         # Post-fit power-scaling sensitivity diagnostic
         power_scaling = run_power_scaling(fitted, data_for_model)

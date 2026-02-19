@@ -28,7 +28,9 @@ def main():
     parser.add_argument("-n", type=int, default=SAMPLE_CHUNKS, help="Number of chunks to sample")
     parser.add_argument("-i", "--input", type=str, help="Input file name (in data/processed/)")
     parser.add_argument("--seed", type=int, help="Random seed for reproducibility")
-    parser.add_argument("--prompt", action="store_true", help="Include system prompt for training data generation")
+    parser.add_argument(
+        "--prompt", action="store_true", help="Include system prompt for training data generation"
+    )
     args = parser.parse_args()
 
     # Get input file
