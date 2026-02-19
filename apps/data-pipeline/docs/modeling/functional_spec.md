@@ -83,13 +83,38 @@ When cause and effect operate at different granularities:
 - Finer → Coarser (e.g., hourly → daily): Aggregate cause using indicator's `aggregation` field
 - Coarser → Finer (e.g., weekly → daily): Broadcast coarser to all finer time points
 
-**1.5 Coefficient Bounds**
+#### 1.5 Parameter Roles and Constraints
 
-| Parameter | Constraint | Rationale |
-|-----------|------------|-----------|
-| AR coefficient ρ | [0, 1] | Stationarity; negative AR rare in behavioral data |
-| Factor loadings λ | [0, ∞) | Sign convention: all loadings positive |
-| Residual variance σ² | (0, ∞) | Must be positive |
+Each parameter in the SSM has a **role** (its function in the model) and a **constraint** (its domain restriction). These are enforced by construction — the prior distribution family guarantees the constraint.
+
+**Roles**
+
+| Role | Symbol | Meaning | Appears in |
+|------|--------|---------|------------|
+| `ar_coefficient` | ρ | Autoregressive persistence of a latent state | Diagonal of **A** |
+| `fixed_effect` | β | Cross-lag causal effect between constructs | Off-diagonal of **A** |
+| `residual_sd` | σ | Scale of the innovation (process noise) | Diagonal of **G** |
+| `loading` | λ | Factor loading mapping latent → observed | Measurement model |
+| `correlation` | Ω | Off-diagonal correlation between residuals | Noise covariance |
+
+**Constraints**
+
+| Constraint | Domain | Typical prior families |
+|------------|--------|----------------------|
+| `none` | (−∞, +∞) | Normal |
+| `positive` | (0, +∞) | HalfNormal, HalfCauchy, Exponential, LogNormal |
+| `unit_interval` | [0, 1] | Beta, Uniform(0,1) |
+| `correlation` | [−1, 1] | LKJCholesky, Uniform(−1,1) |
+
+**Role → Constraint mapping**
+
+| Role | Default constraint | Rationale |
+|------|-------------------|-----------|
+| `ar_coefficient` | `unit_interval` | Stationarity; negative AR rare in behavioral data |
+| `fixed_effect` | `none` | Effect sizes can be positive or negative |
+| `residual_sd` | `positive` | Standard deviations are non-negative by definition |
+| `loading` | `positive` | Sign convention: all loadings positive |
+| `correlation` | `correlation` | Bounded by definition |
 
 ---
 

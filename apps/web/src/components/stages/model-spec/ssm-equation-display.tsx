@@ -3,6 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatTooltip } from "@/components/ui/stat-tooltip";
 import type { LikelihoodSpec, ParameterSpec, PriorProposal } from "@causal-ssm/api-types";
 import katex from "katex";
+import { ArrowDown, BookOpen } from "lucide-react";
+
+const FUNCTIONAL_SPEC_URL =
+  "https://github.com/ma9o/causal-ssm-agent/blob/master/apps/data-pipeline/docs/modeling/functional_spec.md#15-parameter-roles-and-constraints";
 
 interface SsmEquationDisplayProps {
   likelihoods: LikelihoodSpec[];
@@ -140,10 +144,6 @@ export function SSMEquationDisplay({ likelihoods, parameters, priors }: SsmEquat
   const states = stateNames(parameters);
 
   // --- State dynamics ---
-  const sdeLatex = tex(
-    String.raw`\mathrm{d}\boldsymbol{\eta}(t) = \bigl(\mathbf{A}\,\boldsymbol{\eta}(t) + \mathbf{c}\bigr)\,\mathrm{d}t + \mathbf{G}\,\mathrm{d}\mathbf{W}(t)`,
-  );
-
   const transitionLatex = tex(
     String.raw`\begin{aligned}
 \eta_i(t) &= \rho_i \, \eta_i(t\!-\!1) + \textstyle\sum_{j \in \mathrm{pa}(i)} \beta_{ji}\, \eta_j(t\!-\!1) + \varepsilon_i(t) \\
@@ -180,7 +180,18 @@ export function SSMEquationDisplay({ likelihoods, parameters, priors }: SsmEquat
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">SSM Equations</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base">SSM Equations</CardTitle>
+          <a
+            href={FUNCTIONAL_SPEC_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <BookOpen className="h-3.5 w-3.5" />
+            Parameter roles &amp; constraints
+          </a>
+        </div>
       </CardHeader>
       <CardContent className="space-y-5">
         {/* State dynamics */}
@@ -188,14 +199,41 @@ export function SSMEquationDisplay({ likelihoods, parameters, priors }: SsmEquat
           <div className="mb-2 flex items-center justify-between">
             <h4 className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               State Dynamics
-              <StatTooltip explanation="Continuous-time stochastic differential equation governing how the latent states η(t) evolve. A encodes autoregressive persistence (diagonal) and cross-construct causal effects (off-diagonal). G scales the Wiener process noise." />
+              <StatTooltip explanation="Each latent state evolves as a discrete-time AR(1) process: it depends on its own previous value (persistence ρ), causal effects from parent states (β), and Gaussian noise. This is obtained by exact discretization of an underlying continuous-time SDE." />
             </h4>
             <Badge variant="outline">Linear-Gaussian Dynamics</Badge>
           </div>
-          <div className="overflow-x-auto rounded-md border bg-muted/30 px-4 py-3">
-            <div dangerouslySetInnerHTML={{ __html: sdeLatex }} />
-            <div dangerouslySetInnerHTML={{ __html: transitionLatex }} />
-            {stateVecLatex && <div dangerouslySetInnerHTML={{ __html: stateVecLatex }} />}
+          <div className="grid gap-3 md:grid-cols-[1fr,auto]">
+            {/* Main equations */}
+            <div className="overflow-x-auto rounded-md border bg-muted/30 px-4 py-3">
+              <div dangerouslySetInnerHTML={{ __html: transitionLatex }} />
+              {stateVecLatex && <div dangerouslySetInnerHTML={{ __html: stateVecLatex }} />}
+            </div>
+            {/* Discretization aside */}
+            <div className="flex flex-col items-center gap-2 rounded-md border border-dashed bg-muted/15 px-4 py-3 text-center md:max-w-56">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Continuous-time
+              </span>
+              <div
+                className="text-xs [&_.katex]:text-xs"
+                dangerouslySetInnerHTML={{ __html: tex(
+                  String.raw`\mathrm{d}\boldsymbol{\eta} = (\mathbf{A}\boldsymbol{\eta} + \mathbf{c})\,\mathrm{d}t + \mathbf{G}\,\mathrm{d}\mathbf{W}`,
+                ) }}
+              />
+              <div className="flex flex-col items-center gap-0.5 text-muted-foreground">
+                <ArrowDown className="h-4 w-4" />
+                <span className="text-[10px] leading-tight">
+                  exact discretization at&nbsp;&Delta;t
+                </span>
+              </div>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Discrete-time
+              </span>
+              <p className="text-[11px] leading-snug text-muted-foreground">
+                The pipeline specifies dynamics in continuous time, then discretizes exactly to the
+                observation interval to obtain the AR(1) transition used for estimation.
+              </p>
+            </div>
           </div>
         </section>
 
