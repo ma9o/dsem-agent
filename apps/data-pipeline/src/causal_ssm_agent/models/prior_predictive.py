@@ -350,27 +350,35 @@ def validate_prior_predictive(
 
         builder.build_model(X_wide)
     except Exception as e:
-        return False, [
-            PriorValidationResult(
-                parameter="model_build",
-                is_valid=False,
-                issue=f"Model build failed: {e}",
-                suggested_adjustment="Fix model_spec or priors to enable model construction",
-            )
-        ], {}
+        return (
+            False,
+            [
+                PriorValidationResult(
+                    parameter="model_build",
+                    is_valid=False,
+                    issue=f"Model build failed: {e}",
+                    suggested_adjustment="Fix model_spec or priors to enable model construction",
+                )
+            ],
+            {},
+        )
 
     # 2. Sample prior predictive
     try:
         samples = builder.sample_prior_predictive(samples=n_samples)
     except Exception as e:
-        return False, [
-            PriorValidationResult(
-                parameter="prior_sampling",
-                is_valid=False,
-                issue=f"Prior predictive sampling failed: {e}",
-                suggested_adjustment="Check priors for numerical issues",
-            )
-        ], {}
+        return (
+            False,
+            [
+                PriorValidationResult(
+                    parameter="prior_sampling",
+                    is_valid=False,
+                    issue=f"Prior predictive sampling failed: {e}",
+                    suggested_adjustment="Check priors for numerical issues",
+                )
+            ],
+            {},
+        )
 
     # 3. Run checks
     results: list[PriorValidationResult] = []
@@ -551,7 +559,9 @@ def get_failed_parameters(
     # Build indicator→construct lookup from causal_spec
     indicator_to_construct: dict[str, str] = {}
     if causal_spec:
-        for ind in causal_spec.get("measurement", {}).get("indicators", []):
+        from causal_ssm_agent.utils.causal_spec import get_indicators
+
+        for ind in get_indicators(causal_spec):
             ind_name = ind.get("name") if isinstance(ind, dict) else ind.name
             construct = ind.get("construct_name") if isinstance(ind, dict) else ind.construct_name
             if ind_name and construct:

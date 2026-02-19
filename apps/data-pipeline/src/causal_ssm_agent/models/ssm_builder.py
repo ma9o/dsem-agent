@@ -26,6 +26,7 @@ from causal_ssm_agent.orchestrator.schemas_model import (
     ParameterRole,
     validate_model_spec,
 )
+from causal_ssm_agent.utils.causal_spec import get_constructs, get_edges, get_indicators
 from causal_ssm_agent.workers.schemas_prior import PriorProposal
 
 logger = logging.getLogger(__name__)
@@ -191,7 +192,9 @@ class SSMModelBuilder:
         """
         if self._causal_spec is None:
             return 1.0
-        for c in self._causal_spec.get("latent", {}).get("constructs", []):
+        from causal_ssm_agent.utils.causal_spec import get_constructs
+
+        for c in get_constructs(self._causal_spec):
             name = c.get("name") if isinstance(c, dict) else c.name
             if name == construct_name:
                 gran = c.get("temporal_scale") if isinstance(c, dict) else c.temporal_scale
@@ -270,8 +273,7 @@ class SSMModelBuilder:
         # They get near-zero drift/diffusion (quasi-constant, determined by initial state).
         time_invariant_mask = None
         if latent_names is not None and self._causal_spec is not None:
-            latent_data = self._causal_spec.get("latent", {})
-            constructs = latent_data.get("constructs", [])
+            constructs = get_constructs(self._causal_spec)
             tv_set = set(latent_names)
             ti_names = []
             for c in constructs:
@@ -342,16 +344,14 @@ class SSMModelBuilder:
             return None, jnp.eye(n_manifest, n_latent), None
 
         causal_spec = self._causal_spec
-        latent_data = causal_spec.get("latent", {})
-        measurement_data = causal_spec.get("measurement", {})
-        edges = latent_data.get("edges", [])
-        indicators = measurement_data.get("indicators", [])
+        edges = get_edges(causal_spec)
+        indicators = get_indicators(causal_spec)
 
         # Build name-to-index maps
         latent_idx = {name: i for i, name in enumerate(latent_names)}
 
         # Build construct lookup for lag_hours computation
-        constructs = latent_data.get("constructs", [])
+        constructs = get_constructs(causal_spec)
         construct_map: dict[str, dict | Any] = {}
         for c in constructs:
             name = c.get("name") if isinstance(c, dict) else c.name
@@ -621,7 +621,11 @@ class SSMModelBuilder:
         # Falls back to first-order (already stored above) if not embeddable
         if dt_diag_raw and ssm_spec:
             self._try_exact_logm_conversion(
-                ssm_priors, ssm_spec, dt_diag_raw, dt_offdiag_raw, dt_values,
+                ssm_priors,
+                ssm_spec,
+                dt_diag_raw,
+                dt_offdiag_raw,
+                dt_values,
             )
         else:
             # Diagnostic: warn when first-order approximation may be inaccurate
@@ -672,7 +676,8 @@ class SSMModelBuilder:
             logger.info(
                 "Mixed observation intervals (%.1f–%.1f days) across parameters. "
                 "Cannot apply exact matrix logarithm; using first-order approximation.",
-                dt_min, dt_max,
+                dt_min,
+                dt_max,
             )
             self._warn_first_order_approximation(ssm_priors)
             return
@@ -777,7 +782,9 @@ class SSMModelBuilder:
         logger.info(
             "Exact matrix logarithm DT->CT conversion succeeded for %dx%d system "
             "(dt=%.1f days). Drift eigenvalues: %s",
-            n, n, dt,
+            n,
+            n,
+            dt,
             [f"{ev.real:.4f}" for ev in A_eigenvalues],
         )
 
@@ -880,12 +887,8 @@ class SSMModelBuilder:
                 min(implied_timescale_days, expected_lag_days), 1e-10
             )
             if ratio > 5.0:
-                cause_name = (
-                    ssm_spec.latent_names[ci] if ssm_spec.latent_names else f"latent_{ci}"
-                )
-                effect_name = (
-                    ssm_spec.latent_names[ei] if ssm_spec.latent_names else f"latent_{ei}"
-                )
+                cause_name = ssm_spec.latent_names[ci] if ssm_spec.latent_names else f"latent_{ci}"
+                effect_name = ssm_spec.latent_names[ei] if ssm_spec.latent_names else f"latent_{ei}"
                 logger.warning(
                     "Drift rate for %s->%s implies timescale %.1f days, "
                     "but edge lag suggests %.1f days (%.0fx mismatch). "

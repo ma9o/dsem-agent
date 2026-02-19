@@ -5,6 +5,8 @@ from typing import Any
 import polars as pl
 from pydantic import BaseModel, Field
 
+from causal_ssm_agent.utils.causal_spec import get_indicator_info as _get_indicator_info
+
 
 class Extraction(BaseModel):
     """A single extracted observation for an indicator."""
@@ -87,9 +89,6 @@ def _check_dtype_match(value: Any, expected_dtype: str) -> bool:
     if check is None:
         return True  # Unknown dtype, don't fail
     return check(value)
-
-
-from causal_ssm_agent.utils.causal_spec import get_indicator_info as _get_indicator_info
 
 
 def validate_worker_output(
