@@ -30,7 +30,7 @@ You have access to `validate_extractions` tool. Use it to validate your JSON bef
 }
 ```
 
-IMPORTANT: Always output the JSON after validating your final answer. `validate_extractions` does not save the final result.
+IMPORTANT: Once you get "VALID", STOP. Do not output anything else — the validated result is already saved by the tool. Any additional output will be ignored.
 """
 
 USER = """\

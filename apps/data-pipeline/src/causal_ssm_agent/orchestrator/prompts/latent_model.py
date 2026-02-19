@@ -89,7 +89,7 @@ Contemporaneous edges must form a DAG within each time slice (A4). Feedback loop
 
 You have access to `validate_latent_model` tool. Use it to validate your JSON before returning the final answer. Keep validating until you get "VALID".
 
-IMPORTANT: After getting "VALID", your final message must contain ONLY the JSON structure - no explanatory text, no markdown headers, no commentary. Just the raw JSON object.
+IMPORTANT: Once you get "VALID", STOP. Do not output anything else — the validated result is already saved by the tool. Any additional output will be ignored.
 """
 
 USER = """\
@@ -115,7 +115,7 @@ Review your proposed latent model for theoretical coherence.
 
 ## Output
 
-Validate your structure with the tool, then return ONLY the corrected JSON structure as your final message - no explanatory text, no markdown headers, no commentary. Just the raw JSON object.
+If you find issues, fix them, validate with the tool, and stop once you get "VALID". If your structure is already correct, just confirm — do not re-output the JSON.
 
 Think very hard.
 """
