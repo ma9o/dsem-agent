@@ -3,8 +3,19 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatNumber } from "@/lib/utils/format";
 import type { TreatmentEffect } from "@causal-ssm/api-types";
+import { useMemo } from "react";
+import {
+  CartesianGrid,
+  ErrorBar,
+  ReferenceLine,
+  ResponsiveContainer,
+  Scatter,
+  ScatterChart,
+  Tooltip as RechartTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { ticks as d3Ticks, min as d3Min, max as d3Max } from "d3-array";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface ForestPlotPanelProps {
   results: TreatmentEffect[];
@@ -12,15 +23,44 @@ interface ForestPlotPanelProps {
 
 const ROW_HEIGHT = 32;
 const PADDING_TOP = 4;
-const AXIS_HEIGHT = 20;
-const CAP_HALF = 5;
 const DIAMOND_H = 5;
 const DIAMOND_W = 6;
 
-interface HoverState {
-  treatment: string;
+interface ChartRow {
   x: number;
   y: number;
+  errorX: [number, number];
+  treatment: string;
+  beta_hat: number;
+  ci_lower: number;
+  ci_upper: number;
+  se: number;
+  crossesZero: boolean;
+}
+
+function DiamondDot({ cx, cy, fill }: { cx?: number; cy?: number; fill: string }) {
+  if (cx == null || cy == null) return null;
+  return (
+    <polygon
+      points={`${cx},${cy - DIAMOND_H} ${cx + DIAMOND_W},${cy} ${cx},${cy + DIAMOND_H} ${cx - DIAMOND_W},${cy}`}
+      fill={fill}
+    />
+  );
+}
+
+function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: ChartRow }> }) {
+  if (!active || !payload?.[0]) return null;
+  const d = payload[0].payload;
+  return (
+    <div className="rounded-md border bg-popover px-3 py-2 text-sm shadow-md">
+      <div className="mb-1 font-medium">{d.treatment}</div>
+      <div className="space-y-0.5 font-mono text-xs text-muted-foreground">
+        <div>{"\u03B2\u0302"} = {formatNumber(d.beta_hat, 3)}</div>
+        <div>95% CI [{formatNumber(d.ci_lower, 3)}, {formatNumber(d.ci_upper, 3)}]</div>
+        <div>SE = {formatNumber(d.se, 3)}</div>
+      </div>
+    </div>
+  );
 }
 
 export function ForestPlotPanel({ results }: ForestPlotPanelProps) {
@@ -36,10 +76,7 @@ export function ForestPlotPanel({ results }: ForestPlotPanelProps) {
     const lo = d3Min(allVals) ?? 0;
     const hi = d3Max(allVals) ?? 0;
     const pad = (hi - lo) * 0.15;
-    return {
-      domainMin: lo - pad,
-      domainMax: hi + pad,
-    };
+    return { domainMin: lo - pad, domainMax: hi + pad };
   }, [sorted]);
 
   const ticks = useMemo(
@@ -47,50 +84,31 @@ export function ForestPlotPanel({ results }: ForestPlotPanelProps) {
     [domainMin, domainMax],
   );
 
-  const svgRef = useRef<SVGSVGElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [svgWidth, setSvgWidth] = useState(400);
-  const [hover, setHover] = useState<HoverState | null>(null);
-
-  useEffect(() => {
-    if (!svgRef.current) return;
-    const obs = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setSvgWidth(entry.contentRect.width);
+  const { significant, notSignificant } = useMemo(() => {
+    const sig: ChartRow[] = [];
+    const notSig: ChartRow[] = [];
+    sorted.forEach((r, i) => {
+      const row: ChartRow = {
+        x: r.beta_hat,
+        y: i,
+        errorX: [r.beta_hat - r.ci_lower, r.ci_upper - r.beta_hat],
+        treatment: r.treatment,
+        beta_hat: r.beta_hat,
+        ci_lower: r.ci_lower,
+        ci_upper: r.ci_upper,
+        se: r.se,
+        crossesZero: r.ci_lower <= 0 && r.ci_upper >= 0,
+      };
+      if (row.crossesZero) {
+        notSig.push(row);
+      } else {
+        sig.push(row);
       }
     });
-    obs.observe(svgRef.current);
-    return () => obs.disconnect();
-  }, []);
+    return { significant: sig, notSignificant: notSig };
+  }, [sorted]);
 
-  // Pixel-based x scale
-  const xPx = useCallback(
-    (value: number) => {
-      return ((value - domainMin) / (domainMax - domainMin)) * svgWidth;
-    },
-    [domainMin, domainMax, svgWidth],
-  );
-
-  const svgHeight = PADDING_TOP + sorted.length * ROW_HEIGHT + AXIS_HEIGHT;
-
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent<SVGGElement>, treatment: string) => {
-      if (!containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      setHover({
-        treatment,
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-      });
-    },
-    [],
-  );
-
-  const handleMouseLeave = useCallback(() => setHover(null), []);
-
-  const hoveredItem = hover
-    ? sorted.find((r) => r.treatment === hover.treatment)
-    : null;
+  const svgHeight = PADDING_TOP + sorted.length * ROW_HEIGHT + 20;
 
   return (
     <Card>
@@ -112,170 +130,75 @@ export function ForestPlotPanel({ results }: ForestPlotPanelProps) {
             ))}
           </div>
 
-          {/* SVG chart area */}
-          <div className="relative min-w-0 flex-1" ref={containerRef}>
-            <svg
-              ref={svgRef}
-              width="100%"
-              height={svgHeight}
-              className="overflow-visible"
-            >
-              {/* Gridlines */}
-              {ticks.map((t) => {
-                const x = xPx(t);
-                return (
-                  <line
-                    key={`grid-${t}`}
-                    x1={x}
-                    x2={x}
-                    y1={PADDING_TOP}
-                    y2={PADDING_TOP + sorted.length * ROW_HEIGHT}
-                    className="stroke-muted"
-                    strokeWidth={1}
-                  />
-                );
-              })}
-
-              {/* Null-effect reference line at 0 */}
-              <line
-                x1={xPx(0)}
-                x2={xPx(0)}
-                y1={PADDING_TOP - 2}
-                y2={PADDING_TOP + sorted.length * ROW_HEIGHT + 2}
-                className="stroke-muted-foreground/60"
-                strokeWidth={1}
-                strokeDasharray="4 3"
-              />
-
-              {/* Treatment rows */}
-              {sorted.map((r, i) => {
-                const cy = PADDING_TOP + i * ROW_HEIGHT + ROW_HEIGHT / 2;
-                const x1 = xPx(r.ci_lower);
-                const x2 = xPx(r.ci_upper);
-                const xPt = xPx(r.beta_hat);
-                const crossesZero = r.ci_lower <= 0 && r.ci_upper >= 0;
-                const isHovered = hover?.treatment === r.treatment;
-
-                const colorClass = crossesZero
-                  ? "stroke-muted-foreground"
-                  : "stroke-primary";
-                const fillClass = crossesZero
-                  ? "fill-muted-foreground"
-                  : "fill-primary";
-
-                return (
-                  <g
-                    key={r.treatment}
-                    className="cursor-pointer"
-                    onMouseMove={(e) => handleMouseMove(e, r.treatment)}
-                    onMouseLeave={handleMouseLeave}
+          {/* Chart area */}
+          <div className="min-w-0 flex-1">
+            <ResponsiveContainer width="100%" height={svgHeight}>
+              <ScatterChart margin={{ top: PADDING_TOP, right: 0, bottom: 0, left: 0 }}>
+                <CartesianGrid
+                  vertical
+                  horizontal={false}
+                  strokeDasharray="none"
+                  className="stroke-muted"
+                />
+                <XAxis
+                  type="number"
+                  dataKey="x"
+                  domain={[domainMin, domainMax]}
+                  ticks={ticks}
+                  tickFormatter={(t: number) => formatNumber(t, 2)}
+                  fontSize={11}
+                  className="fill-muted-foreground"
+                  axisLine={false}
+                  tickLine={{ className: "stroke-muted-foreground" }}
+                />
+                <YAxis
+                  type="number"
+                  dataKey="y"
+                  hide
+                  domain={[-0.5, sorted.length - 0.5]}
+                  reversed
+                />
+                <ReferenceLine
+                  x={0}
+                  strokeDasharray="4 3"
+                  className="stroke-muted-foreground/60"
+                />
+                <RechartTooltip
+                  content={<CustomTooltip />}
+                  cursor={false}
+                />
+                {significant.length > 0 && (
+                  <Scatter
+                    data={significant}
+                    shape={<DiamondDot fill="var(--primary)" />}
+                    isAnimationActive={false}
                   >
-                    {/* Hover target */}
-                    <rect
-                      x={0}
-                      y={cy - ROW_HEIGHT / 2}
-                      width={svgWidth}
-                      height={ROW_HEIGHT}
-                      fill="transparent"
-                    />
-                    {/* Row highlight on hover */}
-                    {isHovered && (
-                      <rect
-                        x={0}
-                        y={cy - ROW_HEIGHT / 2}
-                        width={svgWidth}
-                        height={ROW_HEIGHT}
-                        className="fill-muted"
-                        opacity={0.4}
-                      />
-                    )}
-                    {/* CI whisker line */}
-                    <line
-                      x1={x1}
-                      x2={x2}
-                      y1={cy}
-                      y2={cy}
-                      className={colorClass}
-                      strokeWidth={isHovered ? 2 : 1.5}
-                      strokeLinecap="round"
-                    />
-                    {/* CI end caps */}
-                    <line
-                      x1={x1}
-                      x2={x1}
-                      y1={cy - CAP_HALF}
-                      y2={cy + CAP_HALF}
-                      className={colorClass}
+                    <ErrorBar
+                      dataKey="errorX"
+                      direction="x"
+                      width={10}
+                      stroke="var(--primary)"
                       strokeWidth={1.5}
                     />
-                    <line
-                      x1={x2}
-                      x2={x2}
-                      y1={cy - CAP_HALF}
-                      y2={cy + CAP_HALF}
-                      className={colorClass}
+                  </Scatter>
+                )}
+                {notSignificant.length > 0 && (
+                  <Scatter
+                    data={notSignificant}
+                    shape={<DiamondDot fill="var(--muted-foreground)" />}
+                    isAnimationActive={false}
+                  >
+                    <ErrorBar
+                      dataKey="errorX"
+                      direction="x"
+                      width={10}
+                      stroke="var(--muted-foreground)"
                       strokeWidth={1.5}
                     />
-                    {/* Point estimate diamond */}
-                    <polygon
-                      points={`${xPt},${cy - DIAMOND_H} ${xPt + DIAMOND_W},${cy} ${xPt},${cy + DIAMOND_H} ${xPt - DIAMOND_W},${cy}`}
-                      className={fillClass}
-                    />
-                  </g>
-                );
-              })}
-
-              {/* X-axis ticks */}
-              {ticks.map((t) => {
-                const x = xPx(t);
-                const tickY = PADDING_TOP + sorted.length * ROW_HEIGHT;
-                return (
-                  <g key={`tick-${t}`}>
-                    <line
-                      x1={x}
-                      x2={x}
-                      y1={tickY}
-                      y2={tickY + 4}
-                      className="stroke-muted-foreground"
-                      strokeWidth={1}
-                    />
-                    <text
-                      x={x}
-                      y={tickY + 16}
-                      textAnchor="middle"
-                      className="fill-muted-foreground"
-                      fontSize={11}
-                    >
-                      {formatNumber(t, 2)}
-                    </text>
-                  </g>
-                );
-              })}
-            </svg>
-
-            {/* Floating tooltip */}
-            {hover && hoveredItem && (
-              <div
-                className="pointer-events-none absolute z-50 rounded-md border bg-popover px-3 py-2 text-sm shadow-md"
-                style={{
-                  left: hover.x,
-                  top: hover.y - 8,
-                  transform: "translate(-50%, -100%)",
-                }}
-              >
-                <div className="mb-1 font-medium">{hoveredItem.treatment}</div>
-                <div className="space-y-0.5 font-mono text-xs text-muted-foreground">
-                  <div>
-                    {"\u03B2\u0302"} = {formatNumber(hoveredItem.beta_hat, 3)}
-                  </div>
-                  <div>
-                    95% CI [{formatNumber(hoveredItem.ci_lower, 3)},{" "}
-                    {formatNumber(hoveredItem.ci_upper, 3)}]
-                  </div>
-                  <div>SE = {formatNumber(hoveredItem.se, 3)}</div>
-                </div>
-              </div>
-            )}
+                  </Scatter>
+                )}
+              </ScatterChart>
+            </ResponsiveContainer>
           </div>
 
           {/* Numeric summary column */}
