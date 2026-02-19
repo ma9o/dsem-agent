@@ -2,10 +2,26 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { PipelineProgress } from "@/lib/hooks/use-run-events";
 import { STAGES } from "@causal-ssm/api-types";
-import { Check, Loader2, X } from "lucide-react";
+import { Check, Copy, Loader2, X } from "lucide-react";
 import Link from "next/link";
+import { useCallback, useState } from "react";
 
-export function PipelineProgressBar({ progress }: { progress: PipelineProgress | undefined }) {
+export function PipelineProgressBar({
+  progress,
+  sessionCode,
+}: {
+  progress: PipelineProgress | undefined;
+  sessionCode?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    if (!sessionCode) return;
+    navigator.clipboard.writeText(sessionCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }, [sessionCode]);
+
   if (!progress) return null;
 
   const completed = STAGES.filter((s) => progress.stages[s.id] === "completed").length;
@@ -21,6 +37,21 @@ export function PipelineProgressBar({ progress }: { progress: PipelineProgress |
             Causal Inference Pipeline
           </Link>
           <div className="flex items-center gap-2">
+            {sessionCode && (
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="flex items-center gap-1 rounded border bg-secondary/50 px-2 py-0.5 font-mono text-xs tracking-widest text-muted-foreground transition-colors hover:bg-secondary"
+                title="Copy session code"
+              >
+                {sessionCode}
+                {copied ? (
+                  <Check className="h-3 w-3 text-success" />
+                ) : (
+                  <Copy className="h-3 w-3" />
+                )}
+              </button>
+            )}
             <span className="text-sm font-medium text-muted-foreground">
               {completed}/{STAGES.length} stages
             </span>

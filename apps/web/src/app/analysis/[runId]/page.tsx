@@ -8,10 +8,13 @@ import { use, useEffect } from "react";
 
 export default function AnalysisPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ runId: string }>;
+  searchParams: Promise<{ code?: string }>;
 }) {
   const { runId } = use(params);
+  const { code: sessionCode } = use(searchParams);
 
   useRunEvents(runId);
   const progress = usePipelineStatus(runId);
@@ -43,5 +46,5 @@ export default function AnalysisPage({
       : `(${completed}/${STAGES.length}) Running | Causal Inference Pipeline`;
   }, [progress]);
 
-  return <AnalysisFeed runId={runId} progress={progress} />;
+  return <AnalysisFeed runId={runId} progress={progress} sessionCode={sessionCode} />;
 }

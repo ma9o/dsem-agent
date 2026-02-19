@@ -5,8 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { uploadFile } from "@/lib/api/endpoints";
 import { isMockMode, MOCK_RUN_ID } from "@/lib/api/mock-provider";
 import { getDeploymentId, triggerRun } from "@/lib/api/prefect";
+import { generateSessionCode } from "@/lib/session-code";
 import { Switch } from "@/components/ui/switch";
-import { ArrowRight, FileText, Loader2, ShieldAlert, Sparkles, Upload, X } from "lucide-react";
+import { ArrowRight, FileText, Loader2, RotateCcw, ShieldAlert, Sparkles, Upload, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -45,6 +46,9 @@ export default function LandingPage() {
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [resumeCode, setResumeCode] = useState("");
+  const [resumeError, setResumeError] = useState<string | null>(null);
+  const [isResuming, setIsResuming] = useState(false);
 
   const validateFile = useCallback((f: File): string | null => {
     const validTypes = [".zip", ".json"];
@@ -97,20 +101,51 @@ export default function LandingPage() {
         return;
       }
 
-      const userId = `user-${Date.now()}`;
-      await uploadFile(file, userId);
+      const code = generateSessionCode();
+      await uploadFile(file, code);
 
       const deploymentId = await getDeploymentId();
       const runId = await triggerRun(deploymentId, {
         query: question,
-        user_id: userId,
+        user_id: code,
         override_gates: overrideGates || undefined,
       });
 
-      router.push(`/analysis/${runId}`);
+      await fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, runId, question }),
+      });
+
+      router.push(`/analysis/${runId}?code=${code}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start analysis");
       setIsSubmitting(false);
+    }
+  };
+
+  const handleResume = async () => {
+    const code = resumeCode.trim().toUpperCase();
+    if (code.length !== 6) {
+      setResumeError("Session code must be 6 characters.");
+      return;
+    }
+
+    setIsResuming(true);
+    setResumeError(null);
+
+    try {
+      const res = await fetch(`/api/sessions/${code}`);
+      if (!res.ok) {
+        setResumeError("Session not found. Check the code and try again.");
+        setIsResuming(false);
+        return;
+      }
+      const { runId } = await res.json();
+      router.push(`/analysis/${runId}?code=${code}`);
+    } catch {
+      setResumeError("Failed to look up session.");
+      setIsResuming(false);
     }
   };
 
@@ -291,6 +326,49 @@ export default function LandingPage() {
             </kbd>{" "}
             to submit
           </p>
+        </div>
+
+        <div className="flex items-center gap-3 opacity-40">
+          <div className="flex-1 border-t" />
+          <span className="text-xs text-muted-foreground">or</span>
+          <div className="flex-1 border-t" />
+        </div>
+
+        <div className="animate-fade-in-up space-y-3" style={{ animationDelay: "0.25s" }}>
+          <p className="text-center text-sm text-muted-foreground">
+            Resume a previous session
+          </p>
+          <div className="flex items-center gap-2 max-w-xs mx-auto">
+            <input
+              type="text"
+              maxLength={6}
+              placeholder="ABC123"
+              value={resumeCode}
+              onChange={(e) => {
+                setResumeCode(e.target.value.toUpperCase());
+                if (resumeError) setResumeError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && resumeCode.trim().length === 6) handleResume();
+              }}
+              className="flex-1 rounded-md border bg-background px-3 py-2 text-center font-mono text-lg tracking-[0.3em] uppercase placeholder:text-muted-foreground/40 placeholder:tracking-[0.3em]"
+            />
+            <Button
+              variant="outline"
+              onClick={handleResume}
+              disabled={isResuming || resumeCode.trim().length !== 6}
+            >
+              {isResuming ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RotateCcw className="h-4 w-4" />
+              )}
+              Resume
+            </Button>
+          </div>
+          {resumeError && (
+            <p className="text-center text-sm text-destructive">{resumeError}</p>
+          )}
         </div>
       </div>
     </div>
