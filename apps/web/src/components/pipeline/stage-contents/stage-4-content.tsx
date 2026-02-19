@@ -1,7 +1,7 @@
 import { LikelihoodTable } from "@/components/stages/model-spec/likelihood-table";
 import { ObservationModelCard } from "@/components/stages/model-spec/observation-model-card";
 import { ParameterTable } from "@/components/stages/model-spec/parameter-table";
-import { PriorCard } from "@/components/stages/model-spec/prior-card";
+import { PriorTable } from "@/components/stages/model-spec/prior-table";
 import { RetryIndicator } from "@/components/stages/model-spec/retry-indicator";
 import { SSMEquationDisplay } from "@/components/stages/model-spec/ssm-equation-display";
 import type { Extraction } from "@causal-ssm/api-types";
@@ -41,11 +41,7 @@ export default function Stage4Content({
       {data.priors.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-sm font-semibold">Prior Distributions</h3>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {data.priors.map((p) => (
-              <PriorCard key={p.parameter} prior={p} />
-            ))}
-          </div>
+          <PriorTable priors={data.priors} />
         </div>
       )}
       {data.validation_retries && data.validation_retries.length > 0 && (
