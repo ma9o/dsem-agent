@@ -8,6 +8,7 @@ import { getDeploymentId, triggerRun } from "@/lib/api/prefect";
 import { generateSessionCode } from "@/lib/session-code";
 import { Switch } from "@/components/ui/switch";
 import { ArrowRight, FileText, Loader2, RotateCcw, ShieldAlert, Sparkles, Upload, X } from "lucide-react";
+import { motion } from "motion/react";
 import { useRouter } from "next/navigation";
 import prettyBytes from "pretty-bytes";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -19,6 +20,18 @@ const EXAMPLE_QUESTIONS = [
 ];
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
+
+const fadeIn = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1 },
+  transition: { duration: 0.3, ease: "easeOut" as const },
+};
+
+const fadeInUp = (delay = 0) => ({
+  initial: { opacity: 0, y: 12 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.4, ease: "easeOut" as const, delay },
+});
 
 export default function LandingPage() {
   const router = useRouter();
@@ -153,7 +166,7 @@ export default function LandingPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-4 sm:p-8">
       <div className="w-full max-w-2xl space-y-8">
-        <div className="animate-fade-in text-center space-y-3">
+        <motion.div className="text-center space-y-3" {...fadeIn}>
           <h1 className="text-4xl sm:text-5xl font-bold tracking-tight">
             Causal Inference Pipeline
           </h1>
@@ -161,137 +174,145 @@ export default function LandingPage() {
             From research question to quantified treatment effects — powered by LLMs, state-space
             models, and Bayesian inference
           </p>
-        </div>
+        </motion.div>
 
-        <Card className="animate-fade-in-up">
-          <CardHeader>
-            <CardTitle>Research Question</CardTitle>
-            <CardDescription>What causal relationship do you want to investigate?</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <textarea
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground min-h-[100px] resize-y"
-              placeholder="e.g., How does my daily screen time affect my sleep quality and mood?"
-              value={question}
-              onChange={(e) => {
-                setQuestion(e.target.value);
-                if (error) setError(null);
-              }}
-              onKeyDown={handleKeyDown}
-            />
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <Sparkles className="h-3 w-3" />
-                Try an example:
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {EXAMPLE_QUESTIONS.map((q) => (
-                  <button
-                    key={q}
-                    type="button"
-                    className="rounded-full border px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
-                    onClick={() => setQuestion(q)}
-                  >
-                    {q.length > 50 ? `${q.slice(0, 50)}...` : q}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="animate-fade-in-up" style={{ animationDelay: "0.1s" }}>
-          <CardHeader>
-            <CardTitle>Data Upload</CardTitle>
-            <CardDescription>
-              Upload your Google Takeout export (ZIP or JSON)
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div
-              className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors ${
-                dragOver
-                  ? "border-primary bg-primary/5"
-                  : "border-muted-foreground/25 hover:border-muted-foreground/50"
-              }`}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragOver(true);
-              }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={handleDrop}
-            >
-              {file ? (
-                <div className="flex items-center gap-3">
-                  <FileText className="h-6 w-6 text-primary" />
-                  <div>
-                    <p className="text-sm font-medium">{file.name}</p>
-                    <p className="text-xs text-muted-foreground">{prettyBytes(file.size)}</p>
-                  </div>
-                  <button
-                    type="button"
-                    className="ml-2 rounded-full p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-                    onClick={() => setFile(null)}
-                    aria-label="Remove file"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+        <motion.div {...fadeInUp()}>
+          <Card>
+            <CardHeader>
+              <CardTitle>Research Question</CardTitle>
+              <CardDescription>What causal relationship do you want to investigate?</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <textarea
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground min-h-[100px] resize-y"
+                placeholder="e.g., How does my daily screen time affect my sleep quality and mood?"
+                value={question}
+                onChange={(e) => {
+                  setQuestion(e.target.value);
+                  if (error) setError(null);
+                }}
+                onKeyDown={handleKeyDown}
+              />
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Sparkles className="h-3 w-3" />
+                  Try an example:
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {EXAMPLE_QUESTIONS.map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      className="rounded-full border px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+                      onClick={() => setQuestion(q)}
+                    >
+                      {q.length > 50 ? `${q.slice(0, 50)}...` : q}
+                    </button>
+                  ))}
                 </div>
-              ) : (
-                <>
-                  <Upload className="h-8 w-8 text-muted-foreground mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Drag and drop or{" "}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div {...fadeInUp(0.1)}>
+          <Card>
+            <CardHeader>
+              <CardTitle>Data Upload</CardTitle>
+              <CardDescription>
+                Upload your Google Takeout export (ZIP or JSON)
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div
+                className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors ${
+                  dragOver
+                    ? "border-primary bg-primary/5"
+                    : "border-muted-foreground/25 hover:border-muted-foreground/50"
+                }`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOver(true);
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={handleDrop}
+              >
+                {file ? (
+                  <div className="flex items-center gap-3">
+                    <FileText className="h-6 w-6 text-primary" />
+                    <div>
+                      <p className="text-sm font-medium">{file.name}</p>
+                      <p className="text-xs text-muted-foreground">{prettyBytes(file.size)}</p>
+                    </div>
                     <button
                       type="button"
-                      className="text-primary underline underline-offset-2 hover:no-underline"
-                      onClick={() => fileInputRef.current?.click()}
+                      className="ml-2 rounded-full p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                      onClick={() => setFile(null)}
+                      aria-label="Remove file"
                     >
-                      browse
+                      <X className="h-4 w-4" />
                     </button>
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground/60">
-                    ZIP or JSON, up to {prettyBytes(MAX_FILE_SIZE)}
-                  </p>
-                </>
-              )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                accept=".zip,.json"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) handleFileSelect(f);
-                }}
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="animate-fade-in-up" style={{ animationDelay: "0.15s" }}>
-          <CardContent className="flex items-center justify-between py-4">
-            <div className="flex items-center gap-2">
-              <ShieldAlert className="h-4 w-4 text-warning-foreground" />
-              <div>
-                <p className="text-sm font-medium">Override stage gates</p>
-                <p className="text-xs text-muted-foreground">
-                  Continue past stage failures instead of halting. Results may be unreliable.
-                </p>
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      Drag and drop or{" "}
+                      <button
+                        type="button"
+                        className="text-primary underline underline-offset-2 hover:no-underline"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        browse
+                      </button>
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground/60">
+                      ZIP or JSON, up to {prettyBytes(MAX_FILE_SIZE)}
+                    </p>
+                  </>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  accept=".zip,.json"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleFileSelect(f);
+                  }}
+                />
               </div>
-            </div>
-            <Switch
-              checked={overrideGates}
-              onCheckedChange={setOverrideGates}
-            />
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div {...fadeInUp(0.15)}>
+          <Card>
+            <CardContent className="flex items-center justify-between py-4">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 text-warning-foreground" />
+                <div>
+                  <p className="text-sm font-medium">Override stage gates</p>
+                  <p className="text-xs text-muted-foreground">
+                    Continue past stage failures instead of halting. Results may be unreliable.
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={overrideGates}
+                onCheckedChange={setOverrideGates}
+              />
+            </CardContent>
+          </Card>
+        </motion.div>
 
         {error && (
-          <p className="animate-fade-in text-sm text-destructive text-center">{error}</p>
+          <motion.p className="text-sm text-destructive text-center" {...fadeIn}>
+            {error}
+          </motion.p>
         )}
 
-        <div className="animate-fade-in-up space-y-2" style={{ animationDelay: "0.2s" }}>
+        <motion.div className="space-y-2" {...fadeInUp(0.2)}>
           <Button
             className="w-full"
             size="lg"
@@ -313,7 +334,7 @@ export default function LandingPage() {
           <p className="text-center text-xs text-muted-foreground/60">
             Press{" "}
             <kbd className="rounded border bg-secondary px-1 py-0.5 text-[10px] font-mono">
-              {isMac ? "⌘" : "Ctrl"}
+              {isMac ? "\u2318" : "Ctrl"}
             </kbd>
             +
             <kbd className="rounded border bg-secondary px-1 py-0.5 text-[10px] font-mono">
@@ -321,7 +342,7 @@ export default function LandingPage() {
             </kbd>{" "}
             to submit
           </p>
-        </div>
+        </motion.div>
 
         <div className="flex items-center gap-3 opacity-40">
           <div className="flex-1 border-t" />
@@ -329,7 +350,7 @@ export default function LandingPage() {
           <div className="flex-1 border-t" />
         </div>
 
-        <div className="animate-fade-in-up space-y-3" style={{ animationDelay: "0.25s" }}>
+        <motion.div className="space-y-3" {...fadeInUp(0.25)}>
           <p className="text-center text-sm text-muted-foreground">
             Resume a previous session
           </p>
@@ -364,7 +385,7 @@ export default function LandingPage() {
           {resumeError && (
             <p className="text-center text-sm text-destructive">{resumeError}</p>
           )}
-        </div>
+        </motion.div>
       </div>
     </div>
   );

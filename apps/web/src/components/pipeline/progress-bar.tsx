@@ -3,6 +3,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import type { PipelineProgress } from "@/lib/hooks/use-run-events";
 import { STAGES } from "@causal-ssm/api-types";
 import { Check, Copy, Loader2, X } from "lucide-react";
+import { motion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useState } from "react";
 
@@ -58,9 +59,13 @@ export function PipelineProgressBar({
               {completed}/{STAGES.length} stages
             </span>
             {progress.isComplete && !hasGateFailure && (
-              <Badge variant="success" className="animate-fade-in">
-                Complete
-              </Badge>
+              <motion.span
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+              >
+                <Badge variant="success">Complete</Badge>
+              </motion.span>
             )}
             {(progress.isFailed || hasGateFailure) && (
               <Badge variant="destructive">

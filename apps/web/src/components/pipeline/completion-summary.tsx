@@ -9,6 +9,7 @@ import type { Stage5Data } from "@causal-ssm/api-types";
 import { STAGES } from "@causal-ssm/api-types";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Download, TrendingUp } from "lucide-react";
+import { motion } from "motion/react";
 import { useCallback } from "react";
 
 export function CompletionSummary({ runId }: { runId: string }) {
@@ -41,7 +42,12 @@ export function CompletionSummary({ runId }: { runId: string }) {
   const sensitiveCount = results.filter((r) => r.sensitivity_flag).length;
 
   return (
-    <Card className="animate-fade-in-up border-success/30 bg-success/5">
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: "easeOut" }}
+    >
+    <Card className="border-success/30 bg-success/5">
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-base">
@@ -99,5 +105,6 @@ export function CompletionSummary({ runId }: { runId: string }) {
         )}
       </CardContent>
     </Card>
+    </motion.div>
   );
 }
