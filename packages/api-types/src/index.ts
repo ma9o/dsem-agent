@@ -34,6 +34,7 @@ export type {
   ValidationIssue,
   ValidationSeverity,
   IndicatorHealth,
+  CellStatus,
 } from "./models/validation";
 
 export type {
@@ -117,7 +118,6 @@ export interface Stage1aData {
 
 export interface Stage1bData {
   causal_spec: import("./models/causal-spec").CausalSpec;
-  filtered_treatments: string[];
   llm_trace?: import("./models/llm-trace").LLMTrace;
 }
 

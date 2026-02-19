@@ -562,6 +562,44 @@ def validate_extraction(
         )
         issues.extend(halluc_issues)
 
+        # Derive per-cell pass/fail statuses for frontend color coding.
+        # These mirror the issue severity decisions above so the frontend
+        # never needs to re-derive domain thresholds.
+        cell_statuses: dict[str, str] = {
+            "n_obs": "warning" if n_obs < MIN_OBSERVATIONS else "ok",
+            "variance": (
+                "error" if variance is not None and variance == 0 else "ok"
+            ),
+            "time_coverage_ratio": (
+                "warning"
+                if time_coverage_ratio is not None and time_coverage_ratio < 1.0
+                else "ok"
+            ),
+            "max_gap_ratio": (
+                "warning"
+                if max_gap_ratio is not None and max_gap_ratio > 1.0
+                else "ok"
+            ),
+            "dtype_violations": (
+                "error"
+                if dtype_violations > 0 and dtype in ("binary", "count")
+                else "warning"
+                if dtype_violations > 0
+                else "ok"
+            ),
+            "duplicate_pct": (
+                "warning"
+                if duplicate_pct > HALLUCINATION_DUPLICATE_THRESHOLD
+                and dtype not in ("binary", "count")
+                and variance is not None
+                and variance > 0
+                else "ok"
+            ),
+            "arithmetic_sequence_detected": (
+                "warning" if arithmetic_sequence_detected else "ok"
+            ),
+        }
+
         per_indicator_health.append(
             {
                 "indicator": ind_name,
@@ -572,6 +610,7 @@ def validate_extraction(
                 "dtype_violations": dtype_violations,
                 "duplicate_pct": duplicate_pct,
                 "arithmetic_sequence_detected": arithmetic_sequence_detected,
+                "cell_statuses": cell_statuses,
             }
         )
 

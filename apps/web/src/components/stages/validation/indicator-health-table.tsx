@@ -1,10 +1,17 @@
 import { Badge } from "@/components/ui/badge";
 import { HeaderWithTooltip, InfoTable } from "@/components/ui/info-table";
-import { createColumnHelper } from "@tanstack/react-table";
 import { formatNumber } from "@/lib/utils/format";
-import type { IndicatorHealth } from "@causal-ssm/api-types";
+import type { CellStatus, IndicatorHealth } from "@causal-ssm/api-types";
+import { createColumnHelper } from "@tanstack/react-table";
 
 const col = createColumnHelper<IndicatorHealth>();
+
+/** Map a backend cell status to a text-color class. */
+function statusClass(status: CellStatus | undefined): string | undefined {
+  if (status === "error") return "text-destructive font-semibold";
+  if (status === "warning") return "text-warning-foreground font-semibold";
+  return undefined;
+}
 
 const columns = [
   col.accessor("indicator", {
@@ -18,7 +25,10 @@ const columns = [
         tooltip="Number of non-null observations after extraction. More observations generally yield more reliable estimates."
       />
     ),
-    cell: (info) => info.getValue().toLocaleString(),
+    cell: (info) => {
+      const cls = statusClass(info.row.original.cell_statuses?.n_obs);
+      return <span className={cls}>{info.getValue().toLocaleString()}</span>;
+    },
     meta: { align: "right" },
   }),
   col.accessor("variance", {
@@ -30,7 +40,9 @@ const columns = [
     ),
     cell: (info) => {
       const v = info.getValue();
-      return v !== null ? formatNumber(v) : "--";
+      if (v === null) return "--";
+      const cls = statusClass(info.row.original.cell_statuses?.variance);
+      return <span className={cls}>{formatNumber(v)}</span>;
     },
     meta: { align: "right" },
   }),
@@ -43,7 +55,9 @@ const columns = [
     ),
     cell: (info) => {
       const v = info.getValue();
-      return v !== null ? formatNumber(v) : "--";
+      if (v === null) return "--";
+      const cls = statusClass(info.row.original.cell_statuses?.time_coverage_ratio);
+      return <span className={cls}>{formatNumber(v)}</span>;
     },
     meta: { align: "right" },
   }),
@@ -56,7 +70,9 @@ const columns = [
     ),
     cell: (info) => {
       const v = info.getValue();
-      return v !== null ? formatNumber(v) : "--";
+      if (v === null) return "--";
+      const cls = statusClass(info.row.original.cell_statuses?.max_gap_ratio);
+      return <span className={cls}>{formatNumber(v)}</span>;
     },
     meta: { align: "right" },
   }),
@@ -69,7 +85,11 @@ const columns = [
     ),
     cell: (info) => {
       const v = info.getValue();
-      return v > 0 ? <Badge variant="destructive">{v}</Badge> : "0";
+      const status = info.row.original.cell_statuses?.dtype_violations;
+      if (v > 0) {
+        return <Badge variant={status === "error" ? "destructive" : "warning"}>{v}</Badge>;
+      }
+      return "0";
     },
     meta: { align: "right" },
   }),
@@ -80,7 +100,10 @@ const columns = [
         tooltip="Percentage of duplicate timestamp-value pairs. High duplication may indicate redundant data or extraction errors."
       />
     ),
-    cell: (info) => formatNumber(info.getValue()),
+    cell: (info) => {
+      const cls = statusClass(info.row.original.cell_statuses?.duplicate_pct);
+      return <span className={cls}>{formatNumber(info.getValue())}</span>;
+    },
     meta: { align: "right" },
   }),
   col.accessor("arithmetic_sequence_detected", {

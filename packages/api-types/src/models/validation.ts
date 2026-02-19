@@ -7,6 +7,8 @@ export interface ValidationIssue {
   message: string;
 }
 
+export type CellStatus = "ok" | "warning" | "error";
+
 export interface IndicatorHealth {
   indicator: string;
   n_obs: number;
@@ -16,6 +18,7 @@ export interface IndicatorHealth {
   dtype_violations: number;
   duplicate_pct: number;
   arithmetic_sequence_detected: boolean;
+  cell_statuses: Record<string, CellStatus>;
 }
 
 export interface ValidationReport {
