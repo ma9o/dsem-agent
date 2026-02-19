@@ -23,6 +23,7 @@ import json
 from evals.common import (
     get_questions_with_causal_spec,
     get_sample_chunks_worker,
+    load_eval_config,
     select_question,
 )
 from inspect_ai import Task, task
@@ -34,20 +35,10 @@ from inspect_ai.solver import Generate, TaskState, solver, system_message
 from causal_ssm_agent.utils.llm import make_worker_generate_fn
 from causal_ssm_agent.workers.core import WorkerResult, run_worker_extraction
 from causal_ssm_agent.workers.prompts.extraction import SYSTEM
-from causal_ssm_agent.workers.schemas import _get_indicator_info
+from causal_ssm_agent.workers.schemas import _check_dtype_match, _get_indicator_info
 
-# Worker models for parallel execution
-# Using reasoning-capable models with thinking budget
-# Note: Gemini 3 uses Vertex AI directly (not OpenRouter) for proper thought signature support
-MODELS = {
-    "openrouter/moonshotai/kimi-k2-thinking": "kimi",
-    "openrouter/deepseek/deepseek-v3.2-exp": "deepseek",
-    "google/vertex/gemini-3-flash-preview": "gemini",  # Vertex AI - requires GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_LOCATION
-    "openrouter/x-ai/grok-4.1-fast": "grok",
-    "openrouter/anthropic/claude-haiku-4.5": "haiku",
-    "openrouter/minimax/minimax-m2": "minimax",
-    "openrouter/openai/gpt-oss-120b": "gpt-oss",
-}
+_CONFIG = load_eval_config()
+MODELS = {m["id"]: m["alias"] for m in _CONFIG["worker_models"]}
 
 
 def _get_indicator_dtypes(causal_spec: dict) -> dict[str, str]:
@@ -111,33 +102,6 @@ def create_eval_dataset(
 VALID_SCHEMA_POINTS = 10
 
 
-def _validate_dtype(value, expected_dtype: str) -> bool:
-    """Check if a value matches the expected dtype.
-
-    Args:
-        value: The extracted value
-        expected_dtype: One of 'continuous', 'binary', 'count', 'ordinal', 'categorical'
-
-    Returns:
-        True if value matches expected dtype
-    """
-    if value is None:
-        return True  # None is always valid (missing data)
-
-    if expected_dtype == "continuous":
-        return isinstance(value, (int, float))
-    elif expected_dtype == "binary":
-        return isinstance(value, bool) or value in (0, 1, "0", "1", "true", "false")
-    elif expected_dtype == "count":
-        return isinstance(value, int) and value >= 0
-    elif expected_dtype == "ordinal":
-        return isinstance(value, (int, float, str))
-    elif expected_dtype == "categorical":
-        return isinstance(value, str)
-    else:
-        return True  # Unknown dtype, accept anything
-
-
 def _score_worker_result(
     result: WorkerResult,
     indicator_dtypes: dict[str, str],
@@ -159,7 +123,7 @@ def _score_worker_result(
         ind_name = extraction.indicator
         expected_dtype = indicator_dtypes.get(ind_name)
 
-        if expected_dtype is not None and not _validate_dtype(extraction.value, expected_dtype):
+        if expected_dtype is not None and not _check_dtype_match(extraction.value, expected_dtype):
             dtype_errors.append(
                 f"{ind_name}: got {type(extraction.value).__name__}={extraction.value}, expected {expected_dtype}"
             )

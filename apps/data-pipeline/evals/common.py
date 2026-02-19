@@ -1,7 +1,6 @@
 """Shared utilities for evals."""
 
 import json
-import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -228,30 +227,3 @@ def get_sample_chunks_worker(n_chunks: int, seed: int, input_file: str | None = 
     data_file = get_data_file(input_file)
     chunk_size = get_worker_chunk_size()
     return sample_chunks(data_file, n_chunks, seed, chunk_size=chunk_size)
-
-
-def extract_json_from_response(text: str) -> str | None:
-    """Extract JSON from model response, handling markdown code blocks."""
-    # Try to find JSON in code blocks first
-    code_block_pattern = r"```(?:json)?\s*\n?([\s\S]*?)\n?```"
-    matches = re.findall(code_block_pattern, text)
-
-    for match in matches:
-        try:
-            json.loads(match.strip())
-            return match.strip()
-        except json.JSONDecodeError:
-            continue
-
-    # Try to find raw JSON object
-    brace_pattern = r"\{[\s\S]*\}"
-    matches = re.findall(brace_pattern, text)
-
-    for match in matches:
-        try:
-            json.loads(match)
-            return match
-        except json.JSONDecodeError:
-            continue
-
-    return None

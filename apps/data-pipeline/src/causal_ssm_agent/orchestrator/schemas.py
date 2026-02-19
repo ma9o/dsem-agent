@@ -71,14 +71,26 @@ _FREQUENCY_AGGS = {"count", "n_unique"}
 # Aggregation keywords that conflict with how_to_measure text
 _SEMANTIC_COLLISIONS: list[tuple[str, set[str], str]] = [
     # (regex pattern in how_to_measure, conflicting aggregations, explanation)
-    (r"\bcount\b|\bnumber of\b|\bhow many\b", {"mean", "median", "std", "var"},
-     "how_to_measure implies counting but aggregation computes a statistic"),
-    (r"\baverage\b|\bmean\b", {"sum", "first", "last", "count"},
-     "how_to_measure implies averaging but aggregation is not mean/median"),
-    (r"\btotal\b|\bcumulative\b|\bsum\b", {"mean", "median", "first", "last"},
-     "how_to_measure implies summing but aggregation is not sum"),
-    (r"\blast\b|\bmost recent\b|\bcurrent\b", {"mean", "sum", "median"},
-     "how_to_measure implies point-in-time but aggregation is a window statistic"),
+    (
+        r"\bcount\b|\bnumber of\b|\bhow many\b",
+        {"mean", "median", "std", "var"},
+        "how_to_measure implies counting but aggregation computes a statistic",
+    ),
+    (
+        r"\baverage\b|\bmean\b",
+        {"sum", "first", "last", "count"},
+        "how_to_measure implies averaging but aggregation is not mean/median",
+    ),
+    (
+        r"\btotal\b|\bcumulative\b|\bsum\b",
+        {"mean", "median", "first", "last"},
+        "how_to_measure implies summing but aggregation is not sum",
+    ),
+    (
+        r"\blast\b|\bmost recent\b|\bcurrent\b",
+        {"mean", "sum", "median"},
+        "how_to_measure implies point-in-time but aggregation is a window statistic",
+    ),
 ]
 
 
@@ -185,9 +197,7 @@ class Construct(BaseModel):
 
         if is_time_varying:
             if self.temporal_scale is None:
-                raise ValueError(
-                    f"Time-varying construct '{self.name}' requires temporal_scale"
-                )
+                raise ValueError(f"Time-varying construct '{self.name}' requires temporal_scale")
             if self.temporal_scale not in GRANULARITY_HOURS:
                 raise ValueError(
                     f"Invalid temporal_scale '{self.temporal_scale}' for '{self.name}'. "
@@ -224,6 +234,96 @@ class CausalEdge(BaseModel):
     )
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# SHARED VALIDATION PREDICATES
+# Used by both the Pydantic model validator (raise-on-first) and the
+# validate_latent_model() function (collect-all-errors).
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def _check_edge_constraint(
+    edge: "CausalEdge",
+    construct_map: dict[str, "Construct"],
+) -> str | None:
+    """Check a single edge against cross-cutting constraints.
+
+    Returns an error message string if violated, or None if valid.
+    Assumes edge endpoints have already been checked for existence.
+    """
+    cause_construct = construct_map[edge.cause]
+    effect_construct = construct_map[edge.effect]
+
+    if effect_construct.role == Role.EXOGENOUS:
+        return f"Exogenous construct '{edge.effect}' cannot be an effect"
+
+    cause_gran = cause_construct.temporal_scale
+    effect_gran = effect_construct.temporal_scale
+    both_time_varying = cause_gran is not None and effect_gran is not None
+
+    if not edge.lagged and both_time_varying and cause_gran != effect_gran:
+        return (
+            f"Contemporaneous edge (lagged=false) requires same timescale: "
+            f"{edge.cause} ({cause_gran}) -> {edge.effect} ({effect_gran})"
+        )
+
+    both_endogenous = (
+        cause_construct.role == Role.ENDOGENOUS and effect_construct.role == Role.ENDOGENOUS
+    )
+    if not edge.lagged and both_time_varying and both_endogenous:
+        return (
+            f"Directed contemporaneous edge '{edge.cause}' -> '{edge.effect}' "
+            "between endogenous latent constructs is not supported by the current "
+            "model class (linear CT-SDE). Use lagged=True for drift-mediated "
+            "effects, or model shared innovation via the diffusion covariance."
+        )
+
+    return None
+
+
+def _check_global_constraints(
+    constructs: list["Construct"],
+    edges: list["CausalEdge"],
+) -> list[str]:
+    """Check global constraints across all constructs and edges.
+
+    Returns a list of error messages (empty if all valid).
+    """
+    errors = []
+
+    # Exactly one outcome required
+    outcomes = [c for c in constructs if c.is_outcome]
+    if len(outcomes) == 0:
+        errors.append("Exactly one construct must have is_outcome=true")
+    elif len(outcomes) > 1:
+        names = [c.name for c in outcomes]
+        errors.append(f"Only one outcome allowed, got {len(outcomes)}: {names}")
+
+    # Outcome must have at least one incoming edge
+    if len(outcomes) == 1:
+        outcome_name = outcomes[0].name
+        incoming_to_outcome = [e for e in edges if e.effect == outcome_name]
+        if not incoming_to_outcome:
+            errors.append(
+                f"Outcome construct '{outcome_name}' has no incoming causal edges. "
+                "The model must include at least one cause of the outcome."
+            )
+
+    # Check acyclicity within time slice (contemporaneous edges only)
+    contemporaneous_edges = [(e.cause, e.effect) for e in edges if not e.lagged]
+    if contemporaneous_edges:
+        import networkx as nx
+
+        G = nx.DiGraph(contemporaneous_edges)
+        if not nx.is_directed_acyclic_graph(G):
+            cycles = list(nx.simple_cycles(G))
+            errors.append(
+                f"Contemporaneous edges form cycle(s) within time slice: {cycles}. "
+                "Use lagged=true for feedback loops across time."
+            )
+
+    return errors
+
+
 class LatentModel(BaseModel):
     """Theoretical causal structure over constructs (the latent model).
 
@@ -237,79 +337,21 @@ class LatentModel(BaseModel):
     @model_validator(mode="after")
     def validate_latent_model(self):
         """Validate latent model constraints."""
-        # Exactly one outcome required
-        outcomes = [c for c in self.constructs if c.is_outcome]
-        if len(outcomes) == 0:
-            raise ValueError("Exactly one construct must have is_outcome=true")
-        if len(outcomes) > 1:
-            names = [c.name for c in outcomes]
-            raise ValueError(f"Only one outcome allowed, got {len(outcomes)}: {names}")
-
         construct_map = {c.name: c for c in self.constructs}
 
         for edge in self.edges:
-            # Check constructs exist
             if edge.cause not in construct_map:
                 raise ValueError(f"Edge cause '{edge.cause}' not in constructs")
             if edge.effect not in construct_map:
                 raise ValueError(f"Edge effect '{edge.effect}' not in constructs")
 
-            cause_construct = construct_map[edge.cause]
-            effect_construct = construct_map[edge.effect]
+            error = _check_edge_constraint(edge, construct_map)
+            if error:
+                raise ValueError(error)
 
-            # No inbound edges to exogenous
-            if effect_construct.role == Role.EXOGENOUS:
-                raise ValueError(f"Exogenous construct '{edge.effect}' cannot be an effect")
-
-            cause_gran = cause_construct.temporal_scale
-            effect_gran = effect_construct.temporal_scale
-
-            # Contemporaneous (lagged=False) requires same timescale
-            # Exception: time-invariant causes (granularity=None) can affect any timescale
-            both_time_varying = cause_gran is not None and effect_gran is not None
-            if not edge.lagged and both_time_varying and cause_gran != effect_gran:
-                raise ValueError(
-                    f"Contemporaneous edge (lagged=false) requires same timescale: "
-                    f"{edge.cause} ({cause_gran}) -> {edge.effect} ({effect_gran})"
-                )
-
-            # Directed lagged=False between endogenous latent constructs is
-            # not supported by the current model class (linear CT-SDE).
-            # Drift A handles directed temporal effects (lagged=True).
-            # Diffusion GG' handles symmetric shared innovation (non-directional).
-            both_endogenous = (
-                cause_construct.role == Role.ENDOGENOUS
-                and effect_construct.role == Role.ENDOGENOUS
-            )
-            if not edge.lagged and both_time_varying and both_endogenous:
-                raise ValueError(
-                    f"Directed contemporaneous edge '{edge.cause}' -> '{edge.effect}' "
-                    "between endogenous latent constructs is not supported by the current "
-                    "model class (linear CT-SDE). Use lagged=True for drift-mediated "
-                    "effects, or model shared innovation via the diffusion covariance."
-                )
-
-        # Outcome must have at least one incoming edge
-        outcome_name = outcomes[0].name
-        incoming_to_outcome = [e for e in self.edges if e.effect == outcome_name]
-        if not incoming_to_outcome:
-            raise ValueError(
-                f"Outcome construct '{outcome_name}' has no incoming causal edges. "
-                "The model must include at least one cause of the outcome."
-            )
-
-        # Check acyclicity within time slice (contemporaneous edges only)
-        contemporaneous_edges = [(e.cause, e.effect) for e in self.edges if not e.lagged]
-        if contemporaneous_edges:
-            import networkx as nx
-
-            G = nx.DiGraph(contemporaneous_edges)
-            if not nx.is_directed_acyclic_graph(G):
-                cycles = list(nx.simple_cycles(G))
-                raise ValueError(
-                    f"Contemporaneous edges form cycle(s) within time slice: {cycles}. "
-                    "Use lagged=true for feedback loops across time."
-                )
+        global_errors = _check_global_constraints(self.constructs, self.edges)
+        if global_errors:
+            raise ValueError(global_errors[0])
 
         return self
 
@@ -649,69 +691,15 @@ def validate_latent_model(data: dict) -> tuple[LatentModel | None, list[str]]:
             errors.append(f"{edge_label}: effect '{edge.effect}' not in constructs")
             continue
 
-        cause_construct = construct_map[edge.cause]
-        effect_construct = construct_map[edge.effect]
-
-        if effect_construct.role == Role.EXOGENOUS:
-            errors.append(f"{edge_label}: exogenous construct '{edge.effect}' cannot be an effect")
-            continue
-
-        cause_gran = cause_construct.temporal_scale
-        effect_gran = effect_construct.temporal_scale
-        both_time_varying = cause_gran is not None and effect_gran is not None
-        if not edge.lagged and both_time_varying and cause_gran != effect_gran:
-            errors.append(
-                f"{edge_label}: contemporaneous edge requires same timescale, "
-                f"got {cause_gran} -> {effect_gran}"
-            )
-            continue
-
-        # Directed lagged=False between endogenous latent constructs is not
-        # supported by the current model class (linear CT-SDE).
-        both_endogenous = (
-            cause_construct.role == Role.ENDOGENOUS
-            and effect_construct.role == Role.ENDOGENOUS
-        )
-        if not edge.lagged and both_time_varying and both_endogenous:
-            errors.append(
-                f"{edge_label}: directed contemporaneous edge between endogenous "
-                "latent constructs is not supported by the current model class "
-                "(linear CT-SDE). Use lagged=True for drift-mediated effects."
-            )
+        constraint_error = _check_edge_constraint(edge, construct_map)
+        if constraint_error:
+            errors.append(f"{edge_label}: {constraint_error}")
             continue
 
         valid_edges.append(edge)
 
-    # Check outcome constraints
-    outcomes = [c for c in valid_constructs if c.is_outcome]
-    if len(outcomes) == 0:
-        errors.append("Exactly one construct must have is_outcome=true (none found)")
-    elif len(outcomes) > 1:
-        names = [c.name for c in outcomes]
-        errors.append(f"Only one outcome allowed, got {len(outcomes)}: {names}")
-
-    # Check outcome has at least one incoming edge
-    if len(outcomes) == 1:
-        outcome_name = outcomes[0].name
-        incoming_to_outcome = [e for e in valid_edges if e.effect == outcome_name]
-        if not incoming_to_outcome:
-            errors.append(
-                f"Outcome construct '{outcome_name}' has no incoming causal edges. "
-                "The model must include at least one cause of the outcome."
-            )
-
-    # Check acyclicity of contemporaneous edges
-    contemporaneous_edges = [(e.cause, e.effect) for e in valid_edges if not e.lagged]
-    if contemporaneous_edges:
-        import networkx as nx
-
-        G = nx.DiGraph(contemporaneous_edges)
-        if not nx.is_directed_acyclic_graph(G):
-            cycles = list(nx.simple_cycles(G))
-            errors.append(
-                f"Contemporaneous edges form cycle(s): {cycles}. "
-                "Use lagged=true for feedback loops."
-            )
+    # Check global constraints (outcome count, incoming edges, acyclicity)
+    errors.extend(_check_global_constraints(valid_constructs, valid_edges))
 
     if not errors:
         try:

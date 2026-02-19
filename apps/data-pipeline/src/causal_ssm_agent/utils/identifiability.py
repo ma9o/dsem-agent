@@ -23,7 +23,11 @@ from y0.algorithm.identify import identify_outcomes
 from y0.dsl import Variable
 from y0.graph import NxMixedGraph
 
-from causal_ssm_agent.utils.effects import get_outcome_from_latent_model
+from causal_ssm_agent.utils.effects import (
+    build_digraph,
+    get_all_treatments,
+    get_outcome_from_latent_model,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +67,7 @@ def check_identifiability(
 
     # Get all potential treatments (observed constructs with paths to outcome)
     # Only observed constructs can be treatments - you can't do(X) on unobserved X
-    all_treatments = [
-        t for t in _get_treatments_from_graph(latent_model, outcome) if t in observed_constructs
-    ]
+    all_treatments = [t for t in get_all_treatments(latent_model) if t in observed_constructs]
 
     # Determine if outcome is time-varying or time-invariant
     outcome_is_time_varying = _is_time_varying(latent_model, outcome)
@@ -174,15 +176,6 @@ def _is_time_varying(latent_model: dict, construct_name: str) -> bool:
         if construct["name"] == construct_name:
             return construct.get("temporal_status", "time_varying") != "time_invariant"
     return True  # Default to time-varying if not found
-
-
-def _get_treatments_from_graph(latent_model: dict, outcome: str) -> list[str]:
-    """Get all constructs with causal paths to outcome."""
-    G = nx.DiGraph()
-    for edge in latent_model.get("edges", []):
-        G.add_edge(edge["cause"], edge["effect"])
-
-    return [node for node in G.nodes() if node != outcome and nx.has_path(G, node, outcome)]
 
 
 def get_observed_constructs(measurement_model: dict) -> set[str]:
@@ -402,9 +395,7 @@ def find_blocking_confounders(
     handle some confounding. The actual identification decision is made by
     y0's identify_outcomes() algorithm.
     """
-    G = nx.DiGraph()
-    for edge in latent_model.get("edges", []):
-        G.add_edge(edge["cause"], edge["effect"])
+    G = build_digraph(latent_model)
 
     all_constructs = {c["name"] for c in latent_model["constructs"]}
     unobserved = all_constructs - observed_constructs
@@ -475,9 +466,7 @@ def find_instruments(
     Returns:
         List of valid instrument names (observed constructs that satisfy IV conditions)
     """
-    G = nx.DiGraph()
-    for edge in latent_model.get("edges", []):
-        G.add_edge(edge["cause"], edge["effect"])
+    G = build_digraph(latent_model)
 
     if treatment not in G or outcome not in G:
         return []
