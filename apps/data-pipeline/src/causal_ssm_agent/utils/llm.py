@@ -156,7 +156,6 @@ def get_generate_config() -> GenerateConfig:
         max_tokens=llm.max_tokens,
         timeout=llm.timeout,
         reasoning_effort=llm.reasoning_effort,
-        reasoning_tokens=llm.reasoning_tokens,
         reasoning_history="all",  # Preserve reasoning across tool calls (required by Gemini)
     )
 
@@ -567,6 +566,7 @@ async def multi_turn_generate(
             config=config,
         )
         messages = list(final_messages)
+        last_nonempty = output.completion
 
         # Follow-up turns: use follow_up_tools if provided, otherwise no tools
         for prompt in follow_ups:
@@ -582,22 +582,27 @@ async def multi_turn_generate(
                 response = await model.generate(messages, config=config)
                 messages.append(ChatMessageAssistant(content=response.completion))
                 output = response
+            if output.completion and output.completion.strip():
+                last_nonempty = output.completion
 
         if trace_capture is not None:
             trace_capture["trace"] = _build_trace(messages, output)
 
-        return output.completion
+        return last_nonempty
     else:
         # Simple generation without tools
         response = await model.generate(messages, config=config)
         messages.append(ChatMessageAssistant(content=response.completion))
+        last_nonempty = response.completion
 
         for prompt in follow_ups:
             messages.append(ChatMessageUser(content=prompt))
             response = await model.generate(messages, config=config)
             messages.append(ChatMessageAssistant(content=response.completion))
+            if response.completion and response.completion.strip():
+                last_nonempty = response.completion
 
         if trace_capture is not None:
             trace_capture["trace"] = _build_trace(messages, response)
 
-        return response.completion
+        return last_nonempty

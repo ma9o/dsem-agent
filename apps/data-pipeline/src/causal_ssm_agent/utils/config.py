@@ -119,7 +119,6 @@ class LLMConfig:
     max_tokens: int = 65536
     timeout: int = 900
     reasoning_effort: str = "high"
-    reasoning_tokens: int = 32768
 
 
 @dataclass(frozen=True)
