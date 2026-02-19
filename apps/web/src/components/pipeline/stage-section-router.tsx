@@ -50,14 +50,14 @@ function StageWithTrace({
   const transition = { duration: 0.35, ease: [0.4, 0, 0.2, 1] as const };
 
   return (
-    <div className="flex items-stretch gap-4">
+    <div className={cn("flex", showTrace && "items-stretch gap-4")}>
       <motion.div
-        className={cn("min-w-0", !showTrace && "max-w-6xl mx-auto")}
+        className={cn("min-w-0", !showTrace && "max-w-6xl mx-auto w-full")}
         animate={{ flex: showTrace ? 2 : 1 }}
         transition={transition}
       >
         {!showTrace && (
-          <div className="mb-3 flex justify-end">
+          <div className="mb-2 flex justify-end">
             <button
               type="button"
               onClick={() => setShowTrace(true)}
@@ -71,7 +71,10 @@ function StageWithTrace({
         {children}
       </motion.div>
       <motion.div
-        className="flex min-w-0 flex-col gap-3 overflow-hidden"
+        className={cn(
+          "flex min-w-0 flex-col gap-3 overflow-hidden",
+          !showTrace && "h-0",
+        )}
         animate={{ flex: showTrace ? 1 : 0, opacity: showTrace ? 1 : 0 }}
         initial={false}
         transition={transition}
