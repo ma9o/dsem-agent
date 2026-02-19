@@ -6,8 +6,6 @@ This module tests:
 3. New validation checks - timestamps, dtype, coverage, gaps, hallucination, correlations
 """
 
-from dataclasses import dataclass
-
 import polars as pl
 import pytest
 
@@ -16,17 +14,7 @@ from causal_ssm_agent.flows.stages.stage3_validation import (
     combine_worker_results,
     validate_extraction,
 )
-
-# ==============================================================================
-# FIXTURES
-# ==============================================================================
-
-
-@dataclass
-class MockWorkerResult:
-    """Mock WorkerResult for testing."""
-
-    dataframe: pl.DataFrame
+from tests.helpers import MockWorkerResult
 
 
 @pytest.fixture
@@ -840,5 +828,3 @@ class TestCheckConstructCorrelations:
             i for i in result["issues"] if i["issue_type"] == "low_construct_correlation"
         ]
         assert len(corr_issues) == 0
-
-

@@ -8,7 +8,6 @@ Uses .fn() to bypass Prefect runtime on all stage tasks.
 All inference uses SVI (~5s on CPU) instead of NUTS-DA to keep total <60s.
 """
 
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 import jax
@@ -33,6 +32,7 @@ from causal_ssm_agent.orchestrator.schemas import (
 )
 from causal_ssm_agent.utils.aggregations import flatten_aggregated_data
 from causal_ssm_agent.utils.effects import get_all_treatments, get_outcome_from_latent_model
+from tests.helpers import MockWorkerResult
 
 # ==============================================================================
 # Constants
@@ -58,18 +58,6 @@ _SVI_CONFIG = {
     "num_samples": 50,
     "seed": 0,
 }
-
-
-# ==============================================================================
-# Mock WorkerResult (matches real WorkerResult interface)
-# ==============================================================================
-
-
-@dataclass
-class MockWorkerResult:
-    """Mock WorkerResult with a .dataframe attribute."""
-
-    dataframe: pl.DataFrame
 
 
 # ==============================================================================

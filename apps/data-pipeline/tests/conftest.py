@@ -5,7 +5,8 @@ This module provides reusable fixtures to reduce duplication across test files:
 - Stage 1b fixtures (identifiability / proxy resolution)
 - Shared SSM data fixtures (lgss_data for recovery tests)
 
-For non-fixture helpers (MockPrediction, make_mock_generate), see helpers.py.
+For non-fixture helpers (MockWorkerResult, MockPrediction, make_mock_generate),
+see helpers.py.
 """
 
 import jax.numpy as jnp
