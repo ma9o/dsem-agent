@@ -8,20 +8,27 @@ Uses the same core logic as production (via run_worker_extraction) for generatin
 worker outputs, just with different model configurations.
 
 Usage:
-    inspect eval evals/eval3_worker_measurement_adherence.py --model openrouter/anthropic/claude-sonnet-4
-    inspect eval evals/eval3_worker_measurement_adherence.py -T question=1
+    inspect eval evals/multi_model/eval3_worker_measurement_adherence.py --model openrouter/anthropic/claude-sonnet-4
+    inspect eval evals/multi_model/eval3_worker_measurement_adherence.py -T question=1
 """
 
 import sys
 from pathlib import Path
 
 # Add project root to path for evals.common import
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import asyncio
 import json
 import random
 
+from evals.common import (
+    discover_questions,
+    get_questions_with_causal_spec,
+    get_sample_chunks_worker,
+    load_eval_config,
+    select_question,
+)
 from inspect_ai import Task, task
 from inspect_ai.dataset import MemoryDataset, Sample
 from inspect_ai.model import ChatMessageSystem, ChatMessageUser, get_model
@@ -39,13 +46,6 @@ from causal_ssm_agent.workers.core import (
     run_worker_extraction,
 )
 from causal_ssm_agent.workers.prompts.extraction import SYSTEM, USER
-from evals.common import (
-    discover_questions,
-    get_questions_with_causal_spec,
-    get_sample_chunks_worker,
-    load_eval_config,
-    select_question,
-)
 
 # Load config
 _CONFIG = load_eval_config()

@@ -37,12 +37,12 @@ CONFIG = load_eval_config()
 # Eval configurations
 EVAL_CONFIGS = {
     "orchestrator": {
-        "file": "evals/eval1a_latent_model.py",
+        "file": "evals/single_model/eval1a_latent_model.py",
         "models": {m["id"]: m["alias"] for m in CONFIG["orchestrator_models"]},
         "task_params": ["n_chunks", "seed", "input_file", "questions"],
     },
     "worker": {
-        "file": "evals/eval2_worker_extraction.py",
+        "file": "evals/single_model/eval2_worker_extraction.py",
         "models": {m["id"]: m["alias"] for m in CONFIG["worker_models"]},
         "task_params": ["n_chunks", "seed", "input_file", "question"],
     },
