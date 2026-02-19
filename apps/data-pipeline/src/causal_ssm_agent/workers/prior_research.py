@@ -528,7 +528,7 @@ def get_default_prior(parameter: ParameterSpec) -> PriorProposal:
     if parameter.role == ParameterRole.AR_COEFFICIENT:
         distribution = "Beta"
         params = {"alpha": 2.0, "beta": 2.0}
-    elif parameter.role == ParameterRole.RESIDUAL_SD:
+    elif parameter.role in (ParameterRole.RESIDUAL_SD, ParameterRole.RANDOM_INTERCEPT_SD):
         distribution = "HalfNormal"
         params = {"sigma": 1.0}
 
