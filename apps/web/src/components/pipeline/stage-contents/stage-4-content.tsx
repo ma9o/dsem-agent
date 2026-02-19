@@ -1,5 +1,4 @@
 import { MeasurementTable } from "@/components/stages/model-spec/measurement-table";
-import { ParameterTable } from "@/components/stages/model-spec/parameter-table";
 import { PriorTable } from "@/components/stages/model-spec/prior-table";
 import { RetryIndicator } from "@/components/stages/model-spec/retry-indicator";
 import { SSMEquationDisplay } from "@/components/stages/model-spec/ssm-equation-display";
@@ -30,11 +29,10 @@ export default function Stage4Content({
           />
         </div>
       )}
-      <ParameterTable parameters={data.model_spec.parameters} />
       {data.priors.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-sm font-semibold">Prior Distributions</h3>
-          <PriorTable priors={data.priors} />
+          <PriorTable priors={data.priors} parameters={data.model_spec.parameters} />
         </div>
       )}
       {data.validation_retries && data.validation_retries.length > 0 && (

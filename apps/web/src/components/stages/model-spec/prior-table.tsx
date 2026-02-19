@@ -1,19 +1,24 @@
 "use client";
 
+import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { HeaderWithTooltip, InfoTable } from "@/components/ui/info-table";
 import { Tooltip } from "@/components/ui/tooltip";
 import { evaluatePdf } from "@/lib/utils/distributions";
 import { formatNumber } from "@/lib/utils/format";
-import type { PriorProposal } from "@causal-ssm/api-types";
+import type { ParameterSpec, PriorProposal } from "@causal-ssm/api-types";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { ExternalLink } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, YAxis } from "recharts";
 
-const col = createColumnHelper<PriorProposal>();
+interface PriorRow extends PriorProposal {
+  search_context?: string;
+}
+
+const col = createColumnHelper<PriorRow>();
 
 /** Compact inline density chart with axes. */
-function DensitySparkline({ prior }: { prior: PriorProposal }) {
+function DensitySparkline({ prior }: { prior: PriorRow }) {
   const data = prior.density_points ?? evaluatePdf(prior.distribution, prior.params, 60);
   return (
     <div className="h-16 w-36">
@@ -56,7 +61,7 @@ function formatParams(params: Record<string, number>): string {
     .join(", ");
 }
 
-const columns: ColumnDef<PriorProposal, unknown>[] = [
+const baseColumns: ColumnDef<PriorRow, unknown>[] = [
   col.accessor("parameter", {
     header: "Parameter",
     cell: (info) => (
@@ -148,6 +153,38 @@ const columns: ColumnDef<PriorProposal, unknown>[] = [
   }),
 ];
 
-export function PriorTable({ priors }: { priors: PriorProposal[] }) {
-  return <InfoTable columns={columns} data={priors} />;
+const searchContextColumn = col.accessor("search_context", {
+  header: () => (
+    <HeaderWithTooltip
+      label="Search Context"
+      tooltip="The search query used by the pipeline to find prior literature for this parameter's effect size."
+    />
+  ),
+  cell: (info) => (
+    <span className="max-w-xs text-xs text-muted-foreground italic">
+      {info.getValue() || "--"}
+    </span>
+  ),
+});
+
+export function PriorTable({ priors, parameters }: { priors: PriorProposal[]; parameters?: ParameterSpec[] }) {
+  const paramMap = useMemo(() => {
+    const map = new Map<string, ParameterSpec>();
+    for (const p of parameters ?? []) map.set(p.name, p);
+    return map;
+  }, [parameters]);
+
+  const rows: PriorRow[] = useMemo(
+    () => priors.map((p) => ({ ...p, search_context: paramMap.get(p.parameter)?.search_context })),
+    [priors, paramMap],
+  );
+
+  const hasSearchContext = rows.some((r) => r.search_context);
+
+  const columns = useMemo<ColumnDef<PriorRow, unknown>[]>(
+    () => (hasSearchContext ? [...baseColumns, searchContextColumn] : baseColumns),
+    [hasSearchContext],
+  );
+
+  return <InfoTable columns={columns} data={rows} />;
 }
