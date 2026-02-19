@@ -1,8 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { NextResponse } from "next/server";
-
-const SESSIONS_PATH = join(process.cwd(), "..", "data-pipeline", "results", "sessions.json");
+import { readSessions } from "../_shared";
 
 export async function GET(
   _request: Request,
@@ -12,8 +9,7 @@ export async function GET(
   const normalizedCode = code.toUpperCase();
 
   try {
-    const data = await readFile(SESSIONS_PATH, "utf-8");
-    const sessions = JSON.parse(data);
+    const sessions = await readSessions();
     const session = sessions[normalizedCode];
 
     if (!session) {
