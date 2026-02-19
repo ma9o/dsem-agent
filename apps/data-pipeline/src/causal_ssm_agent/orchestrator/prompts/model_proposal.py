@@ -1,113 +1,73 @@
 """Stage 4 prompts: Model Specification Proposal.
 
-The orchestrator proposes the complete model structure including:
-- Distribution families and link functions for each indicator
-- All parameters requiring priors with search context for literature
+The LLM receives a pre-computed skeleton (parameters, deterministic likelihoods)
+and only provides genuine decisions: distribution choices for ambiguous indicators,
+loading constraints, search contexts, and reasoning.
 
 NOTE: Keep distributions/links in sync with VALID_LIKELIHOODS_FOR_DTYPE
 and VALID_LINKS_FOR_DISTRIBUTION in schemas_model.py
 """
 
 SYSTEM = """\
-You are a Bayesian statistician specifying a generative model for causal inference.
+You are a Bayesian statistician completing a model specification for causal inference.
 
-Your task is to translate a causal DAG with measurement model into a complete model specification that NumPyro can fit.
+Most of this specification has already been determined from the causal structure. \
+Your job is to provide ONLY the decisions that require statistical judgment.
 
-## Background
+## What Has Been Pre-Computed
 
-In Bayesian modeling, we specify our beliefs about the generative process that created the data. This framework subsumes what were traditionally called "SEMs" and "DSEMs"—Bayesian models with latent variables and temporal dynamics.
+The following are already determined and shown in the user message:
+- **All parameters** (enumerated from the DAG: one AR per time-varying endogenous construct, \
+one fixed effect per edge, one residual SD per construct, loadings for multi-indicator constructs)
+- **Deterministic likelihoods** (e.g., ordinal → ordered_logistic / cumulative_logit)
+- **Parameter constraints** based on role (ar → correlation, fixed_effect → none, residual_sd → positive)
 
-## Your Responsibilities
+## What You Decide
 
-1. **Choose distribution families**: For each observed indicator, select the appropriate likelihood:
-   - `gaussian`: Continuous unbounded data
-   - `student_t`: Continuous data with heavy tails
-   - `gamma`: Positive continuous data (reaction times, durations)
-   - `bernoulli`: Binary outcomes (yes/no, success/failure)
-   - `poisson`: Count data (low counts, rare events)
-   - `negative_binomial`: Overdispersed count data
-   - `beta`: Proportions/rates in (0, 1)
-   - `ordered_logistic`: Ordinal scales (Likert items)
-   - `categorical`: Unordered categories
+1. **Distribution + link** for indicators with ambiguous dtypes (continuous, count, \
+categorical). Choose based on the data summary and domain knowledge.
 
-2. **Select link functions**: Match the link to the distribution:
-   - `identity`: gaussian, student_t (default)
-   - `log`: poisson, gamma, negative_binomial
-   - `logit`: bernoulli, beta
-   - `cumulative_logit`: ordered_logistic
-   - `softmax`: categorical
+2. **Loading constraints**: For each loading parameter, decide `positive` (sign identification) \
+or `none` (if negative loadings are theoretically plausible).
 
-3. **Enumerate ALL parameters needing priors**: Be exhaustive:
-   - Fixed effects (beta coefficients) for each causal edge
-   - AR(1) coefficients for time-varying endogenous constructs
-   - Residual standard deviations
-   - Factor loadings (if multi-indicator constructs)
+3. **Search contexts**: For EVERY parameter, write a search query that would find \
+relevant effect sizes in the academic literature (meta-analyses, systematic reviews, \
+large longitudinal studies). This is used for prior elicitation.
 
-4. **Provide search context**: For each parameter, write a search query that would find relevant effect sizes in the literature. This will be used to ground priors in empirical evidence.
+## Distribution Guidelines
 
-## Parameter Roles and Constraints
+- `gaussian`: Continuous unbounded data, approximately symmetric
+- `student_t`: Continuous data with heavy tails or outliers
+- `gamma`: Positive continuous data (reaction times, durations)
+- `beta`: Proportions/rates in (0, 1)
+- `poisson`: Count data (low counts, rare events, variance ≈ mean)
+- `negative_binomial`: Overdispersed count data (variance > mean)
+- `bernoulli`: Binary outcomes (logit or probit link)
 
-Each parameter's `role` must be one of these exact values, with its required `constraint`:
+## Link Function Rules
 
-| role | constraint | When to use |
-|------|-----------|-------------|
-| `fixed_effect` | `none` | Beta coefficient for EVERY causal edge (cause→effect), including edges from time-invariant exogenous constructs |
-| `ar_coefficient` | `unit_interval` | AR(1) persistence for each time-varying endogenous construct |
-| `residual_sd` | `positive` | Residual/innovation SD for each construct or indicator |
-| `loading` | `positive` | Factor loading for multi-indicator constructs |
-| `correlation` | `correlation` | Correlation between constructs |
-
-**Only these 5 roles are valid.** Do NOT invent new roles. Use full construct names (not abbreviations) when naming parameters — e.g., `ar_cognitive_fatigue` not `ar_cog_fatigue`, `beta_stress_level_focus_quality` not `beta_stress_focus`. Specifically:
-- Indicator intercepts are implicit (handled by the link function) — do NOT create `intercept` parameters
-- Distribution-specific parameters (beta concentration, negative_binomial overdispersion, ordered_logistic cutpoints) are handled automatically — do NOT create parameters for them
-- Use `loading` (not `factor_loading`) for factor loadings
-- Use `residual_sd` (not `innovation_sd`) for residual/innovation standard deviations
-
-## Output Format
-
-Return a JSON object with this structure:
-```json
-{
-  "likelihoods": [
-    {
-      "variable": "indicator_name",
-      "distribution": "gaussian|gamma|bernoulli|...",
-      "link": "identity|log|logit|...",
-      "reasoning": "Why this distribution/link for this variable"
-    }
-  ],
-  "parameters": [
-    {
-      "name": "beta_stress_anxiety",
-      "role": "fixed_effect",
-      "constraint": "none",
-      "description": "Effect of stress on anxiety (standardized)",
-      "search_context": "meta-analysis stress anxiety effect size standardized coefficient"
-    }
-  ],
-  "reasoning": "Overall justification for the model design choices"
-}
-```
+Most distributions have exactly one valid link (auto-determined). You only choose \
+when multiple are valid:
+- **bernoulli**: `logit` (default) or `probit` (threshold/latent variable interpretation)
+- **gamma**: `log` (default, ensures positive mean) or `inverse` (canonical, \
+direct reciprocal relationship)
+- **beta**: `logit` (default) or `probit`
 
 ## Continuous-Time Dynamics
 
-The underlying model is a **continuous-time** state-space model (CT-SSM). Time is measured in **fractional days**.
-
-- **AR coefficients** (role `ar_coefficient`) represent **discrete-time persistence** per observation interval. They are automatically converted to continuous-time drift rates internally via `drift = -ln(AR) / dt`. You do NOT need to do this conversion — just propose AR values in [0, 1].
-- **Fixed effects** (beta coefficients) represent **discrete-time cross-lagged regression coefficients** — e.g. "a 1-unit increase in X predicts a 0.3-unit change in Y at the next observation." They are automatically converted to continuous-time coupling rates internally via `rate = beta / dt`. You do NOT need to do this conversion — just propose betas on the discrete-time scale you find in the literature.
-- Each construct's `temporal_scale` (hourly, daily, weekly, etc.) determines the natural timescale for both AR and beta conversions. The system handles this automatically.
-
-## Guidelines
-
-- Prefer simpler models when uncertainty is high
-- Provide specific, searchable queries in `search_context` that would find meta-analyses or large-scale studies
-- Remember: AR coefficients should be in [0, 1] for stationarity (use weakly informative priors that encourage but don't enforce this)
+The underlying model is a continuous-time state-space model (CT-SSM). Time is \
+measured in fractional days. AR coefficients represent discrete-time persistence \
+per observation interval, in (−1, 1). Positive = smooth persistence; negative = \
+oscillatory dynamics (common in homeostatic/feedback systems). The system handles \
+the CT conversion automatically.
 
 ## Validation Tool
 
-You have access to `validate_model_spec` tool. Use it to validate your JSON. Keep validating until you get "VALID".
+You have access to `validate_model_spec` tool. Use it to validate your JSON. \
+Keep validating until you get "VALID".
 
-IMPORTANT: Once you get "VALID", STOP. Do not output anything else — the validated result is already saved by the tool. Any additional output will be ignored.
+IMPORTANT: Once you get "VALID", STOP. Do not output anything else — the validated \
+result is already saved by the tool.
 """
 
 USER = """\
@@ -115,19 +75,31 @@ USER = """\
 
 {question}
 
-## Causal Model (CausalSpec)
+## Pre-Computed Model Skeleton
 
-### Constructs (Latent Variables)
+### Resolved Likelihoods (fully deterministic — do not change)
 
-{constructs}
+{resolved_likelihoods}
 
-### Causal Edges
+### All Parameters (enumerated from DAG — do not add or remove)
 
-{edges}
+{parameters}
 
-### Indicators (Observed Variables)
+## Your Decisions
 
-{indicators}
+### 1. Distribution Choices
+
+For each indicator below, choose the appropriate distribution and link function.
+
+{ambiguous_indicators}
+
+### 2. Loading Constraints
+{loading_params}
+
+### 3. Search Contexts
+
+For EVERY parameter listed above, provide a search query for finding relevant \
+effect sizes in the academic literature.
 
 ## Data Summary
 
@@ -135,19 +107,100 @@ USER = """\
 
 ---
 
-Based on the causal structure and measurement model above, propose a complete model specification.
-
-For each parameter, provide a search_context that would help find relevant effect sizes in the academic literature (meta-analyses, systematic reviews, large longitudinal studies).
-
-Think very hard about:
-1. What distribution family best matches each indicator's data type?
-2. What are ALL the parameters that need priors?
-3. What literature search would find effect sizes for each causal relationship?
-
-Output your specification as JSON.
+Output your decisions as JSON:
+```json
+{{
+  "distribution_choices": [
+    {{"variable": "...", "distribution": "...", "link": "...", "reasoning": "..."}}
+  ],
+  "loading_constraints": [
+    {{"parameter": "...", "constraint": "positive|none", "reasoning": "..."}}
+  ],
+  "search_contexts": {{
+    "parameter_name": "search query for literature"
+  }},
+  "reasoning": "Overall justification for model design choices"
+}}
+```
 """
 
 
+def format_resolved_likelihoods(resolved: list[dict]) -> str:
+    """Format pre-computed likelihoods for the prompt."""
+    if not resolved:
+        return "(none — all indicators require your decision)"
+    lines = [
+        "| Variable | Distribution | Link | Reason |",
+        "|----------|-------------|------|--------|",
+    ]
+    for rl in resolved:
+        lines.append(
+            f"| {rl['variable']} | {rl['distribution']} | {rl['link']} | {rl['reasoning']} |"
+        )
+    return "\n".join(lines)
+
+
+def format_ambiguous_indicators(ambiguous: list[dict]) -> str:
+    """Format indicators needing LLM distribution choices."""
+    if not ambiguous:
+        return "(none — all distributions were determined by dtype)"
+    lines = []
+    for ai in ambiguous:
+        var = ai["variable"]
+        dtype = ai["dtype"]
+        if "fixed_distribution" in ai:
+            dist = ai["fixed_distribution"]
+            links = ", ".join(ai["valid_links"])
+            lines.append(
+                f"- **{var}** (dtype={dtype}): distribution is `{dist}` — choose link: {links}"
+            )
+        else:
+            dists = ", ".join(ai["valid_distributions"])
+            lines.append(f"- **{var}** (dtype={dtype}): choose distribution from: {dists}")
+            link_opts = ai.get("link_options", {})
+            for d, links in link_opts.items():
+                if len(links) == 1:
+                    lines.append(f"  - if `{d}` → link is `{links[0]}` (auto)")
+                else:
+                    lines.append(f"  - if `{d}` → choose link: {', '.join(links)}")
+    return "\n".join(lines)
+
+
+def format_parameters(parameters: list[dict]) -> str:
+    """Format pre-computed parameters for the prompt."""
+    if not parameters:
+        return "(none)"
+    lines = [
+        "| Name | Role | Constraint | Description |",
+        "|------|------|-----------|-------------|",
+    ]
+    for p in parameters:
+        constraint = p["constraint"]
+        if p["role"] == "loading":
+            constraint += " (you decide)"
+        lines.append(f"| {p['name']} | {p['role']} | {constraint} | {p['description']} |")
+    return "\n".join(lines)
+
+
+def format_loading_params(loading_params: list[dict]) -> str:
+    """Format loading parameters needing constraint decisions."""
+    if not loading_params:
+        return "\n(no multi-indicator constructs — skip this section)\n"
+    lines = [
+        "",
+        "For each loading below, decide `positive` (reference/sign identification) "
+        "or `none` (if negative loadings are plausible).",
+        "",
+        "| Parameter | Indicator | Construct |",
+        "|-----------|-----------|-----------|",
+    ]
+    for lp in loading_params:
+        lines.append(f"| {lp['name']} | {lp['indicator']} | {lp['construct']} |")
+    lines.append("")
+    return "\n".join(lines)
+
+
+# Keep legacy formatters for backward compatibility with other callers
 def format_constructs(causal_spec: dict) -> str:
     """Format constructs for the prompt."""
     from causal_ssm_agent.utils.causal_spec import get_constructs
