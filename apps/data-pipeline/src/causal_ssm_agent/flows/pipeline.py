@@ -147,6 +147,7 @@ async def causal_inference_pipeline(
 
     # Hard gate: filter out non-identifiable treatments
     non_identifiable = identifiability_status.get("non_identifiable_treatments", {})
+    gate_1b_failed = False
     if non_identifiable:
         print("\n⚠️  NON-IDENTIFIABLE TREATMENT EFFECTS (excluded from analysis):")
         for treatment in sorted(non_identifiable.keys()):
@@ -162,17 +163,11 @@ async def causal_inference_pipeline(
         treatments = [t for t in treatments if t not in non_identifiable]
         print(f"Continuing with {len(treatments)} identifiable treatments")
         if not treatments:
+            gate_1b_failed = True
             if gates_overridden:
                 print("⚠️  GATE 1b OVERRIDDEN: No identifiable treatments, continuing with empty list")
-            else:
-                raise RuntimeError(
-                    "No identifiable treatment effects remain after filtering. "
-                    "All treatments are blocked by unobserved confounders."
-                )
 
-    gate_1b_overridden = gates_overridden and non_identifiable and not [
-        t for t in stage1a_result["treatments"] if t not in non_identifiable
-    ]
+    gate_1b_overridden = gates_overridden and gate_1b_failed
 
     create_markdown_artifact(
         key="causal-spec",
@@ -184,12 +179,21 @@ async def causal_inference_pipeline(
         f"{list(non_identifiable.keys()) if non_identifiable else 'none'}\n",
     )
 
+    # Persist web data BEFORE potential halt so frontend can display gate failure
     stage1b_web_data = dict(stage1b_result)
+    if gate_1b_failed:
+        stage1b_web_data["gate_failed"] = True
     if gate_1b_overridden:
         stage1b_web_data["gate_overridden"] = {
             "reason": "No identifiable treatments remain — all blocked by unobserved confounders"
         }
     persist_web_result("stage-1b", stage1b_web_data)
+
+    if gate_1b_failed and not gates_overridden:
+        raise RuntimeError(
+            "No identifiable treatment effects remain after filtering. "
+            "All treatments are blocked by unobserved confounders."
+        )
 
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 2: Parallel indicator population (worker chunk size)
@@ -284,25 +288,31 @@ async def causal_inference_pipeline(
         )
 
     # Hard gate: abort if no usable data
+    gate_3_failed = False
     gate_3_overridden = False
     if validation_report and not validation_report.get("is_valid", True):
         n_data = len(data_for_model) if hasattr(data_for_model, "__len__") else 0
         if n_data == 0:
+            gate_3_failed = True
             if gates_overridden:
                 print("⚠️  GATE 3 OVERRIDDEN: Validation failed with no usable data, continuing")
                 gate_3_overridden = True
-            else:
-                raise RuntimeError(
-                    "Stage 3 validation failed and no usable data remains. "
-                    "Cannot proceed to model specification."
-                )
 
+    # Persist web data BEFORE potential halt so frontend can display gate failure
     stage3_web_data: dict = {"validation_report": validation_report or {}}
+    if gate_3_failed:
+        stage3_web_data["gate_failed"] = True
     if gate_3_overridden:
         stage3_web_data["gate_overridden"] = {
             "reason": "Validation failed with no usable data remaining"
         }
     persist_web_result("stage-3", stage3_web_data)
+
+    if gate_3_failed and not gates_overridden:
+        raise RuntimeError(
+            "Stage 3 validation failed and no usable data remains. "
+            "Cannot proceed to model specification."
+        )
 
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 4: Model Specification (Orchestrator-Worker Architecture)
@@ -360,11 +370,13 @@ async def causal_inference_pipeline(
     print("\n=== Stage 4b: Parametric Identifiability ===")
     stage4_result = stage4b_parametric_id_flow(stage4_result, raw_data=data_for_model)
 
+    gate_4b_failed = False
     gate_4b_overridden = False
     param_id = stage4_result.get("parametric_id", {})
     if param_id.get("checked", False):
         t_rule = param_id.get("t_rule", {})
         if not t_rule.get("satisfies", True):
+            gate_4b_failed = True
             if gates_overridden:
                 print(
                     f"⚠️  GATE 4b OVERRIDDEN: T-rule violated "
@@ -372,12 +384,6 @@ async def causal_inference_pipeline(
                     f"> {t_rule.get('n_moments')} moments), continuing"
                 )
                 gate_4b_overridden = True
-            else:
-                raise RuntimeError(
-                    f"T-rule violated: {t_rule.get('n_free_params')} free parameters "
-                    f"> {t_rule.get('n_moments')} moment conditions. "
-                    "Model is provably non-identified. Halting pipeline."
-                )
         summary = param_id.get("summary", {})
         if summary.get("structural_issues"):
             print("⚠️  STRUCTURAL non-identifiability detected — some parameters unconstrained")
@@ -391,9 +397,12 @@ async def causal_inference_pipeline(
     else:
         print(f"  Skipped: {param_id.get('error', 'unknown')}")
 
+    # Persist web data BEFORE potential halt so frontend can display gate failure
     stage4b_web_data: dict = {
         "parametric_id": stage4_result.get("parametric_id", {}),
     }
+    if gate_4b_failed:
+        stage4b_web_data["gate_failed"] = True
     if gate_4b_overridden:
         stage4b_web_data["gate_overridden"] = {
             "reason": (
@@ -402,6 +411,13 @@ async def causal_inference_pipeline(
             )
         }
     persist_web_result("stage-4b", stage4b_web_data)
+
+    if gate_4b_failed and not gates_overridden:
+        raise RuntimeError(
+            f"T-rule violated: {t_rule.get('n_free_params')} free parameters "
+            f"> {t_rule.get('n_moments')} moment conditions. "
+            "Model is provably non-identified. Halting pipeline."
+        )
 
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 5: Fit and intervene (with identifiability awareness)

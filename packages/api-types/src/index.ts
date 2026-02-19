@@ -124,6 +124,7 @@ export interface Stage1aData {
 export interface Stage1bData {
   causal_spec: import("./models/causal-spec").CausalSpec;
   llm_trace?: import("./models/llm-trace").LLMTrace;
+  gate_failed?: boolean;
   gate_overridden?: GateOverride;
 }
 
@@ -136,6 +137,7 @@ export interface Stage2Data {
 
 export interface Stage3Data {
   validation_report: import("./models/validation").ValidationReport;
+  gate_failed?: boolean;
   gate_overridden?: GateOverride;
 }
 
@@ -153,6 +155,7 @@ export interface Stage4Data {
 
 export interface Stage4bData {
   parametric_id: import("./models/parametric-id").ParametricIdResult;
+  gate_failed?: boolean;
   gate_overridden?: GateOverride;
 }
 

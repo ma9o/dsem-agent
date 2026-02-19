@@ -16,6 +16,7 @@ export interface StageTiming {
 export interface PipelineProgress {
   stages: Record<StageId, StageRunStatus>;
   timings: Partial<Record<StageId, StageTiming>>;
+  gateFailures: Partial<Record<StageId, boolean>>;
   currentStage: StageId | null;
   isComplete: boolean;
   isFailed: boolean;
@@ -24,7 +25,7 @@ export interface PipelineProgress {
 function initialProgress(): PipelineProgress {
   const stages = {} as Record<StageId, StageRunStatus>;
   for (const s of STAGES) stages[s.id] = "pending";
-  return { stages, timings: {}, currentStage: null, isComplete: false, isFailed: false };
+  return { stages, timings: {}, gateFailures: {}, currentStage: null, isComplete: false, isFailed: false };
 }
 
 const MAX_RECONNECT_ATTEMPTS = 10;

@@ -3,7 +3,7 @@
 import { LLMTracePanel } from "@/components/ui/custom/llm-trace-panel";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { cn } from "@/lib/utils/cn";
-import type { StageRunStatus, StageTiming } from "@/lib/hooks/use-run-events";
+import type { PipelineProgress, StageRunStatus, StageTiming } from "@/lib/hooks/use-run-events";
 import { useStageData } from "@/lib/hooks/use-stage-data";
 import type {
   GateOverride,
@@ -18,12 +18,14 @@ import type {
   Stage5Data,
   StageMeta,
 } from "@causal-ssm/api-types";
+import { useQueryClient } from "@tanstack/react-query";
 import { Bot } from "lucide-react";
 import { motion } from "motion/react";
 import {
   type ReactNode,
   Suspense,
   lazy,
+  useEffect,
   useState,
 } from "react";
 import { StageSection } from "./stage-section";
@@ -107,12 +109,29 @@ export function StageSectionRouter({
   status: StageRunStatus;
   timing?: StageTiming;
 }) {
+  const queryClient = useQueryClient();
   const isCompleted = status === "completed";
   const elapsedMs =
     timing?.completedAt && timing?.startedAt ? timing.completedAt - timing.startedAt : undefined;
 
-  // Read context + trace + gate override from the stage data (shared query key — cache hit when stage content is loaded)
-  const { data: stageData } = useStageData<{ context?: string; llm_trace?: LLMTrace; gate_overridden?: GateOverride }>(runId, stage.id, isCompleted);
+  // Read context + trace + gate override + gate failure from the stage data (shared query key — cache hit when stage content is loaded)
+  const { data: stageData } = useStageData<{ context?: string; llm_trace?: LLMTrace; gate_overridden?: GateOverride; gate_failed?: boolean }>(runId, stage.id, isCompleted);
+
+  const gateFailed = stageData?.gate_failed ?? false;
+
+  // Sync gate failure state into pipeline progress so the progress bar can reflect it
+  useEffect(() => {
+    if (!gateFailed) return;
+    queryClient.setQueryData<PipelineProgress>(["pipeline", runId, "status"], (old) => {
+      if (!old) return old;
+      if (old.gateFailures[stage.id]) return old; // already set
+      return {
+        ...old,
+        gateFailures: { ...old.gateFailures, [stage.id]: true },
+        isFailed: true,
+      };
+    });
+  }, [gateFailed, queryClient, runId, stage.id]);
 
   const section = (
     <StageSection
@@ -124,6 +143,7 @@ export function StageSectionRouter({
       context={stageData?.context}
       hasGate={stage.hasGate}
       gateOverridden={stageData?.gate_overridden}
+      gateFailed={gateFailed}
       loadingHint={stage.loadingHint}
     >
       {isCompleted && (
