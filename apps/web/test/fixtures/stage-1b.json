@@ -56,5 +56,6 @@
     "total_time_seconds": 18.7,
     "usage": { "input_tokens": 3200, "output_tokens": 2890, "total_tokens": 6090, "reasoning_tokens": 520 }
   },
-  "context": "Stage 1b proposes indicators and checks nonparametric identification via do-calculus (Pearl/Shpitser-Pearl ID algorithm). Assumption A7 (reflective measurement model) enables causal identification by linking latent constructs to observable data."
+  "context": "Stage 1b proposes indicators and checks nonparametric identification via do-calculus (Pearl/Shpitser-Pearl ID algorithm). Assumption A7 (reflective measurement model) enables causal identification by linking latent constructs to observable data.",
+  "gate_overridden": { "reason": "Nonparametric identification check failed: P(procrastination | do(stress)) is not identifiable via the ID algorithm. User chose to continue." }
 }
