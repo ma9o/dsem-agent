@@ -10,7 +10,7 @@ export default function Stage3Content({ data }: { data: Stage3Data }) {
     <div className="space-y-4">
       {!report.is_valid && (
         <HardGateAlert
-          title="Validation Failed — Pipeline Halted"
+          title="Data Validation Failed"
           explanation="The extracted data failed validation checks. No usable data remains after filtering."
           suggestion="Check data source quality, add more indicators, or broaden measurement criteria."
         />

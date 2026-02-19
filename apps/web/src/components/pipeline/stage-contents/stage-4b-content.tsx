@@ -8,7 +8,6 @@ export default function Stage4bContent({ data }: { data: Stage4bData }) {
 
   return (
     <div className="space-y-4">
-      <TRuleCard tRule={pid.t_rule} />
       {!pid.t_rule.satisfies && (
         <HardGateAlert
           title="T-Rule Violated — Pipeline Halted"
@@ -16,6 +15,7 @@ export default function Stage4bContent({ data }: { data: Stage4bData }) {
           suggestion="Reduce model complexity by removing parameters or collect more time points to increase moment conditions."
         />
       )}
+      <TRuleCard tRule={pid.t_rule} />
       {pid.per_param_classification.length > 0 && (
         <WeakParamsList params={pid.per_param_classification} />
       )}
