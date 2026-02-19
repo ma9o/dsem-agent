@@ -1,12 +1,12 @@
 "use client";
 
-import type { StageId } from "@causal-ssm/api-types";
+import type { StageId, StageStatus } from "@causal-ssm/api-types";
 import { STAGES } from "@causal-ssm/api-types";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef } from "react";
 import { isMockMode, simulatePipelineEvents } from "../api/mock-provider";
 
-export type StageRunStatus = "pending" | "running" | "completed" | "failed";
+export type StageRunStatus = Exclude<StageStatus, "blocked">;
 
 export interface StageTiming {
   startedAt: number;
