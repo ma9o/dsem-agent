@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils/cn";
 import type { StageRunStatus, StageTiming } from "@/lib/hooks/use-run-events";
 import { useStageData } from "@/lib/hooks/use-stage-data";
 import type {
+  GateOverride,
   LLMTrace,
   Stage0Data,
   Stage1aData,
@@ -110,8 +111,8 @@ export function StageSectionRouter({
   const elapsedMs =
     timing?.completedAt && timing?.startedAt ? timing.completedAt - timing.startedAt : undefined;
 
-  // Read context + trace from the stage data (shared query key — cache hit when stage content is loaded)
-  const { data: stageData } = useStageData<{ context?: string; llm_trace?: LLMTrace }>(runId, stage.id, isCompleted);
+  // Read context + trace + gate override from the stage data (shared query key — cache hit when stage content is loaded)
+  const { data: stageData } = useStageData<{ context?: string; llm_trace?: LLMTrace; gate_overridden?: GateOverride }>(runId, stage.id, isCompleted);
 
   const section = (
     <StageSection
@@ -122,6 +123,7 @@ export function StageSectionRouter({
       elapsedMs={elapsedMs}
       context={stageData?.context}
       hasGate={stage.hasGate}
+      gateOverridden={stageData?.gate_overridden}
       loadingHint={stage.loadingHint}
     >
       {isCompleted && (

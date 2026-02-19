@@ -3,7 +3,8 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils/cn";
 import { linkifyDocRefs } from "@/lib/utils/linkify-docs";
 import type { StageRunStatus } from "@/lib/hooks/use-run-events";
-import { ShieldCheck } from "lucide-react";
+import type { GateOverride } from "@causal-ssm/api-types";
+import { ShieldAlert, ShieldCheck } from "lucide-react";
 
 const statusVariant: Record<
   StageRunStatus,
@@ -29,6 +30,7 @@ export function StageHeader({
   hasGate = false,
   context,
   hideBadge = false,
+  gateOverridden,
 }: {
   number: string;
   title: string;
@@ -36,6 +38,7 @@ export function StageHeader({
   hasGate?: boolean;
   context?: string;
   hideBadge?: boolean;
+  gateOverridden?: GateOverride;
 }) {
   return (
     <div className="flex items-center gap-3">
@@ -56,9 +59,17 @@ export function StageHeader({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-3">
           <h2 className="text-base font-semibold sm:text-lg">{title}</h2>
-          {hasGate && (
+          {hasGate && !gateOverridden && (
             <Tooltip content="This stage can halt the pipeline if checks fail">
               <ShieldCheck className="h-4 w-4 text-foreground/75" />
+            </Tooltip>
+          )}
+          {gateOverridden && (
+            <Tooltip content={gateOverridden.reason}>
+              <Badge variant="warning" className="gap-1">
+                <ShieldAlert className="h-3 w-3" />
+                Gate Overridden
+              </Badge>
             </Tooltip>
           )}
         </div>

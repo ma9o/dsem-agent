@@ -2,6 +2,7 @@
 
 import { Skeleton } from "@/components/ui/skeleton";
 import type { StageRunStatus } from "@/lib/hooks/use-run-events";
+import type { GateOverride } from "@causal-ssm/api-types";
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, ChevronDown } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
@@ -26,6 +27,7 @@ export function StageSection({
   defaultCollapsed = false,
   elapsedMs,
   hasGate = false,
+  gateOverridden,
   loadingHint,
 }: {
   id?: string;
@@ -37,6 +39,7 @@ export function StageSection({
   defaultCollapsed?: boolean;
   elapsedMs?: number;
   hasGate?: boolean;
+  gateOverridden?: GateOverride;
   loadingHint?: string;
 }) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
@@ -60,7 +63,7 @@ export function StageSection({
         onClick={isCollapsible ? () => setCollapsed((c) => !c) : undefined}
       >
         <div className="flex-1 min-w-0">
-          <StageHeader number={number} title={title} status={status} hasGate={hasGate} context={context} hideBadge={isCollapsible} />
+          <StageHeader number={number} title={title} status={status} hasGate={hasGate} gateOverridden={gateOverridden} context={context} hideBadge={isCollapsible} />
         </div>
         {isCollapsible && (
           <div className="flex shrink-0 items-center gap-2 pt-1">
