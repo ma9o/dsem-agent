@@ -253,12 +253,13 @@ def aggregate_worker_measurements(
             combined = combined.with_columns(pl.Series(col_name, py_vals, dtype=pl.Utf8))
 
     # 3. Dtype-aware encoding: encode binary/ordinal/categorical values before Float64 cast
-    indicators = causal_spec.get("measurement", {}).get("indicators", [])
-    dtype_lookup = {
-        ind.get("name"): ind.get("measurement_dtype", "continuous") for ind in indicators
-    }
+    from causal_ssm_agent.utils.causal_spec import get_indicator_dtypes, get_indicators
+
+    dtype_lookup = get_indicator_dtypes(causal_spec)
     ordinal_levels_lookup = {
-        ind.get("name"): ind["ordinal_levels"] for ind in indicators if ind.get("ordinal_levels")
+        ind.get("name"): ind["ordinal_levels"]
+        for ind in get_indicators(causal_spec)
+        if ind.get("ordinal_levels")
     }
     combined = _encode_non_continuous(combined, dtype_lookup, ordinal_levels_lookup)
 
@@ -277,9 +278,8 @@ def aggregate_worker_measurements(
         return {}
 
     # 5. Build indicator -> aggregation lookup
-    indicators = causal_spec.get("measurement", {}).get("indicators", [])
     indicator_info: dict[str, str] = {}
-    for ind in indicators:
+    for ind in get_indicators(causal_spec):
         name = ind.get("name")
         if name:
             indicator_info[name] = ind.get("aggregation", "mean")

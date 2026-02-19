@@ -87,7 +87,7 @@ async def propose_model_task(
         propose_model_spec,
     )
     from causal_ssm_agent.utils.config import get_config
-    from causal_ssm_agent.utils.llm import make_orchestrator_generate_fn
+    from causal_ssm_agent.utils.llm import attach_trace, make_orchestrator_generate_fn
 
     config = get_config()
     model = get_model(config.stage4_prior_elicitation.model)
@@ -104,9 +104,7 @@ async def propose_model_task(
     )
 
     out = result.model_spec.model_dump()
-    trace = trace_capture.get("trace")
-    if trace is not None:
-        out["llm_trace"] = trace.to_dict()
+    attach_trace(out, trace_capture)
     return out
 
 

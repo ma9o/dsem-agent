@@ -89,23 +89,7 @@ def _check_dtype_match(value: Any, expected_dtype: str) -> bool:
     return check(value)
 
 
-def _get_indicator_info(causal_spec: dict) -> dict[str, dict]:
-    """Extract indicator info from a CausalSpec dict.
-
-    Args:
-        causal_spec: CausalSpec dict with latent.constructs and measurement.indicators
-
-    Returns:
-        Dict mapping indicator name to {dtype, construct_name}
-    """
-    indicators = causal_spec.get("measurement", {}).get("indicators", [])
-    return {
-        ind.get("name"): {
-            "dtype": ind.get("measurement_dtype"),
-            "construct_name": ind.get("construct_name"),
-        }
-        for ind in indicators
-    }
+from causal_ssm_agent.utils.causal_spec import get_indicator_info as _get_indicator_info
 
 
 def validate_worker_output(

@@ -9,7 +9,7 @@ from prefect import task
 from causal_ssm_agent.orchestrator.stage1a import run_stage1a
 from causal_ssm_agent.utils.config import get_config
 from causal_ssm_agent.utils.effects import get_all_treatments, get_outcome_from_latent_model
-from causal_ssm_agent.utils.llm import make_orchestrator_generate_fn
+from causal_ssm_agent.utils.llm import attach_trace, make_orchestrator_generate_fn
 
 
 @task(
@@ -51,7 +51,5 @@ async def propose_latent_model(question: str) -> dict:
             "The model specifies theoretical constructs and their causal relationships."
         ),
     }
-    trace = trace_capture.get("trace")
-    if trace is not None:
-        out["llm_trace"] = trace.to_dict()
+    attach_trace(out, trace_capture)
     return out

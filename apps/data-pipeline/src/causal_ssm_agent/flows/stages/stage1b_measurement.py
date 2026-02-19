@@ -11,7 +11,7 @@ from causal_ssm_agent.orchestrator.agents import build_causal_spec as _build_cau
 from causal_ssm_agent.orchestrator.stage1b import run_stage1b
 from causal_ssm_agent.utils.config import get_config
 from causal_ssm_agent.utils.data import chunk_lines, get_orchestrator_chunk_size
-from causal_ssm_agent.utils.llm import make_orchestrator_generate_fn
+from causal_ssm_agent.utils.llm import attach_trace, make_orchestrator_generate_fn
 
 
 @task(cache_policy=INPUTS, result_serializer="json")
@@ -73,7 +73,5 @@ async def propose_measurement_with_identifiability_fix(
             "via do-calculus (Pearl/Shpitser-Pearl ID algorithm)."
         ),
     }
-    trace = trace_capture.get("trace")
-    if trace is not None:
-        out["llm_trace"] = trace.to_dict()
+    attach_trace(out, trace_capture)
     return out
