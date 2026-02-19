@@ -18,15 +18,18 @@ interface MockMethodSwitcherProps {
 }
 
 export function MockMethodSwitcher({ baseData, onDataChange }: MockMethodSwitcherProps) {
-  const [active, setActive] = useState<InferenceMethod>("svi");
+  const [active, setActive] = useState<InferenceMethod>("nuts_da");
   const [nutsdaData, setNutsdaData] = useState<Stage5Data | null>(null);
 
   useEffect(() => {
     fetch("/api/results/mock-run-001/stage-5-nutsda")
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setNutsdaData(d))
+      .then((d) => {
+        setNutsdaData(d);
+        if (d) onDataChange(d);
+      })
       .catch(() => {});
-  }, []);
+  }, [onDataChange]);
 
   const handleSwitch = (method: InferenceMethod) => {
     if (method === active) return;
