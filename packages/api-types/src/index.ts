@@ -135,12 +135,11 @@ export interface Stage3Data {
 export interface Stage4Data {
   model_spec: import("./models/model-spec").ModelSpec;
   priors: import("./models/prior").PriorProposal[];
-  validation_retries: Array<{
+  validation_retries?: Array<{
     attempt: number;
     failed_params: string[];
     feedback: string;
   }>;
-  ssm_equations: string[];
   llm_trace?: import("./models/llm-trace").LLMTrace;
   prior_predictive_samples?: Record<string, number[]>;
 }

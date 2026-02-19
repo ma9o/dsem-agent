@@ -8,10 +8,10 @@ export async function GET(
 ) {
   const { runId, stage } = await params;
 
-  // Try fixture data first (for mock mode), then real results
+  // Try real pipeline results first, fall back to fixtures (for mock/dev mode)
   const paths = [
-    join(process.cwd(), "test", "fixtures", `${stage}.json`),
     join(process.cwd(), "..", "data-pipeline", "results", runId, `${stage}.json`),
+    join(process.cwd(), "test", "fixtures", `${stage}.json`),
   ];
 
   for (const filePath of paths) {
