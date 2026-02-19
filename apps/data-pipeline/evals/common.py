@@ -24,6 +24,7 @@ from causal_ssm_agent.utils.llm import get_generate_config, multi_turn_generate
 # Eval config (non-question settings)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def load_eval_config() -> dict:
     """Load the eval config.yaml file."""
     config_path = Path(__file__).parent / "config.yaml"
@@ -127,6 +128,11 @@ def get_questions_with_model_spec() -> list[EvalQuestion]:
     return [q for q in discover_questions() if q.has_model_spec]
 
 
+def get_questions_with_model_spec_and_causal_spec() -> list[EvalQuestion]:
+    """Return questions that have both model_spec.json and causal_spec.json."""
+    return [q for q in discover_questions() if q.has_model_spec and q.has_causal_spec]
+
+
 def select_question(questions: list[EvalQuestion], selector: str) -> EvalQuestion:
     """Select a question by numeric prefix or full slug."""
     for q in questions:
@@ -144,6 +150,7 @@ def select_questions(questions: list[EvalQuestion], selectors: str) -> list[Eval
 # ══════════════════════════════════════════════════════════════════════════════
 # Solvers & utilities
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def tool_assisted_generate(
     tools: list[Tool],
@@ -180,6 +187,7 @@ def tool_assisted_generate(
 
     return _solver()
 
+
 # Files to exclude when finding the latest data file (script outputs)
 EXCLUDE_FILES = {"orchestrator-samples-manual.txt"}
 
@@ -206,7 +214,9 @@ def get_data_file(input_file: str | None = None):
     return data_file
 
 
-def get_sample_chunks_orchestrator(n_chunks: int, seed: int, input_file: str | None = None) -> list[str]:
+def get_sample_chunks_orchestrator(
+    n_chunks: int, seed: int, input_file: str | None = None
+) -> list[str]:
     """Get sampled chunks using orchestrator chunk size from config."""
     data_file = get_data_file(input_file)
     chunk_size = get_orchestrator_chunk_size()
