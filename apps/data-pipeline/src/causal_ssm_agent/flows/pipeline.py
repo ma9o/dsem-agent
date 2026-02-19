@@ -15,22 +15,19 @@ from prefect.utilities.annotations import unmapped
 
 from causal_ssm_agent.utils.aggregations import flatten_aggregated_data
 from causal_ssm_agent.utils.data import get_sample_chunks, load_query
-from causal_ssm_agent.utils.effects import (
-    get_all_treatments,
-    get_outcome_from_latent_model,
-)
 
 from .stages import (
     # Stage 3
     aggregate_measurements,
     # Stage 1b
-    build_causal_spec,
     combine_worker_results,
     # Stage 5
     fit_model,
     load_orchestrator_chunks,
     # Stage 2
     load_worker_chunks,
+    # Web persistence
+    persist_web_result,
     populate_indicators,
     # Stage 0
     preprocess_raw_input,
@@ -85,27 +82,37 @@ async def causal_inference_pipeline(
     preprocess_result = preprocess_raw_input(user_id)
     lines = preprocess_result["lines"]
 
+    persist_web_result("stage-0", {
+        "source_type": preprocess_result["source_type"],
+        "source_label": preprocess_result["source_label"],
+        "n_records": preprocess_result["n_records"],
+        "date_range": preprocess_result["date_range"],
+        "sample": preprocess_result["sample"],
+    })
+
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 1a: Propose latent model (theory only, no data)
     # ══════════════════════════════════════════════════════════════════════════
     print("\n=== Stage 1a: Latent Model ===")
-    latent_model = await propose_latent_model(question)
-    n_constructs = len(latent_model["constructs"])
-    n_edges = len(latent_model["edges"])
+    stage1a_result = await propose_latent_model(question)
+    latent_model = stage1a_result["latent_model"]
+    outcome = stage1a_result["outcome_name"]
+    treatments = stage1a_result["treatments"]
+    n_constructs = stage1a_result["graph_properties"]["n_constructs"]
+    n_edges = stage1a_result["graph_properties"]["n_edges"]
     print(f"Proposed {n_constructs} constructs with {n_edges} causal edges")
 
-    # Identify the outcome and all potential treatments
-    outcome = get_outcome_from_latent_model(latent_model)
     if not outcome:
         raise ValueError("No outcome identified in latent model (missing is_outcome=true)")
     print(f"Outcome variable: {outcome}")
 
-    treatments = get_all_treatments(latent_model)
     print(f"Potential treatments: {len(treatments)} constructs with paths to {outcome}")
     for t in treatments[:5]:
         print(f"  - {t}")
     if len(treatments) > 5:
         print(f"  ... and {len(treatments) - 5} more")
+
+    persist_web_result("stage-1a", stage1a_result)
 
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 1b: Propose measurement model (with identifiability check)
@@ -115,14 +122,15 @@ async def causal_inference_pipeline(
     print(f"Loaded {len(orchestrator_chunks)} orchestrator chunks")
 
     # Propose measurements and check identifiability
-    measurement_result = await propose_measurement_with_identifiability_fix(
+    stage1b_result = await propose_measurement_with_identifiability_fix(
         question,
         latent_model,
         orchestrator_chunks[: get_sample_chunks()],
     )
 
-    measurement_model = measurement_result["measurement_model"]
-    identifiability_status = measurement_result["identifiability_status"]
+    causal_spec = stage1b_result["causal_spec"]
+    measurement_model = stage1b_result["measurement_model"]
+    identifiability_status = stage1b_result["identifiability_status"]
 
     n_indicators = len(measurement_model["indicators"])
     print(f"Final model has {n_indicators} indicators")
@@ -159,8 +167,7 @@ async def causal_inference_pipeline(
         f"{list(non_identifiable.keys()) if non_identifiable else 'none'}\n",
     )
 
-    # Combine into full causal spec with identifiability status
-    causal_spec = build_causal_spec(latent_model, measurement_model, identifiability_status)
+    persist_web_result("stage-1b", stage1b_result)
 
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 2: Parallel indicator population (worker chunk size)
@@ -194,6 +201,26 @@ async def causal_inference_pipeline(
     else:
         data_for_model = raw_data_result
         print("  No aggregation applied (using raw data)")
+
+    # Persist stage-2 web data
+    sample_rows = raw_data_result.head(20).to_dicts() if n_observations > 0 else []
+    per_ind_counts = (
+        dict(raw_data_result.group_by("indicator").len().iter_rows())
+        if n_observations > 0
+        else {}
+    )
+    persist_web_result("stage-2", {
+        "workers": [
+            {"worker_id": i, "status": "completed", "n_extractions": 0, "chunk_size": 0}
+            for i in range(len(worker_chunks))
+        ],
+        "combined_extractions_sample": [
+            {k: str(v) if v is not None else None for k, v in row.items()}
+            for row in sample_rows
+        ],
+        "total_extractions": n_observations,
+        "per_indicator_counts": per_ind_counts,
+    })
 
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 3: Validate Extraction
@@ -243,6 +270,8 @@ async def causal_inference_pipeline(
                 "Cannot proceed to model specification."
             )
 
+    persist_web_result("stage-3", {"validation_report": validation_report or {}})
+
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 4: Model Specification (Orchestrator-Worker Architecture)
     # ══════════════════════════════════════════════════════════════════════════
@@ -289,6 +318,13 @@ async def causal_inference_pipeline(
         f"- **Model built**: {model_info.get('model_built', 'unknown')}\n",
     )
 
+    persist_web_result("stage-4", {
+        "model_spec": model_spec,
+        "priors": list(stage4_result.get("priors", {}).values()),
+        "llm_trace": stage4_result.get("llm_trace"),
+        "prior_predictive_samples": stage4_result.get("prior_predictive_samples"),
+    })
+
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 4b: Parametric Identifiability Diagnostics
     # ══════════════════════════════════════════════════════════════════════════
@@ -316,6 +352,10 @@ async def causal_inference_pipeline(
             print(f"  Weak parameters (low contraction): {weak}")
     else:
         print(f"  Skipped: {param_id.get('error', 'unknown')}")
+
+    persist_web_result("stage-4b", {
+        "parametric_id": stage4_result.get("parametric_id", {}),
+    })
 
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 5: Fit and intervene (with identifiability awareness)
@@ -502,7 +542,7 @@ async def causal_inference_pipeline(
         posterior_marginals = fitted_res.get("posterior_marginals")
         posterior_pairs = fitted_res.get("posterior_pairs")
 
-    return {
+    stage5_data = {
         "intervention_results": intervention_results,
         "power_scaling": ps_list,
         "ppc": ppc_result,
@@ -513,6 +553,9 @@ async def causal_inference_pipeline(
         "posterior_marginals": posterior_marginals,
         "posterior_pairs": posterior_pairs,
     }
+    persist_web_result("stage-5", stage5_data)
+
+    return stage5_data
 
 
 if __name__ == "__main__":

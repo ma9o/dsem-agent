@@ -1,5 +1,8 @@
 """Pipeline stages."""
 
+from .persist import (
+    persist_web_result,
+)
 from .stage0_preprocess import (
     preprocess_raw_input,
 )
@@ -50,6 +53,8 @@ __all__ = [
     "aggregate_measurements",
     "combine_worker_results",
     "validate_extraction",
+    # Persistence
+    "persist_web_result",
     # Stage 4
     "stage4_orchestrated_flow",
     # Stage 4b

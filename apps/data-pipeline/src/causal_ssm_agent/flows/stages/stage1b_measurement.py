@@ -28,7 +28,9 @@ def build_causal_spec(
     return _build_causal_spec_core(latent_model, measurement_model, identifiability_status)
 
 
-@task(cache_policy=INPUTS, result_serializer="json")
+@task(
+    result_serializer="json",
+)
 async def propose_measurement_with_identifiability_fix(
     question: str,
     latent_model: dict,
@@ -47,7 +49,7 @@ async def propose_measurement_with_identifiability_fix(
         dataset_summary: Brief overview of the full dataset
 
     Returns:
-        Dict with 'measurement_model' and 'identifiability_status'
+        Stage1bData dict matching the web frontend contract.
     """
     model = get_model(get_config().stage1_structure_proposal.model)
     trace_capture: dict = {}
@@ -59,9 +61,17 @@ async def propose_measurement_with_identifiability_fix(
         generate=generate,
         dataset_summary=dataset_summary,
     )
-    out = {
+    causal_spec = _build_causal_spec_core(
+        latent_model, result.measurement_model, result.identifiability_status
+    )
+    out: dict = {
+        "causal_spec": causal_spec,
         "measurement_model": result.measurement_model,
         "identifiability_status": result.identifiability_status,
+        "context": (
+            "Stage 1b proposes indicators and checks nonparametric identification "
+            "via do-calculus (Pearl/Shpitser-Pearl ID algorithm)."
+        ),
     }
     trace = trace_capture.get("trace")
     if trace is not None:
