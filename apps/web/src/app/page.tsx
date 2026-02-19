@@ -33,8 +33,9 @@ export default function LandingPage() {
   const [isMac, setIsMac] = useState(false);
 
   useEffect(() => {
-    if (isMockMode()) {
-      router.replace(`/analysis/${MOCK_RUN_ID}`);
+    if (isMockMode() && !sessionStorage.getItem("mock-landed")) {
+      sessionStorage.setItem("mock-landed", "true");
+      router.push(`/analysis/${MOCK_RUN_ID}`);
     }
   }, [router]);
 
