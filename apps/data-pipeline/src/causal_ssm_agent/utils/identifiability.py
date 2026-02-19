@@ -589,6 +589,64 @@ def analyze_unobserved_constructs(
     }
 
 
+def get_correlation_pairs_from_marginalization(
+    latent_model: dict,
+    measurement_model: dict,
+    identifiability_result: dict,
+) -> list[tuple[str, str, str]]:
+    """Return (state1, state2, confounder) pairs needing correlation parameters.
+
+    When an unobserved confounder with 2+ observed children is marginalized,
+    its children's innovations become correlated. This function identifies those
+    pairs so the model spec can add correlation parameters.
+
+    Only confounders that are actual confounders (listed in
+    graph_info["unobserved_confounders"], meaning 2+ observed children) AND
+    are in can_marginalize get pairs. Single-child unobserved constructs don't
+    create confounding and need no correlation.
+
+    Args:
+        latent_model: Dict with 'constructs' and 'edges'
+        measurement_model: Dict with 'indicators'
+        identifiability_result: Output from check_identifiability()
+
+    Returns:
+        List of (state1, state2, confounder_name) tuples, sorted for determinism.
+        state1 < state2 lexicographically within each tuple.
+    """
+    from itertools import combinations
+
+    analysis = analyze_unobserved_constructs(
+        latent_model, measurement_model, identifiability_result
+    )
+    can_marginalize = analysis["can_marginalize"]
+    # Only confounders with 2+ observed children (listed in unobserved_confounders)
+    actual_confounders = set(
+        identifiability_result.get("graph_info", {}).get("unobserved_confounders", [])
+    )
+    marginalizable_confounders = can_marginalize & actual_confounders
+
+    if not marginalizable_confounders:
+        return []
+
+    # Build confounder -> observed children mapping from edges
+    observed = get_observed_constructs(measurement_model)
+    pairs: list[tuple[str, str, str]] = []
+
+    for confounder in sorted(marginalizable_confounders):
+        children = sorted(
+            {
+                edge["effect"]
+                for edge in latent_model.get("edges", [])
+                if edge["cause"] == confounder and edge["effect"] in observed
+            }
+        )
+        for s1, s2 in combinations(children, 2):
+            pairs.append((s1, s2, confounder))
+
+    return pairs
+
+
 def format_identifiability_report(result: dict, outcome: str) -> str:
     """Format identifiability check results for logging."""
     lines = []

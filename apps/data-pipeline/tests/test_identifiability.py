@@ -8,6 +8,7 @@ from causal_ssm_agent.utils.identifiability import (
     dag_to_admg,
     format_identifiability_report,
     format_marginalization_report,
+    get_correlation_pairs_from_marginalization,
     get_observed_constructs,
 )
 
@@ -269,6 +270,173 @@ def test_format_marginalization_report():
     assert "U2" in report
     assert "U3" in report
     assert "blocks identification" in report
+
+
+def test_correlation_pairs_from_marginalized_confounder():
+    """Front-door: U confounds X->Y but is marginalized. Should produce cor pair."""
+    latent_model = {
+        "constructs": [
+            {"name": "X", "role": "exogenous", "temporal_status": "time_varying"},
+            {"name": "M", "role": "endogenous", "temporal_status": "time_varying"},
+            {
+                "name": "Y",
+                "role": "endogenous",
+                "temporal_status": "time_varying",
+                "is_outcome": True,
+            },
+            {"name": "U", "role": "exogenous", "temporal_status": "time_varying"},
+        ],
+        "edges": [
+            {"cause": "X", "effect": "M", "lagged": False},
+            {"cause": "M", "effect": "Y", "lagged": False},
+            {"cause": "U", "effect": "X", "lagged": False},
+            {"cause": "U", "effect": "Y", "lagged": False},
+        ],
+    }
+    measurement_model = {
+        "indicators": [
+            {"name": "x_ind", "construct_name": "X"},
+            {"name": "m_ind", "construct_name": "M"},
+            {"name": "y_ind", "construct_name": "Y"},
+        ]
+    }
+
+    id_result = check_identifiability(latent_model, measurement_model)
+    pairs = get_correlation_pairs_from_marginalization(
+        latent_model, measurement_model, id_result
+    )
+
+    # U confounds X and Y, both observed → should produce (X, Y, U) pair
+    assert len(pairs) == 1
+    s1, s2, confounder = pairs[0]
+    assert {s1, s2} == {"X", "Y"}
+    assert confounder == "U"
+
+
+def test_correlation_pairs_no_marginalized_confounders():
+    """All observed → no correlation pairs needed."""
+    latent_model = {
+        "constructs": [
+            {"name": "A", "role": "exogenous"},
+            {"name": "B", "role": "endogenous", "is_outcome": True},
+        ],
+        "edges": [{"cause": "A", "effect": "B"}],
+    }
+    measurement_model = {
+        "indicators": [
+            {"name": "a_ind", "construct_name": "A"},
+            {"name": "b_ind", "construct_name": "B"},
+        ]
+    }
+
+    id_result = check_identifiability(latent_model, measurement_model)
+    pairs = get_correlation_pairs_from_marginalization(
+        latent_model, measurement_model, id_result
+    )
+    assert pairs == []
+
+
+def test_correlation_pairs_single_child_not_confounder():
+    """Unobserved with single observed child is not a confounder → no pair."""
+    latent_model = {
+        "constructs": [
+            {"name": "X", "role": "exogenous", "temporal_status": "time_varying"},
+            {
+                "name": "Y",
+                "role": "endogenous",
+                "temporal_status": "time_varying",
+                "is_outcome": True,
+            },
+            {"name": "U", "role": "exogenous", "temporal_status": "time_varying"},
+        ],
+        "edges": [
+            {"cause": "X", "effect": "Y", "lagged": False},
+            {"cause": "U", "effect": "X", "lagged": False},  # U only affects X
+        ],
+    }
+    measurement_model = {
+        "indicators": [
+            {"name": "x_ind", "construct_name": "X"},
+            {"name": "y_ind", "construct_name": "Y"},
+        ]
+    }
+
+    id_result = check_identifiability(latent_model, measurement_model)
+    pairs = get_correlation_pairs_from_marginalization(
+        latent_model, measurement_model, id_result
+    )
+    assert pairs == []
+
+
+def test_correlation_pairs_multiple_confounders():
+    """Two marginalized confounders produce independent correlation pairs.
+
+    DAG: U1 -> X, U1 -> Y (front-door via M1)
+         U2 -> Y, U2 -> Z (front-door via M2)
+         X -> M1 -> Y -> M2 -> Z
+
+    U1 confounds {X, Y} → cor_X_Y
+    U2 confounds {Y, Z} → cor_Y_Z
+    """
+    latent_model = {
+        "constructs": [
+            {"name": "X", "role": "exogenous", "temporal_status": "time_varying"},
+            {"name": "M1", "role": "endogenous", "temporal_status": "time_varying"},
+            {
+                "name": "Y",
+                "role": "endogenous",
+                "temporal_status": "time_varying",
+            },
+            {"name": "M2", "role": "endogenous", "temporal_status": "time_varying"},
+            {
+                "name": "Z",
+                "role": "endogenous",
+                "temporal_status": "time_varying",
+                "is_outcome": True,
+            },
+            {"name": "U1", "role": "exogenous", "temporal_status": "time_varying"},
+            {"name": "U2", "role": "exogenous", "temporal_status": "time_varying"},
+        ],
+        "edges": [
+            # Causal chain with mediators
+            {"cause": "X", "effect": "M1", "lagged": False},
+            {"cause": "M1", "effect": "Y", "lagged": False},
+            {"cause": "Y", "effect": "M2", "lagged": False},
+            {"cause": "M2", "effect": "Z", "lagged": False},
+            # Confounders
+            {"cause": "U1", "effect": "X", "lagged": False},
+            {"cause": "U1", "effect": "Y", "lagged": False},
+            {"cause": "U2", "effect": "Y", "lagged": False},
+            {"cause": "U2", "effect": "Z", "lagged": False},
+        ],
+    }
+    measurement_model = {
+        "indicators": [
+            {"name": "x_ind", "construct_name": "X"},
+            {"name": "m1_ind", "construct_name": "M1"},
+            {"name": "y_ind", "construct_name": "Y"},
+            {"name": "m2_ind", "construct_name": "M2"},
+            {"name": "z_ind", "construct_name": "Z"},
+        ]
+    }
+
+    id_result = check_identifiability(latent_model, measurement_model)
+    pairs = get_correlation_pairs_from_marginalization(
+        latent_model, measurement_model, id_result
+    )
+
+    # Extract just the state pairs (ignoring confounder name)
+    state_pairs = {(s1, s2) for s1, s2, _ in pairs}
+    confounders = {confounder for _, _, confounder in pairs}
+
+    # U1 confounds X and Y → (X, Y) pair
+    assert ("X", "Y") in state_pairs
+    # U2 confounds Y and Z → (Y, Z) pair
+    assert ("Y", "Z") in state_pairs
+    # Both confounders should be referenced
+    assert confounders == {"U1", "U2"}
+    # No spurious pairs (X, Z) — X and Z don't share a confounder
+    assert ("X", "Z") not in state_pairs
 
 
 if __name__ == "__main__":
