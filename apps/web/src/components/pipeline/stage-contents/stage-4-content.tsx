@@ -51,12 +51,6 @@ export default function Stage4Content({
       {data.validation_retries && data.validation_retries.length > 0 && (
         <RetryIndicator retries={data.validation_retries} />
       )}
-      {data.model_spec.reasoning && (
-        <div className="rounded-lg bg-muted p-4 text-sm">
-          <p className="font-medium mb-1">Model Reasoning</p>
-          <p className="text-muted-foreground">{data.model_spec.reasoning}</p>
-        </div>
-      )}
     </div>
   );
 }
