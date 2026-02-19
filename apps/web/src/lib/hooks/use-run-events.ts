@@ -4,6 +4,7 @@ import type { StageId, StageStatus } from "@causal-ssm/api-types";
 import { STAGES } from "@causal-ssm/api-types";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef } from "react";
+import ReconnectingWebSocket from "reconnecting-websocket";
 import { isMockMode, simulatePipelineEvents } from "../api/mock-provider";
 
 export type StageRunStatus = Exclude<StageStatus, "blocked">;
@@ -34,9 +35,7 @@ const BASE_DELAY_MS = 1000;
 
 export function useRunEvents(runId: string | null) {
   const queryClient = useQueryClient();
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectAttempts = useRef(0);
-  const unmounted = useRef(false);
+  const wsRef = useRef<ReconnectingWebSocket | null>(null);
 
   const updateStage = useCallback(
     (stageId: StageId, status: StageRunStatus, eventTime?: number) => {
@@ -69,18 +68,33 @@ export function useRunEvents(runId: string | null) {
     [queryClient, runId],
   );
 
-  const connect = useCallback(() => {
-    if (!runId || unmounted.current) return;
+  useEffect(() => {
+    if (!runId) return;
+
+    // Initialize progress
+    queryClient.setQueryData(["pipeline", runId, "status"], initialProgress());
+
+    if (isMockMode()) {
+      const cleanup = simulatePipelineEvents({
+        onStageStart: (id) => updateStage(id, "running"),
+        onStageComplete: (id) => {
+          updateStage(id, "completed");
+          queryClient.invalidateQueries({ queryKey: ["pipeline", runId, "stage", id] });
+        },
+      });
+      return cleanup;
+    }
 
     const wsUrl = "ws://localhost:4200/api/events/out";
-    const ws = new WebSocket(wsUrl);
+    const ws = new ReconnectingWebSocket(wsUrl, [], {
+      maxRetries: MAX_RECONNECT_ATTEMPTS,
+      minReconnectionDelay: BASE_DELAY_MS,
+      maxReconnectionDelay: BASE_DELAY_MS * 2 ** MAX_RECONNECT_ATTEMPTS,
+      reconnectionDelayGrowFactor: 2,
+    });
     wsRef.current = ws;
 
-    ws.onopen = () => {
-      reconnectAttempts.current = 0;
-    };
-
-    ws.onmessage = (event) => {
+    ws.onmessage = (event: MessageEvent) => {
       try {
         const data = JSON.parse(event.data);
         if (data.resource?.["prefect.flow-run.id"] !== runId) return;
@@ -102,57 +116,20 @@ export function useRunEvents(runId: string | null) {
         } else if (data.event === "prefect.task-run.Failed") {
           updateStage(stage.id, "failed", eventTime);
         }
+
+        // Close permanently if pipeline is done — no need to reconnect
+        const progress = queryClient.getQueryData<PipelineProgress>(["pipeline", runId, "status"]);
+        if (progress?.isComplete || progress?.isFailed) {
+          ws.close();
+        }
       } catch {
         // Ignore parse errors
       }
     };
 
-    ws.onclose = () => {
-      if (unmounted.current) return;
-
-      // Check if pipeline is already complete — no need to reconnect
-      const progress = queryClient.getQueryData<PipelineProgress>(["pipeline", runId, "status"]);
-      if (progress?.isComplete || progress?.isFailed) return;
-
-      // Exponential backoff reconnection
-      if (reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
-        const delay = BASE_DELAY_MS * 2 ** reconnectAttempts.current;
-        reconnectAttempts.current++;
-        setTimeout(() => {
-          if (!unmounted.current) connect();
-        }, delay);
-      }
-    };
-
-    ws.onerror = () => {
-      // Error will trigger onclose, which handles reconnection
-    };
-  }, [runId, queryClient, updateStage]);
-
-  useEffect(() => {
-    if (!runId) return;
-    unmounted.current = false;
-
-    // Initialize progress
-    queryClient.setQueryData(["pipeline", runId, "status"], initialProgress());
-
-    if (isMockMode()) {
-      const cleanup = simulatePipelineEvents({
-        onStageStart: (id) => updateStage(id, "running"),
-        onStageComplete: (id) => {
-          updateStage(id, "completed");
-          queryClient.invalidateQueries({ queryKey: ["pipeline", runId, "stage", id] });
-        },
-      });
-      return cleanup;
-    }
-
-    connect();
-
     return () => {
-      unmounted.current = true;
-      wsRef.current?.close();
+      ws.close();
       wsRef.current = null;
     };
-  }, [runId, queryClient, updateStage, connect]);
+  }, [runId, queryClient, updateStage]);
 }
