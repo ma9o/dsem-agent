@@ -1,6 +1,6 @@
 "use client";
 
-import { diagnosisLabel } from "@/lib/constants/charts";
+import { diagnosisColor, diagnosisLabel } from "@/lib/constants/charts";
 import { formatNumber } from "@/lib/utils/format";
 import type { PowerScalingResult } from "@causal-ssm/api-types";
 import {
@@ -19,11 +19,6 @@ interface PowerScalingScatterProps {
   results: PowerScalingResult[];
 }
 
-const diagnosisColor: Record<string, string> = {
-  well_identified: "var(--success)",
-  prior_dominated: "var(--warning)",
-  prior_data_conflict: "var(--destructive)",
-};
 
 
 export function PowerScalingScatter({ results }: PowerScalingScatterProps) {

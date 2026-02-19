@@ -12,19 +12,19 @@ function halfNormalPdf(x: number, sigma: number): number {
   return (2 / (sigma * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * (x / sigma) ** 2);
 }
 
+/** Stirling approximation for ln(Gamma(a)). */
+function lnGamma(a: number): number {
+  return 0.5 * Math.log((2 * Math.PI) / a) + a * (Math.log(a + 1 / (12 * a - 1 / (10 * a))) - 1);
+}
+
 function gammaPdf(x: number, alpha: number, beta: number): number {
   if (x <= 0) return 0;
-  // Stirling approximation for gamma function
-  const lnGamma = (a: number) =>
-    0.5 * Math.log((2 * Math.PI) / a) + a * (Math.log(a + 1 / (12 * a - 1 / (10 * a))) - 1);
   const logPdf = alpha * Math.log(beta) + (alpha - 1) * Math.log(x) - beta * x - lnGamma(alpha);
   return Math.exp(logPdf);
 }
 
 function betaPdf(x: number, alpha: number, beta: number): number {
   if (x <= 0 || x >= 1) return 0;
-  const lnGamma = (a: number) =>
-    0.5 * Math.log((2 * Math.PI) / a) + a * (Math.log(a + 1 / (12 * a - 1 / (10 * a))) - 1);
   const logB = lnGamma(alpha) + lnGamma(beta) - lnGamma(alpha + beta);
   return Math.exp((alpha - 1) * Math.log(x) + (beta - 1) * Math.log(1 - x) - logB);
 }

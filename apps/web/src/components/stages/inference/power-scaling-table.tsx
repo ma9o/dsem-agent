@@ -2,15 +2,10 @@ import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { HeaderWithTooltip, InfoTable } from "@/components/ui/info-table";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
-import { diagnosisLabel } from "@/lib/constants/charts";
+import { diagnosisBadgeVariant, diagnosisLabel } from "@/lib/constants/charts";
 import { formatNumber } from "@/lib/utils/format";
 import type { PowerScalingResult } from "@causal-ssm/api-types";
 
-const diagnosisBadgeVariant: Record<string, "success" | "warning" | "destructive"> = {
-  well_identified: "success",
-  prior_dominated: "warning",
-  prior_data_conflict: "destructive",
-};
 
 
 const col = createColumnHelper<PowerScalingResult>();

@@ -1,8 +1,10 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatTooltip } from "@/components/ui/stat-tooltip";
+import { FUNCTIONAL_SPEC_URL } from "@/lib/constants/stages";
 import type { LikelihoodSpec, ParameterSpec, PriorProposal } from "@causal-ssm/api-types";
 import katex from "katex";
+import { BookOpen } from "lucide-react";
 
 interface SsmEquationDisplayProps {
   likelihoods: LikelihoodSpec[];
@@ -136,23 +138,76 @@ function stateNames(parameters: ParameterSpec[]): string[] {
     .map((p) => p.name.split("_").slice(1).join("_"));
 }
 
-export function SSMEquationDisplay({ likelihoods, parameters, priors }: SsmEquationDisplayProps) {
-  const states = stateNames(parameters);
+/** Parse a fixed_effect parameter name into source→target given known state names. */
+function parseFixedEffect(
+  name: string,
+  knownStates: string[],
+): { source: string; target: string } | null {
+  const body = name.replace(/^beta_/, "");
+  // Match longest known state as suffix to handle multi-word state names
+  for (const state of [...knownStates].sort((a, b) => b.length - a.length)) {
+    if (body.endsWith(`_${state}`)) {
+      return { source: body.slice(0, -(state.length + 1)), target: state };
+    }
+  }
+  return null;
+}
 
+/** Build concrete per-state transition LaTeX lines from actual parameters. */
+function concreteTransitionLines(parameters: ParameterSpec[]): string[] {
+  const states = stateNames(parameters);
+  const fixedEffects = parameters.filter((p) => p.role === "fixed_effect");
+
+  // Group cross-lag effects by target state
+  const effectsByTarget = new Map<string, string[]>();
+  for (const s of states) effectsByTarget.set(s, []);
+
+  for (const fe of fixedEffects) {
+    const parsed = parseFixedEffect(fe.name, states);
+    if (parsed) {
+      effectsByTarget.get(parsed.target)?.push(parsed.source);
+    }
+  }
+
+  const lines: string[] = [];
+  for (const state of states) {
+    const s = `\\text{${textify(state)}}`;
+    let rhs = `\\rho_{${s}} \\, \\eta_{${s}}(t\\!-\\!1)`;
+
+    const parents = effectsByTarget.get(state) ?? [];
+    for (const src of parents) {
+      const srcTex = `\\text{${textify(src)}}`;
+      rhs += ` + \\beta_{${srcTex} \\to ${s}} \\, \\eta_{${srcTex}}(t\\!-\\!1)`;
+    }
+
+    rhs += ` + \\varepsilon_{${s}}(t)`;
+    lines.push(`\\eta_{${s}}(t) &= ${rhs}`);
+  }
+
+  // Add noise lines
+  for (const state of states) {
+    const s = `\\text{${textify(state)}}`;
+    lines.push(`\\varepsilon_{${s}}(t) &\\sim \\mathcal{N}(0,\\, \\sigma_{${s}}^2)`);
+  }
+
+  return lines;
+}
+
+export function SSMEquationDisplay({ likelihoods, parameters, priors }: SsmEquationDisplayProps) {
   // --- State dynamics ---
-  const transitionLatex = tex(
+  const transitionLines = concreteTransitionLines(parameters);
+  const transitionLatex =
+    transitionLines.length > 0
+      ? tex(`\\begin{aligned}\n${transitionLines.join(" \\\\\n")}\n\\end{aligned}`)
+      : null;
+
+  // Generic form (kept as reference while iterating on the display)
+  const genericTransitionLatex = tex(
     String.raw`\begin{aligned}
 \eta_i(t) &= \rho_i \, \eta_i(t\!-\!1) + \textstyle\sum_{j \in \mathrm{pa}(i)} \beta_{ji}\, \eta_j(t\!-\!1) + \varepsilon_i(t) \\
 \varepsilon_i(t) &\sim \mathcal{N}(0,\, \sigma_i^2)
 \end{aligned}`,
   );
-
-  const stateVecLatex =
-    states.length > 0
-      ? tex(
-          `\\boldsymbol{\\eta}(t) = \\begin{bmatrix} ${states.map((s) => `\\eta_{\\text{${textify(s)}}}(t)`).join(" \\\\ ")} \\end{bmatrix}`,
-        )
-      : null;
 
   // --- Observation model ---
   const predictorDef =
@@ -176,23 +231,40 @@ export function SSMEquationDisplay({ likelihoods, parameters, priors }: SsmEquat
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">SSM Equations</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base">SSM Equations</CardTitle>
+          <a
+            href={FUNCTIONAL_SPEC_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <BookOpen className="h-3.5 w-3.5" />
+            Parameter roles &amp; constraints
+          </a>
+        </div>
       </CardHeader>
       <CardContent className="space-y-5">
         {/* State dynamics */}
-        <section>
-          <div className="mb-2 flex items-center justify-between">
-            <h4 className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              State Dynamics
-              <StatTooltip explanation="Each latent state evolves as a discrete-time AR(1) process: it depends on its own previous value (persistence ρ), causal effects from parent states (β), and Gaussian noise. This is obtained by exact discretization of an underlying continuous-time SDE." />
-            </h4>
-            <Badge variant="outline">Linear-Gaussian Dynamics</Badge>
-          </div>
-          <div className="overflow-x-auto rounded-md border bg-muted/30 px-4 py-3">
-            <div dangerouslySetInnerHTML={{ __html: transitionLatex }} />
-            {stateVecLatex && <div dangerouslySetInnerHTML={{ __html: stateVecLatex }} />}
-          </div>
-        </section>
+        {transitionLatex && (
+          <section>
+            <div className="mb-2 flex items-center justify-between">
+              <h4 className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                State Dynamics
+                <StatTooltip explanation="Each latent state evolves as a discrete-time AR(1) process: it depends on its own previous value (persistence ρ), causal effects from parent states (β), and Gaussian noise." />
+              </h4>
+              <Badge variant="outline">Linear-Gaussian Dynamics</Badge>
+            </div>
+            <div className="overflow-x-auto rounded-md border bg-muted/30 px-4 py-3">
+              <div dangerouslySetInnerHTML={{ __html: transitionLatex }} />
+            </div>
+            {/* TODO: remove generic reference once display is finalized */}
+            <div className="mt-2 overflow-x-auto rounded-md border border-dashed bg-muted/15 px-4 py-3">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Generic form (reference)</p>
+              <div dangerouslySetInnerHTML={{ __html: genericTransitionLatex }} />
+            </div>
+          </section>
+        )}
 
         {/* Observation model */}
         {obsLatex && (

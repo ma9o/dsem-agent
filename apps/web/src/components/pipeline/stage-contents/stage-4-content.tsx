@@ -2,12 +2,9 @@ import { MeasurementTable } from "@/components/stages/model-spec/measurement-tab
 import { PriorTable } from "@/components/stages/model-spec/prior-table";
 import { RetryIndicator } from "@/components/stages/model-spec/retry-indicator";
 import { SSMEquationDisplay } from "@/components/stages/model-spec/ssm-equation-display";
-import type { Extraction } from "@causal-ssm/api-types";
-import type { Stage4Data } from "@causal-ssm/api-types";
+import { FUNCTIONAL_SPEC_URL } from "@/lib/constants/stages";
+import type { Extraction, Stage4Data } from "@causal-ssm/api-types";
 import { BookOpen } from "lucide-react";
-
-const FUNCTIONAL_SPEC_URL =
-  "https://github.com/ma9o/causal-ssm-agent/blob/master/apps/data-pipeline/docs/modeling/functional_spec.md#15-parameter-roles-and-constraints";
 
 export default function Stage4Content({
   data,
