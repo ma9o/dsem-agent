@@ -1,10 +1,9 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatTooltip } from "@/components/ui/stat-tooltip";
-import { FUNCTIONAL_SPEC_URL } from "@/lib/constants/stages";
+import { FunctionalSpecLink } from "@/components/stages/model-spec/functional-spec-link";
 import type { LikelihoodSpec, ParameterSpec, PriorProposal } from "@causal-ssm/api-types";
 import katex from "katex";
-import { BookOpen } from "lucide-react";
 
 interface SsmEquationDisplayProps {
   likelihoods: LikelihoodSpec[];
@@ -233,15 +232,7 @@ export function SSMEquationDisplay({ likelihoods, parameters, priors }: SsmEquat
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-base">SSM Equations</CardTitle>
-          <a
-            href={FUNCTIONAL_SPEC_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <BookOpen className="h-3.5 w-3.5" />
-            Parameter roles &amp; constraints
-          </a>
+          <FunctionalSpecLink />
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
