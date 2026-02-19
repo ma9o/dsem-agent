@@ -5,7 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { uploadFile } from "@/lib/api/endpoints";
 import { isMockMode, MOCK_RUN_ID } from "@/lib/api/mock-provider";
 import { getDeploymentId, triggerRun } from "@/lib/api/prefect";
-import { ArrowRight, FileText, Loader2, Sparkles, Upload, X } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { ArrowRight, FileText, Loader2, ShieldAlert, Sparkles, Upload, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -27,6 +28,7 @@ export default function LandingPage() {
   const router = useRouter();
   const [question, setQuestion] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [overrideGates, setOverrideGates] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isMac, setIsMac] = useState(false);
 
@@ -101,6 +103,7 @@ export default function LandingPage() {
       const runId = await triggerRun(deploymentId, {
         query: question,
         user_id: userId,
+        override_gates: overrideGates || undefined,
       });
 
       router.push(`/analysis/${runId}`);
@@ -232,6 +235,24 @@ export default function LandingPage() {
                 }}
               />
             </div>
+          </CardContent>
+        </Card>
+
+        <Card className="animate-fade-in-up" style={{ animationDelay: "0.15s" }}>
+          <CardContent className="flex items-center justify-between py-4">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="h-4 w-4 text-warning-foreground" />
+              <div>
+                <p className="text-sm font-medium">Override stage gates</p>
+                <p className="text-xs text-muted-foreground">
+                  Continue past stage failures instead of halting. Results may be unreliable.
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={overrideGates}
+              onChange={(e) => setOverrideGates(e.target.checked)}
+            />
           </CardContent>
         </Card>
 
