@@ -840,5 +840,3 @@ class TestCheckConstructCorrelations:
             i for i in result["issues"] if i["issue_type"] == "low_construct_correlation"
         ]
         assert len(corr_issues) == 0
-
-

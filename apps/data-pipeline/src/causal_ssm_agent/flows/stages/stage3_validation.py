@@ -277,19 +277,23 @@ def _check_hallucination_signals(
     # Excessive duplicates (only for continuous/ordinal data with variance > 0)
     if dtype not in ("binary", "count"):
         variance = values.var()
-        if variance is not None and variance > 0 and max_count > n * HALLUCINATION_DUPLICATE_THRESHOLD:
-                most_common = vc.sort("count", descending=True).row(0)[0]
-                issues.append(
-                    {
-                        "indicator": ind_name,
-                        "issue_type": "suspicious_pattern",
-                        "severity": "warning",
-                        "message": (
-                            f">{HALLUCINATION_DUPLICATE_THRESHOLD * 100:.0f}% of values "
-                            f"are {most_common} ({max_count}/{n})"
-                        ),
-                    }
-                )
+        if (
+            variance is not None
+            and variance > 0
+            and max_count > n * HALLUCINATION_DUPLICATE_THRESHOLD
+        ):
+            most_common = vc.sort("count", descending=True).row(0)[0]
+            issues.append(
+                {
+                    "indicator": ind_name,
+                    "issue_type": "suspicious_pattern",
+                    "severity": "warning",
+                    "message": (
+                        f">{HALLUCINATION_DUPLICATE_THRESHOLD * 100:.0f}% of values "
+                        f"are {most_common} ({max_count}/{n})"
+                    ),
+                }
+            )
 
     # Arithmetic sequence check
     if n >= 5:
@@ -538,9 +542,7 @@ def validate_extraction(
         # 2. Dtype range conformance
         dtype_violations = 0
         if dtype:
-            dtype_issues, dtype_violations = _check_dtype_range(
-                values["value"], dtype, ind_name
-            )
+            dtype_issues, dtype_violations = _check_dtype_range(values["value"], dtype, ind_name)
             issues.extend(dtype_issues)
 
         # 3-4. Time coverage and gaps (skip for time-invariant constructs)
@@ -551,14 +553,12 @@ def validate_extraction(
                 parsed_ts, causal_gran, ind_name
             )
             issues.extend(coverage_issues)
-            gap_issues, max_gap_ratio = _check_timestamp_gaps(
-                parsed_ts, causal_gran, ind_name
-            )
+            gap_issues, max_gap_ratio = _check_timestamp_gaps(parsed_ts, causal_gran, ind_name)
             issues.extend(gap_issues)
 
         # 5. Hallucination signals
-        halluc_issues, duplicate_pct, arithmetic_sequence_detected = (
-            _check_hallucination_signals(values["value"], dtype or "continuous", ind_name)
+        halluc_issues, duplicate_pct, arithmetic_sequence_detected = _check_hallucination_signals(
+            values["value"], dtype or "continuous", ind_name
         )
         issues.extend(halluc_issues)
 
@@ -567,18 +567,12 @@ def validate_extraction(
         # never needs to re-derive domain thresholds.
         cell_statuses: dict[str, str] = {
             "n_obs": "warning" if n_obs < MIN_OBSERVATIONS else "ok",
-            "variance": (
-                "error" if variance is not None and variance == 0 else "ok"
-            ),
+            "variance": ("error" if variance is not None and variance == 0 else "ok"),
             "time_coverage_ratio": (
-                "warning"
-                if time_coverage_ratio is not None and time_coverage_ratio < 1.0
-                else "ok"
+                "warning" if time_coverage_ratio is not None and time_coverage_ratio < 1.0 else "ok"
             ),
             "max_gap_ratio": (
-                "warning"
-                if max_gap_ratio is not None and max_gap_ratio > 1.0
-                else "ok"
+                "warning" if max_gap_ratio is not None and max_gap_ratio > 1.0 else "ok"
             ),
             "dtype_violations": (
                 "error"
@@ -595,9 +589,7 @@ def validate_extraction(
                 and variance > 0
                 else "ok"
             ),
-            "arithmetic_sequence_detected": (
-                "warning" if arithmetic_sequence_detected else "ok"
-            ),
+            "arithmetic_sequence_detected": ("warning" if arithmetic_sequence_detected else "ok"),
         }
 
         per_indicator_health.append(

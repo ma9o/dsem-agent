@@ -302,9 +302,7 @@ def test_correlation_pairs_from_marginalized_confounder():
     }
 
     id_result = check_identifiability(latent_model, measurement_model)
-    pairs = get_correlation_pairs_from_marginalization(
-        latent_model, measurement_model, id_result
-    )
+    pairs = get_correlation_pairs_from_marginalization(latent_model, measurement_model, id_result)
 
     # U confounds X and Y, both observed → should produce (X, Y, U) pair
     assert len(pairs) == 1
@@ -330,9 +328,7 @@ def test_correlation_pairs_no_marginalized_confounders():
     }
 
     id_result = check_identifiability(latent_model, measurement_model)
-    pairs = get_correlation_pairs_from_marginalization(
-        latent_model, measurement_model, id_result
-    )
+    pairs = get_correlation_pairs_from_marginalization(latent_model, measurement_model, id_result)
     assert pairs == []
 
 
@@ -362,9 +358,7 @@ def test_correlation_pairs_single_child_not_confounder():
     }
 
     id_result = check_identifiability(latent_model, measurement_model)
-    pairs = get_correlation_pairs_from_marginalization(
-        latent_model, measurement_model, id_result
-    )
+    pairs = get_correlation_pairs_from_marginalization(latent_model, measurement_model, id_result)
     assert pairs == []
 
 
@@ -421,9 +415,7 @@ def test_correlation_pairs_multiple_confounders():
     }
 
     id_result = check_identifiability(latent_model, measurement_model)
-    pairs = get_correlation_pairs_from_marginalization(
-        latent_model, measurement_model, id_result
-    )
+    pairs = get_correlation_pairs_from_marginalization(latent_model, measurement_model, id_result)
 
     # Extract just the state pairs (ignoring confounder name)
     state_pairs = {(s1, s2) for s1, s2, _ in pairs}

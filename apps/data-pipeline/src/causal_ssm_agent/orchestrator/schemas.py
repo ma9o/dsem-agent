@@ -71,14 +71,26 @@ _FREQUENCY_AGGS = {"count", "n_unique"}
 # Aggregation keywords that conflict with how_to_measure text
 _SEMANTIC_COLLISIONS: list[tuple[str, set[str], str]] = [
     # (regex pattern in how_to_measure, conflicting aggregations, explanation)
-    (r"\bcount\b|\bnumber of\b|\bhow many\b", {"mean", "median", "std", "var"},
-     "how_to_measure implies counting but aggregation computes a statistic"),
-    (r"\baverage\b|\bmean\b", {"sum", "first", "last", "count"},
-     "how_to_measure implies averaging but aggregation is not mean/median"),
-    (r"\btotal\b|\bcumulative\b|\bsum\b", {"mean", "median", "first", "last"},
-     "how_to_measure implies summing but aggregation is not sum"),
-    (r"\blast\b|\bmost recent\b|\bcurrent\b", {"mean", "sum", "median"},
-     "how_to_measure implies point-in-time but aggregation is a window statistic"),
+    (
+        r"\bcount\b|\bnumber of\b|\bhow many\b",
+        {"mean", "median", "std", "var"},
+        "how_to_measure implies counting but aggregation computes a statistic",
+    ),
+    (
+        r"\baverage\b|\bmean\b",
+        {"sum", "first", "last", "count"},
+        "how_to_measure implies averaging but aggregation is not mean/median",
+    ),
+    (
+        r"\btotal\b|\bcumulative\b|\bsum\b",
+        {"mean", "median", "first", "last"},
+        "how_to_measure implies summing but aggregation is not sum",
+    ),
+    (
+        r"\blast\b|\bmost recent\b|\bcurrent\b",
+        {"mean", "sum", "median"},
+        "how_to_measure implies point-in-time but aggregation is a window statistic",
+    ),
 ]
 
 
@@ -185,9 +197,7 @@ class Construct(BaseModel):
 
         if is_time_varying:
             if self.temporal_scale is None:
-                raise ValueError(
-                    f"Time-varying construct '{self.name}' requires temporal_scale"
-                )
+                raise ValueError(f"Time-varying construct '{self.name}' requires temporal_scale")
             if self.temporal_scale not in GRANULARITY_HOURS:
                 raise ValueError(
                     f"Invalid temporal_scale '{self.temporal_scale}' for '{self.name}'. "
@@ -278,8 +288,7 @@ class LatentModel(BaseModel):
             # Drift A handles directed temporal effects (lagged=True).
             # Diffusion GG' handles symmetric shared innovation (non-directional).
             both_endogenous = (
-                cause_construct.role == Role.ENDOGENOUS
-                and effect_construct.role == Role.ENDOGENOUS
+                cause_construct.role == Role.ENDOGENOUS and effect_construct.role == Role.ENDOGENOUS
             )
             if not edge.lagged and both_time_varying and both_endogenous:
                 raise ValueError(
@@ -669,8 +678,7 @@ def validate_latent_model(data: dict) -> tuple[LatentModel | None, list[str]]:
         # Directed lagged=False between endogenous latent constructs is not
         # supported by the current model class (linear CT-SDE).
         both_endogenous = (
-            cause_construct.role == Role.ENDOGENOUS
-            and effect_construct.role == Role.ENDOGENOUS
+            cause_construct.role == Role.ENDOGENOUS and effect_construct.role == Role.ENDOGENOUS
         )
         if not edge.lagged and both_time_varying and both_endogenous:
             errors.append(

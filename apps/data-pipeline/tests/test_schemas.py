@@ -67,9 +67,7 @@ class TestConstruct:
 
     def test_time_varying_requires_temporal_scale(self):
         """Time-varying construct requires temporal_scale."""
-        with pytest.raises(
-            ValueError, match=r"Time-varying construct .* requires temporal_scale"
-        ):
+        with pytest.raises(ValueError, match=r"Time-varying construct .* requires temporal_scale"):
             Construct(
                 name="mood",
                 description="Invalid",
@@ -511,31 +509,23 @@ class TestSemanticCollisions:
 
     def test_count_text_mean_agg_collision(self):
         """'count' in how_to_measure + mean aggregation → warning."""
-        warnings = check_semantic_collisions(
-            "Count the number of exercise sessions", "mean"
-        )
+        warnings = check_semantic_collisions("Count the number of exercise sessions", "mean")
         assert len(warnings) >= 1
         assert "counting" in warnings[0].lower() or "count" in warnings[0].lower()
 
     def test_no_collision(self):
         """Consistent text and aggregation → no warnings."""
-        warnings = check_semantic_collisions(
-            "Average daily mood rating", "mean"
-        )
+        warnings = check_semantic_collisions("Average daily mood rating", "mean")
         assert len(warnings) == 0
 
     def test_total_text_mean_agg_collision(self):
         """'total' in text + mean aggregation → warning."""
-        warnings = check_semantic_collisions(
-            "Total steps walked during the day", "mean"
-        )
+        warnings = check_semantic_collisions("Total steps walked during the day", "mean")
         assert len(warnings) >= 1
 
     def test_last_text_sum_agg_collision(self):
         """'most recent' in text + sum aggregation → warning."""
-        warnings = check_semantic_collisions(
-            "The most recent blood pressure reading", "sum"
-        )
+        warnings = check_semantic_collisions("The most recent blood pressure reading", "sum")
         assert len(warnings) >= 1
 
 

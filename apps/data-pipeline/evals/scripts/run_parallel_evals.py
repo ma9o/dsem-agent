@@ -80,12 +80,14 @@ def print_summary(logs: list[EvalLog], models_dict: dict):
                         stderr = stderr_metric.value
                     break
 
-        results.append({
-            "model": model,
-            "status": status,
-            "mean_score": mean_score,
-            "stderr": stderr,
-        })
+        results.append(
+            {
+                "model": model,
+                "status": status,
+                "mean_score": mean_score,
+                "stderr": stderr,
+            }
+        )
 
     # Sort by mean score descending (failures at bottom)
     sorted_results = sorted(
@@ -124,12 +126,17 @@ def main():
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("-i", "--input-file", help="Specific input file name")
     parser.add_argument(
-        "-q", "--question",
+        "-q",
+        "--question",
         help="Question selector (prefix ID or slug). For worker eval: single question. "
-             "For orchestrator eval: comma-separated list.",
+        "For orchestrator eval: comma-separated list.",
     )
-    parser.add_argument("--max-tasks", type=int, help="Max parallel tasks (default: max(4, num_models))")
-    parser.add_argument("--retry-attempts", type=int, default=3, help="Max retry attempts (default: 3)")
+    parser.add_argument(
+        "--max-tasks", type=int, help="Max parallel tasks (default: max(4, num_models))"
+    )
+    parser.add_argument(
+        "--retry-attempts", type=int, default=3, help="Max retry attempts (default: 3)"
+    )
     parser.add_argument("--log-dir", help="Log directory (default: logs/<eval>-<timestamp>)")
     args = parser.parse_args()
 

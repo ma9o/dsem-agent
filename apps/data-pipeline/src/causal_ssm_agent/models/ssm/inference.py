@@ -87,7 +87,9 @@ class InferenceResult:
                     entry["r_hat"] = float(val) if val.ndim == 0 else [float(v) for v in val.flat]
                 if "n_eff" in stats:
                     val = stats["n_eff"]
-                    entry["ess_bulk"] = float(val) if val.ndim == 0 else [float(v) for v in val.flat]
+                    entry["ess_bulk"] = (
+                        float(val) if val.ndim == 0 else [float(v) for v in val.flat]
+                    )
                 per_param.append(entry)
             result["per_parameter"] = per_param
         except Exception:
@@ -215,7 +217,7 @@ class InferenceResult:
             # Reshape to (n_chains, n_draws_per_chain, n_obs) for ArviZ
             n_chains = int(mcmc.num_chains) if hasattr(mcmc, "num_chains") else 1
             n_per_chain = n_draws // n_chains
-            ll_chained = ll_flat[:n_chains * n_per_chain].reshape(n_chains, n_per_chain, n_obs)
+            ll_chained = ll_flat[: n_chains * n_per_chain].reshape(n_chains, n_per_chain, n_obs)
 
             idata = az.from_numpyro(
                 mcmc,
@@ -280,7 +282,9 @@ class InferenceResult:
 
         return marginals
 
-    def get_posterior_pairs(self, max_params: int = 6, max_samples: int = 200) -> list[dict[str, Any]]:
+    def get_posterior_pairs(
+        self, max_params: int = 6, max_samples: int = 200
+    ) -> list[dict[str, Any]]:
         """Compute pairwise scatter data for joint posterior visualization.
 
         Selects up to max_params scalar parameters and returns thinned
@@ -387,26 +391,30 @@ def _build_trace_data(
         if arr.ndim == 2:
             # Scalar parameter: (n_chains, n_samples)
             thinned = arr[:, ::step]
-            traces.append({
-                "parameter": name,
-                "chains": [
-                    {"chain": int(c), "values": [float(v) for v in thinned[c]]}
-                    for c in range(n_chains)
-                ],
-            })
+            traces.append(
+                {
+                    "parameter": name,
+                    "chains": [
+                        {"chain": int(c), "values": [float(v) for v in thinned[c]]}
+                        for c in range(n_chains)
+                    ],
+                }
+            )
         elif arr.ndim >= 3:
             # Multi-dim: flatten to indexed scalars, cap at 12 elements
             flat = arr.reshape(n_chains, n_samples, -1)
             n_elem = min(flat.shape[2], 12)
             for i in range(n_elem):
                 thinned = flat[:, ::step, i]
-                traces.append({
-                    "parameter": f"{name}[{i}]",
-                    "chains": [
-                        {"chain": int(c), "values": [float(v) for v in thinned[c]]}
-                        for c in range(n_chains)
-                    ],
-                })
+                traces.append(
+                    {
+                        "parameter": f"{name}[{i}]",
+                        "chains": [
+                            {"chain": int(c), "values": [float(v) for v in thinned[c]]}
+                            for c in range(n_chains)
+                        ],
+                    }
+                )
 
     return traces
 
@@ -447,17 +455,21 @@ def _build_rank_histograms(
                 bins=n_bins,
                 range=(1, total + 1),
             )
-            chain_hists.append({
-                "chain": int(c),
-                "counts": [int(v) for v in hist],
-            })
+            chain_hists.append(
+                {
+                    "chain": int(c),
+                    "counts": [int(v) for v in hist],
+                }
+            )
 
-        histograms.append({
-            "parameter": name,
-            "n_bins": n_bins,
-            "expected_per_bin": float(n_samples / n_bins),
-            "chains": chain_hists,
-        })
+        histograms.append(
+            {
+                "parameter": name,
+                "n_bins": n_bins,
+                "expected_per_bin": float(n_samples / n_bins),
+                "chains": chain_hists,
+            }
+        )
 
     return histograms
 
@@ -705,7 +717,12 @@ def _fit_nuts(
     )
 
     rng_key = random.PRNGKey(seed)
-    mcmc.run(rng_key, observations, times, extra_fields=("diverging", "num_steps", "accept_prob", "energy"))
+    mcmc.run(
+        rng_key,
+        observations,
+        times,
+        extra_fields=("diverging", "num_steps", "accept_prob", "energy"),
+    )
 
     return InferenceResult(
         _samples=mcmc.get_samples(),

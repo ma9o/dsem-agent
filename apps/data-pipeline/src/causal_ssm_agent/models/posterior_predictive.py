@@ -845,10 +845,7 @@ def _compute_overlays(
         observed = [None if jnp.isnan(v) else float(v) for v in obs_j]
 
         # Spaghetti: individual draw trajectories for this variable
-        spaghetti = [
-            [float(v) for v in y_sim[int(idx), :, j]]
-            for idx in spag_indices
-        ]
+        spaghetti = [[float(v) for v in y_sim[int(idx), :, j]] for idx in spag_indices]
 
         overlays.append(
             PPCOverlay(

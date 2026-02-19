@@ -232,8 +232,12 @@ def measurement_model_scorer():
             metadata={
                 "n_indicators": len(result.measurement_model.get("indicators", [])),
                 "proxy_requested": result.proxy_requested,
-                "initial_non_identifiable": len(result.initial_identifiability["non_identifiable_treatments"]),
-                "final_non_identifiable": len(result.final_identifiability["non_identifiable_treatments"]),
+                "initial_non_identifiable": len(
+                    result.initial_identifiability["non_identifiable_treatments"]
+                ),
+                "final_non_identifiable": len(
+                    result.final_identifiability["non_identifiable_treatments"]
+                ),
             },
         )
 
@@ -298,7 +302,9 @@ def measurement_model_eval(
         questions: Optional comma-separated question selectors (e.g. "1,3")
     """
     return Task(
-        dataset=create_eval_dataset(n_chunks=n_chunks, seed=seed, input_file=input_file, questions=questions),
+        dataset=create_eval_dataset(
+            n_chunks=n_chunks, seed=seed, input_file=input_file, questions=questions
+        ),
         solver=[
             system_message(measurement_model.SYSTEM),
             measurement_model_solver(),
