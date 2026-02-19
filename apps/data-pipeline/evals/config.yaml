@@ -7,7 +7,7 @@
 
 # Models for orchestrator structure eval (top-tier with max reasoning)
 orchestrator_models:
-  - id: openrouter/anthropic/claude-opus-4.5
+  - id: openrouter/anthropic/claude-opus-4.6
     alias: claude
   - id: google/vertex/gemini-3-pro-preview
     alias: gemini
@@ -36,7 +36,7 @@ worker_models:
     alias: gpt-oss
 
 # Judge model for measurement adherence eval
-judge_model: openrouter/anthropic/claude-opus-4.5
+judge_model: openrouter/anthropic/claude-opus-4.6
 
 # Worker timeout in seconds (for measurement adherence eval)
 worker_timeout_seconds: 1200

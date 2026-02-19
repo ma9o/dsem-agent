@@ -21,7 +21,7 @@ uv run python evals/scripts/run_parallel_evals.py -n 10 --seed 123
 
 ```bash
 uv run inspect eval evals/single_model/eval1a_latent_model.py \
-    --model openrouter/anthropic/claude-opus-4.5
+    --model openrouter/anthropic/claude-opus-4.6
 
 # View detailed results
 uv run inspect view
