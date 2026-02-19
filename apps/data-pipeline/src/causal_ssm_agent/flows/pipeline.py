@@ -99,13 +99,16 @@ async def causal_inference_pipeline(
     preprocess_result = preprocess_raw_input(user_id)
     lines = preprocess_result["lines"]
 
-    persist_web_result("stage-0", {
-        "source_type": preprocess_result["source_type"],
-        "source_label": preprocess_result["source_label"],
-        "n_records": preprocess_result["n_records"],
-        "date_range": preprocess_result["date_range"],
-        "sample": preprocess_result["sample"],
-    })
+    persist_web_result(
+        "stage-0",
+        {
+            "source_type": preprocess_result["source_type"],
+            "source_label": preprocess_result["source_label"],
+            "n_records": preprocess_result["n_records"],
+            "date_range": preprocess_result["date_range"],
+            "sample": preprocess_result["sample"],
+        },
+    )
 
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 1a: Propose latent model (theory only, no data)
@@ -172,7 +175,9 @@ async def causal_inference_pipeline(
         if not treatments:
             gate_1b_failed = True
             if gates_overridden:
-                print("⚠️  GATE 1b OVERRIDDEN: No identifiable treatments, continuing with empty list")
+                print(
+                    "⚠️  GATE 1b OVERRIDDEN: No identifiable treatments, continuing with empty list"
+                )
 
     gate_1b_overridden = gates_overridden and gate_1b_failed
 
@@ -238,22 +243,23 @@ async def causal_inference_pipeline(
     # Persist stage-2 web data
     sample_rows = raw_data_result.head(20).to_dicts() if n_observations > 0 else []
     per_ind_counts = (
-        dict(raw_data_result.group_by("indicator").len().iter_rows())
-        if n_observations > 0
-        else {}
+        dict(raw_data_result.group_by("indicator").len().iter_rows()) if n_observations > 0 else {}
     )
-    persist_web_result("stage-2", {
-        "workers": [
-            {"worker_id": i, "status": "completed", "n_extractions": 0, "chunk_size": 0}
-            for i in range(len(worker_chunks))
-        ],
-        "combined_extractions_sample": [
-            {k: str(v) if v is not None else None for k, v in row.items()}
-            for row in sample_rows
-        ],
-        "total_extractions": n_observations,
-        "per_indicator_counts": per_ind_counts,
-    })
+    persist_web_result(
+        "stage-2",
+        {
+            "workers": [
+                {"worker_id": i, "status": "completed", "n_extractions": 0, "chunk_size": 0}
+                for i in range(len(worker_chunks))
+            ],
+            "combined_extractions_sample": [
+                {k: str(v) if v is not None else None for k, v in row.items()}
+                for row in sample_rows
+            ],
+            "total_extractions": n_observations,
+            "per_indicator_counts": per_ind_counts,
+        },
+    )
 
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 3: Validate Extraction
@@ -364,12 +370,15 @@ async def causal_inference_pipeline(
         f"- **Model built**: {model_info.get('model_built', 'unknown')}\n",
     )
 
-    persist_web_result("stage-4", {
-        "model_spec": model_spec,
-        "priors": list(stage4_result.get("priors", {}).values()),
-        "llm_trace": stage4_result.get("llm_trace"),
-        "prior_predictive_samples": stage4_result.get("prior_predictive_samples"),
-    })
+    persist_web_result(
+        "stage-4",
+        {
+            "model_spec": model_spec,
+            "priors": list(stage4_result.get("priors", {}).values()),
+            "llm_trace": stage4_result.get("llm_trace"),
+            "prior_predictive_samples": stage4_result.get("prior_predictive_samples"),
+        },
+    )
 
     # ══════════════════════════════════════════════════════════════════════════
     # Stage 4b: Parametric Identifiability Diagnostics

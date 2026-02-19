@@ -257,9 +257,7 @@ def weekly_study_priors() -> dict[str, dict]:
 class TestE2ESpecToDiscretization:
     """End-to-end: CausalSpec → SSMSpec → SSMPriors → discretize → roundtrip."""
 
-    def test_ssm_spec_structure_from_dag(
-        self, two_construct_causal_spec, two_construct_model_spec
-    ):
+    def test_ssm_spec_structure_from_dag(self, two_construct_causal_spec, two_construct_model_spec):
         """SSMModelBuilder produces correct SSMSpec from DAG structure."""
         from causal_ssm_agent.models.ssm_builder import SSMModelBuilder
 
@@ -411,9 +409,7 @@ class TestE2ESpecToDiscretization:
         drift = jnp.zeros((n, n))
         mu_diag = ssm_priors.drift_diag["mu"]
         if isinstance(mu_diag, list):
-            drift = drift.at[jnp.diag_indices(n)].set(
-                jnp.array([-abs(v) for v in mu_diag])
-            )
+            drift = drift.at[jnp.diag_indices(n)].set(jnp.array([-abs(v) for v in mu_diag]))
         else:
             drift = drift.at[jnp.diag_indices(n)].set(-abs(mu_diag))
 
@@ -483,9 +479,7 @@ class TestE2ESpecToDiscretization:
         drift = jnp.zeros((n, n))
         mu_diag = ssm_priors.drift_diag["mu"]
         if isinstance(mu_diag, list):
-            drift = drift.at[jnp.diag_indices(n)].set(
-                jnp.array([-abs(v) for v in mu_diag])
-            )
+            drift = drift.at[jnp.diag_indices(n)].set(jnp.array([-abs(v) for v in mu_diag]))
 
         if spec.drift_mask is not None:
             mu_offdiag = ssm_priors.drift_offdiag["mu"]
@@ -516,6 +510,7 @@ class TestE2ESpecToDiscretization:
         )
         # Verify via exact logm roundtrip
         from scipy.linalg import logm
+
         A_recovered = logm(np.array(F_weekly)).real / dt_weekly
         ct_rate = float(drift[0, 1])  # the CT rate we set
         assert abs(A_recovered[0, 1] - ct_rate) < 1e-6, (
@@ -543,9 +538,7 @@ class TestE2ESpecToDiscretization:
         drift = jnp.zeros((n, n))
         mu_diag = ssm_priors.drift_diag["mu"]
         if isinstance(mu_diag, list):
-            drift = drift.at[jnp.diag_indices(n)].set(
-                jnp.array([-abs(v) for v in mu_diag])
-            )
+            drift = drift.at[jnp.diag_indices(n)].set(jnp.array([-abs(v) for v in mu_diag]))
 
         if spec.drift_mask is not None:
             mu_offdiag = ssm_priors.drift_offdiag["mu"]
@@ -600,12 +593,14 @@ class TestE2ESpecToDiscretization:
 
         # Build model with minimal mock data
         n_time = 30
-        mock_data = pl.DataFrame({
-            "mood_rating": np.random.randn(n_time) * 1.5 + 5,
-            "stress_self_report": np.random.randn(n_time) * 1.5 + 5,
-            "stress_cortisol": np.random.randn(n_time) * 2 + 10,
-            "time": np.arange(n_time, dtype=float),
-        })
+        mock_data = pl.DataFrame(
+            {
+                "mood_rating": np.random.randn(n_time) * 1.5 + 5,
+                "stress_self_report": np.random.randn(n_time) * 1.5 + 5,
+                "stress_cortisol": np.random.randn(n_time) * 2 + 10,
+                "time": np.arange(n_time, dtype=float),
+            }
+        )
         model = builder.build_model(mock_data)
 
         # Sample from prior predictive
@@ -625,13 +620,9 @@ class TestE2ESpecToDiscretization:
         if drift_samples.ndim == 3:  # (n_samples, n_latent, n_latent)
             for i in range(drift_samples.shape[0]):
                 diag = jnp.diag(drift_samples[i])
-                assert jnp.all(diag < 0), (
-                    f"Sample {i} has non-negative drift diagonal: {diag}"
-                )
+                assert jnp.all(diag < 0), f"Sample {i} has non-negative drift diagonal: {diag}"
 
-    def test_different_intervals_produce_different_rates(
-        self, two_construct_model_spec
-    ):
+    def test_different_intervals_produce_different_rates(self, two_construct_model_spec):
         """Same DT beta at different study intervals → different CT rates.
 
         beta=0.3 from weekly (dt=7) → CT rate ≈ 0.043
@@ -668,13 +659,41 @@ class TestE2ESpecToDiscretization:
 
         model_spec = {
             "likelihoods": [
-                {"variable": "mood_score", "distribution": "gaussian", "link": "identity", "reasoning": ""},
-                {"variable": "stress_score", "distribution": "gaussian", "link": "identity", "reasoning": ""},
+                {
+                    "variable": "mood_score",
+                    "distribution": "gaussian",
+                    "link": "identity",
+                    "reasoning": "",
+                },
+                {
+                    "variable": "stress_score",
+                    "distribution": "gaussian",
+                    "link": "identity",
+                    "reasoning": "",
+                },
             ],
             "parameters": [
-                {"name": "rho_mood", "role": "ar_coefficient", "constraint": "unit_interval", "description": "", "search_context": ""},
-                {"name": "rho_stress", "role": "ar_coefficient", "constraint": "unit_interval", "description": "", "search_context": ""},
-                {"name": "beta_stress_mood", "role": "fixed_effect", "constraint": "none", "description": "", "search_context": ""},
+                {
+                    "name": "rho_mood",
+                    "role": "ar_coefficient",
+                    "constraint": "unit_interval",
+                    "description": "",
+                    "search_context": "",
+                },
+                {
+                    "name": "rho_stress",
+                    "role": "ar_coefficient",
+                    "constraint": "unit_interval",
+                    "description": "",
+                    "search_context": "",
+                },
+                {
+                    "name": "beta_stress_mood",
+                    "role": "fixed_effect",
+                    "constraint": "none",
+                    "description": "",
+                    "search_context": "",
+                },
             ],
             "reasoning": "",
         }
@@ -702,13 +721,22 @@ class TestE2ESpecToDiscretization:
 
         drift_mask = np.array([[True, True], [False, True]])
         ssm_spec = SSMSpec(
-            n_latent=2, n_manifest=2, latent_names=["mood", "stress"], drift_mask=drift_mask,
+            n_latent=2,
+            n_manifest=2,
+            latent_names=["mood", "stress"],
+            drift_mask=drift_mask,
         )
 
-        builder_w = SSMModelBuilder(model_spec=model_spec, priors=priors_weekly, causal_spec=causal_spec)
-        ssm_priors_w = builder_w._convert_priors_to_ssm(priors_weekly, model_spec, ssm_spec=ssm_spec)
+        builder_w = SSMModelBuilder(
+            model_spec=model_spec, priors=priors_weekly, causal_spec=causal_spec
+        )
+        ssm_priors_w = builder_w._convert_priors_to_ssm(
+            priors_weekly, model_spec, ssm_spec=ssm_spec
+        )
 
-        builder_d = SSMModelBuilder(model_spec=model_spec, priors=priors_daily, causal_spec=causal_spec)
+        builder_d = SSMModelBuilder(
+            model_spec=model_spec, priors=priors_daily, causal_spec=causal_spec
+        )
         ssm_priors_d = builder_d._convert_priors_to_ssm(priors_daily, model_spec, ssm_spec=ssm_spec)
 
         # Weekly: mixed intervals (beta=7d, rho=1d) → first-order: 0.3 / 7 ≈ 0.043
@@ -761,6 +789,7 @@ class TestExactMatrixLogConversion:
 
         # Exact (logm): gives the actual (negative) drift
         from scipy.linalg import logm
+
         A_exact = logm(Phi).real / dt
 
         # logm gives ln(rho)/dt which equals -drift_mag
@@ -774,10 +803,12 @@ class TestExactMatrixLogConversion:
         from scipy.linalg import expm, logm
 
         # Known stable drift
-        A = np.array([
-            [-0.5, 0.1],
-            [-0.2, -0.8],
-        ])
+        A = np.array(
+            [
+                [-0.5, 0.1],
+                [-0.2, -0.8],
+            ]
+        )
         dt = 1.0
 
         # Forward: CT → DT
@@ -843,10 +874,12 @@ class TestExactMatrixLogConversion:
         from scipy.linalg import logm
 
         # Embeddable: stable 2D system with positive eigenvalues
-        Phi_good = np.array([
-            [0.8, 0.1],
-            [0.05, 0.7],
-        ])
+        Phi_good = np.array(
+            [
+                [0.8, 0.1],
+                [0.05, 0.7],
+            ]
+        )
         eigs = np.linalg.eigvals(Phi_good)
         assert np.all(np.real(eigs) > 0), "Expected positive real eigenvalues"
 
@@ -857,10 +890,12 @@ class TestExactMatrixLogConversion:
         )
 
         # Non-embeddable: negative eigenvalue
-        Phi_bad = np.array([
-            [-0.5, 0.0],
-            [0.0, 0.8],
-        ])
+        Phi_bad = np.array(
+            [
+                [-0.5, 0.0],
+                [0.0, 0.8],
+            ]
+        )
         eigs_bad = np.linalg.eigvals(Phi_bad)
         has_negative = np.any(np.real(eigs_bad) <= 0)
         assert has_negative, "This matrix should have a non-positive eigenvalue"
@@ -879,10 +914,12 @@ class TestExactMatrixLogConversion:
         from scipy.linalg import expm, logm
 
         # True CT system: stress → mood with moderate coupling
-        A_true = np.array([
-            [-0.3, 0.15],   # mood: AR drift -0.3, stress coupling 0.15
-            [0.0, -0.5],    # stress: AR drift -0.5, no reverse coupling
-        ])
+        A_true = np.array(
+            [
+                [-0.3, 0.15],  # mood: AR drift -0.3, stress coupling 0.15
+                [0.0, -0.5],  # stress: AR drift -0.5, no reverse coupling
+            ]
+        )
         dt = 7.0  # weekly observation interval
 
         # Generate "observed" DT transition matrix
@@ -914,10 +951,12 @@ class TestExactMatrixLogConversion:
         Key property: F(dt1) * F(dt2) == F(dt1 + dt2) (semi-group property).
         """
         # Stable 2D drift
-        drift = jnp.array([
-            [-0.3, 0.05],
-            [-0.1, -0.5],
-        ])
+        drift = jnp.array(
+            [
+                [-0.3, 0.05],
+                [-0.1, -0.5],
+            ]
+        )
         diffusion_cov = jnp.eye(2) * 0.1
 
         # Discretize at dt=1 and dt=2
@@ -927,7 +966,9 @@ class TestExactMatrixLogConversion:
         # Semi-group property: F(2) == F(1) @ F(1)
         F1_squared = F1 @ F1
         np.testing.assert_allclose(
-            np.array(F2), np.array(F1_squared), atol=1e-5,
+            np.array(F2),
+            np.array(F1_squared),
+            atol=1e-5,
             err_msg="Semi-group property F(2dt) = F(dt)^2 violated",
         )
 
@@ -947,18 +988,41 @@ class TestExactMatrixLogConversion:
         """
         model_spec = {
             "likelihoods": [
-                {"variable": "mood_rating", "distribution": "gaussian",
-                 "link": "identity", "reasoning": ""},
-                {"variable": "stress_self_report", "distribution": "gaussian",
-                 "link": "identity", "reasoning": ""},
+                {
+                    "variable": "mood_rating",
+                    "distribution": "gaussian",
+                    "link": "identity",
+                    "reasoning": "",
+                },
+                {
+                    "variable": "stress_self_report",
+                    "distribution": "gaussian",
+                    "link": "identity",
+                    "reasoning": "",
+                },
             ],
             "parameters": [
-                {"name": "rho_mood", "role": "ar_coefficient", "constraint": "unit_interval",
-                 "description": "", "search_context": ""},
-                {"name": "rho_stress", "role": "ar_coefficient", "constraint": "unit_interval",
-                 "description": "", "search_context": ""},
-                {"name": "beta_stress_mood", "role": "fixed_effect", "constraint": "none",
-                 "description": "", "search_context": ""},
+                {
+                    "name": "rho_mood",
+                    "role": "ar_coefficient",
+                    "constraint": "unit_interval",
+                    "description": "",
+                    "search_context": "",
+                },
+                {
+                    "name": "rho_stress",
+                    "role": "ar_coefficient",
+                    "constraint": "unit_interval",
+                    "description": "",
+                    "search_context": "",
+                },
+                {
+                    "name": "beta_stress_mood",
+                    "role": "fixed_effect",
+                    "constraint": "none",
+                    "description": "",
+                    "search_context": "",
+                },
             ],
             "reasoning": "",
         }
@@ -966,28 +1030,33 @@ class TestExactMatrixLogConversion:
         # All parameters at dt=7 (weekly)
         priors = {
             "rho_mood": {
-                "distribution": "Beta", "params": {"alpha": 3.0, "beta": 2.0},
+                "distribution": "Beta",
+                "params": {"alpha": 3.0, "beta": 2.0},
                 "reference_interval_days": 7.0,
             },
             "rho_stress": {
-                "distribution": "Beta", "params": {"alpha": 2.0, "beta": 2.0},
+                "distribution": "Beta",
+                "params": {"alpha": 2.0, "beta": 2.0},
                 "reference_interval_days": 7.0,
             },
             "beta_stress_mood": {
-                "distribution": "Normal", "params": {"mu": 0.3, "sigma": 0.15},
+                "distribution": "Normal",
+                "params": {"mu": 0.3, "sigma": 0.15},
                 "reference_interval_days": 7.0,
             },
         }
 
         drift_mask = np.array([[True, True], [False, True]])
         ssm_spec = SSMSpec(
-            n_latent=2, n_manifest=2,
+            n_latent=2,
+            n_manifest=2,
             latent_names=["mood", "stress"],
             drift_mask=drift_mask,
         )
 
         builder = SSMModelBuilder(
-            model_spec=model_spec, priors=priors,
+            model_spec=model_spec,
+            priors=priors,
             causal_spec=two_construct_causal_spec,
         )
         ssm_priors = builder._convert_priors_to_ssm(priors, model_spec, ssm_spec=ssm_spec)
@@ -1008,35 +1077,58 @@ class TestExactMatrixLogConversion:
 
         # Should recover original DT values closely
         rho_mood_original = 3.0 / 5.0  # E[Beta(3,2)] = 0.6
-        rho_stress_original = 0.5      # E[Beta(2,2)] = 0.5
+        rho_stress_original = 0.5  # E[Beta(2,2)] = 0.5
         beta_original = 0.3
 
         assert abs(Phi_reconstructed[0, 0] - rho_mood_original) < 0.01, (
-            f"Roundtrip rho_mood: got {Phi_reconstructed[0,0]:.4f}, expected {rho_mood_original}"
+            f"Roundtrip rho_mood: got {Phi_reconstructed[0, 0]:.4f}, expected {rho_mood_original}"
         )
         assert abs(Phi_reconstructed[1, 1] - rho_stress_original) < 0.01, (
-            f"Roundtrip rho_stress: got {Phi_reconstructed[1,1]:.4f}, expected {rho_stress_original}"
+            f"Roundtrip rho_stress: got {Phi_reconstructed[1, 1]:.4f}, expected {rho_stress_original}"
         )
         assert abs(Phi_reconstructed[0, 1] - beta_original) < 0.01, (
-            f"Roundtrip beta: got {Phi_reconstructed[0,1]:.4f}, expected {beta_original}"
+            f"Roundtrip beta: got {Phi_reconstructed[0, 1]:.4f}, expected {beta_original}"
         )
 
     def test_edge_lag_days_populated(self, two_construct_causal_spec):
         """Builder stores edge lag metadata from causal spec during mask building."""
         model_spec = {
             "likelihoods": [
-                {"variable": "mood_rating", "distribution": "gaussian",
-                 "link": "identity", "reasoning": ""},
-                {"variable": "stress_self_report", "distribution": "gaussian",
-                 "link": "identity", "reasoning": ""},
+                {
+                    "variable": "mood_rating",
+                    "distribution": "gaussian",
+                    "link": "identity",
+                    "reasoning": "",
+                },
+                {
+                    "variable": "stress_self_report",
+                    "distribution": "gaussian",
+                    "link": "identity",
+                    "reasoning": "",
+                },
             ],
             "parameters": [
-                {"name": "rho_mood", "role": "ar_coefficient", "constraint": "unit_interval",
-                 "description": "", "search_context": ""},
-                {"name": "rho_stress", "role": "ar_coefficient", "constraint": "unit_interval",
-                 "description": "", "search_context": ""},
-                {"name": "beta_stress_mood", "role": "fixed_effect", "constraint": "none",
-                 "description": "", "search_context": ""},
+                {
+                    "name": "rho_mood",
+                    "role": "ar_coefficient",
+                    "constraint": "unit_interval",
+                    "description": "",
+                    "search_context": "",
+                },
+                {
+                    "name": "rho_stress",
+                    "role": "ar_coefficient",
+                    "constraint": "unit_interval",
+                    "description": "",
+                    "search_context": "",
+                },
+                {
+                    "name": "beta_stress_mood",
+                    "role": "fixed_effect",
+                    "constraint": "none",
+                    "description": "",
+                    "search_context": "",
+                },
             ],
             "reasoning": "",
         }
@@ -1046,7 +1138,9 @@ class TestExactMatrixLogConversion:
             causal_spec=two_construct_causal_spec,
         )
         # Building masks populates _edge_lag_days
-        builder._build_masks_from_causal_spec(["mood", "stress"], ["mood_rating", "stress_self_report"], 2, 2)
+        builder._build_masks_from_causal_spec(
+            ["mood", "stress"], ["mood_rating", "stress_self_report"], 2, 2
+        )
 
         # stress -> mood edge, both daily, lagged=True: lag = 24h = 1.0 day
         assert len(builder._edge_lag_days) == 1
@@ -1060,18 +1154,41 @@ class TestExactMatrixLogConversion:
 
         model_spec = {
             "likelihoods": [
-                {"variable": "mood_rating", "distribution": "gaussian",
-                 "link": "identity", "reasoning": ""},
-                {"variable": "stress_self_report", "distribution": "gaussian",
-                 "link": "identity", "reasoning": ""},
+                {
+                    "variable": "mood_rating",
+                    "distribution": "gaussian",
+                    "link": "identity",
+                    "reasoning": "",
+                },
+                {
+                    "variable": "stress_self_report",
+                    "distribution": "gaussian",
+                    "link": "identity",
+                    "reasoning": "",
+                },
             ],
             "parameters": [
-                {"name": "rho_mood", "role": "ar_coefficient", "constraint": "unit_interval",
-                 "description": "", "search_context": ""},
-                {"name": "rho_stress", "role": "ar_coefficient", "constraint": "unit_interval",
-                 "description": "", "search_context": ""},
-                {"name": "beta_stress_mood", "role": "fixed_effect", "constraint": "none",
-                 "description": "", "search_context": ""},
+                {
+                    "name": "rho_mood",
+                    "role": "ar_coefficient",
+                    "constraint": "unit_interval",
+                    "description": "",
+                    "search_context": "",
+                },
+                {
+                    "name": "rho_stress",
+                    "role": "ar_coefficient",
+                    "constraint": "unit_interval",
+                    "description": "",
+                    "search_context": "",
+                },
+                {
+                    "name": "beta_stress_mood",
+                    "role": "fixed_effect",
+                    "constraint": "none",
+                    "description": "",
+                    "search_context": "",
+                },
             ],
             "reasoning": "",
         }
@@ -1081,17 +1198,20 @@ class TestExactMatrixLogConversion:
             "rho_mood": {"distribution": "Beta", "params": {"alpha": 2.0, "beta": 2.0}},
             "rho_stress": {"distribution": "Beta", "params": {"alpha": 2.0, "beta": 2.0}},
             "beta_stress_mood": {
-                "distribution": "Normal", "params": {"mu": 5.0, "sigma": 1.0},
+                "distribution": "Normal",
+                "params": {"mu": 5.0, "sigma": 1.0},
             },
         }
         drift_mask = np.array([[True, True], [False, True]])
         ssm_spec = SSMSpec(
-            n_latent=2, n_manifest=2,
+            n_latent=2,
+            n_manifest=2,
             latent_names=["mood", "stress"],
             drift_mask=drift_mask,
         )
         builder = SSMModelBuilder(
-            model_spec=model_spec, priors=priors,
+            model_spec=model_spec,
+            priors=priors,
             causal_spec=two_construct_causal_spec,
         )
         # Must build masks first to populate _edge_lag_days

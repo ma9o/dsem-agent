@@ -36,7 +36,9 @@ def mcmc_result():
 
     kernel = NUTS(_toy_model)
     mcmc = MCMC(kernel, num_warmup=100, num_samples=200, num_chains=2)
-    mcmc.run(random.PRNGKey(1), x, y, extra_fields=("diverging", "num_steps", "accept_prob", "energy"))
+    mcmc.run(
+        random.PRNGKey(1), x, y, extra_fields=("diverging", "num_steps", "accept_prob", "energy")
+    )
 
     return InferenceResult(
         _samples=mcmc.get_samples(),

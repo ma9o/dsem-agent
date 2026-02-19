@@ -292,7 +292,6 @@ class TestDefaultPriors:
         assert prior.distribution == "Normal"
 
 
-
 # --- AutoElicit Tests ---
 
 
@@ -303,8 +302,7 @@ class TestAutoElicit:
         """GMM with unimodal data falls back to simple pooling."""
         # All samples identical -> GMM should select K=1 -> simple pooling
         samples = [
-            RawPriorSample(paraphrase_id=i, mu=0.3, sigma=0.1, reasoning="")
-            for i in range(5)
+            RawPriorSample(paraphrase_id=i, mu=0.3, sigma=0.1, reasoning="") for i in range(5)
         ]
 
         result = aggregate_prior_samples(samples)

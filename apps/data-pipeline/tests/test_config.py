@@ -265,9 +265,7 @@ class TestGetGenerateConfigReadsConfig:
     """Verify LLM config is wired through to get_generate_config."""
 
     def test_get_generate_config_reads_config(self):
-        custom_llm = LLMConfig(
-            max_tokens=1024, timeout=60, reasoning_effort="low"
-        )
+        custom_llm = LLMConfig(max_tokens=1024, timeout=60, reasoning_effort="low")
         mock_cfg = MagicMock()
         mock_cfg.llm = custom_llm
 
