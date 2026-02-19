@@ -4,17 +4,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { StageRunStatus } from "@/lib/hooks/use-run-events";
 import type { GateOverride } from "@causal-ssm/api-types";
 import { AlertCircle, ChevronDown } from "lucide-react";
+import { motion } from "motion/react";
+import prettyMs from "pretty-ms";
 import { type ReactNode, useEffect, useState } from "react";
 import { StageHeader } from "./stage-header";
-
-function formatElapsed(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  const seconds = ms / 1000;
-  if (seconds < 60) return `${seconds.toFixed(1)}s`;
-  const minutes = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${minutes}m ${secs}s`;
-}
 
 export function StageSection({
   id,
@@ -56,9 +49,12 @@ export function StageSection({
   const isCollapsible = status === "completed" && !gateFailed;
 
   return (
-    <section
+    <motion.section
       id={id}
-      className={`animate-fade-in-up scroll-mt-28 rounded-lg border bg-card p-4 shadow-sm sm:p-6 ${
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: "easeOut" }}
+      className={`scroll-mt-28 rounded-lg border bg-card p-4 shadow-sm sm:p-6 ${
         gateFailed ? "border-destructive/40" : ""
       }`}
     >
@@ -73,7 +69,7 @@ export function StageSection({
           <div className="flex shrink-0 items-center gap-2 pt-1">
             {elapsedMs !== undefined && (
               <span className="text-xs text-muted-foreground/60 font-mono">
-                {formatElapsed(elapsedMs)}
+                {prettyMs(elapsedMs)}
               </span>
             )}
             <ChevronDown
@@ -83,22 +79,37 @@ export function StageSection({
         )}
       </div>
       {status === "running" && (
-        <div className="animate-fade-in mt-4 space-y-3">
+        <motion.div
+          className="mt-4 space-y-3"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
+        >
           {loadingHint && (
             <p className="text-sm text-muted-foreground">{loadingHint}</p>
           )}
           <Skeleton className="h-4 w-3/4" />
           <Skeleton className="h-4 w-1/2" />
           <Skeleton className="h-32 w-full" />
-        </div>
+        </motion.div>
       )}
       {status === "completed" && !collapsed && (
-        <div className="animate-fade-in mt-4 space-y-4">
+        <motion.div
+          className="mt-4 space-y-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
+        >
           {children}
-        </div>
+        </motion.div>
       )}
       {status === "failed" && (
-        <div className="animate-fade-in mt-4 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+        <motion.div
+          className="mt-4 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
+        >
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
           <div className="text-sm">
             <p className="font-medium text-destructive">Stage failed</p>
@@ -106,8 +117,8 @@ export function StageSection({
               Check pipeline logs for details. This may be a transient error.
             </p>
           </div>
-        </div>
+        </motion.div>
       )}
-    </section>
+    </motion.section>
   );
 }
