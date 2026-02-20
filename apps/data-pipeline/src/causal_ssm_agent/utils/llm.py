@@ -3,9 +3,11 @@
 import dataclasses
 import json
 import logging
+import tempfile
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from inspect_ai.model import (
@@ -139,6 +141,97 @@ def _build_trace(all_messages: list["ChatMessage"], output: ModelOutput) -> LLMT
 
 
 # ---------------------------------------------------------------------------
+# Live trace persistence (intermediate disk writes)
+# ---------------------------------------------------------------------------
+
+_LIVE_TRACE_DIR = Path(tempfile.gettempdir()) / "causal-pipeline-traces"
+
+
+def get_live_trace_dir() -> Path:
+    """Return the directory where live traces are written.
+
+    Live traces are partial JSON files updated after each LLM turn,
+    allowing agents to inspect intermediate conversation state while
+    a stage is still running.
+
+    Files are named ``{label}-live.json`` within a flow-run subdirectory.
+    """
+    return _LIVE_TRACE_DIR
+
+
+def _persist_partial_trace(
+    messages: list["ChatMessage"],
+    trace_path: Path,
+    label: str,
+    turn: int,
+    elapsed: float,
+) -> None:
+    """Write accumulated messages to disk as a partial trace.
+
+    Overwrites the file each turn so the agent always reads the latest state.
+    Failures are logged but never bubble up — this is best-effort observability.
+    """
+    try:
+        trace_path.parent.mkdir(parents=True, exist_ok=True)
+        partial = {
+            "label": label,
+            "turn": turn,
+            "elapsed_seconds": round(elapsed, 1),
+            "status": "running",
+            "messages": [dataclasses.asdict(_chat_message_to_trace(m)) for m in messages],
+        }
+        trace_path.write_text(json.dumps(partial, indent=2, default=str))
+    except Exception:
+        logger.debug("Failed to write partial trace to %s", trace_path, exc_info=True)
+
+
+def make_live_trace_path(stage_id: str) -> Path:
+    """Create a path for live trace persistence.
+
+    Uses the Prefect flow run ID when running inside a flow, otherwise
+    falls back to a timestamp-based directory.
+
+    Args:
+        stage_id: Stage identifier (e.g. "stage-1a", "stage-4")
+
+    Returns:
+        Path like ``/tmp/causal-pipeline-traces/{run_id}/{stage_id}-live.json``
+    """
+    run_id = None
+    try:
+        from prefect.runtime import flow_run
+
+        run_id = flow_run.id
+    except Exception:
+        pass
+    if run_id is None:
+        run_id = time.strftime("%Y%m%d-%H%M%S")
+    return _LIVE_TRACE_DIR / str(run_id) / f"{stage_id}-live.json"
+
+
+def _finalize_live_trace(
+    trace_path: Path | None,
+    messages: list["ChatMessage"],
+    elapsed: float,
+) -> None:
+    """Mark a live trace file as completed.
+
+    Overwrites the running trace with a final snapshot that has status="completed".
+    """
+    if trace_path is None:
+        return
+    try:
+        final = {
+            "status": "completed",
+            "elapsed_seconds": round(elapsed, 1),
+            "messages": [dataclasses.asdict(_chat_message_to_trace(m)) for m in messages],
+        }
+        trace_path.write_text(json.dumps(final, indent=2, default=str))
+    except Exception:
+        logger.debug("Failed to finalize live trace at %s", trace_path, exc_info=True)
+
+
+# ---------------------------------------------------------------------------
 # Type aliases for generate functions (unified)
 # ---------------------------------------------------------------------------
 
@@ -192,6 +285,7 @@ def make_generate_fn(
     model: Model,
     config: GenerateConfig | None = None,
     trace_capture: dict | None = None,
+    trace_path: Path | None = None,
 ) -> GenerateFn:
     """Create a generate function for LLM calls.
 
@@ -202,6 +296,8 @@ def make_generate_fn(
         model: The model to use for generation
         config: Optional generation config (uses get_generate_config() if None)
         trace_capture: Optional dict for capturing the LLM trace
+        trace_path: Optional path for live trace persistence (partial JSON written
+            after each LLM turn so agents can inspect mid-run state)
 
     Returns:
         An async function that handles multi-turn generation with tools and follow-ups
@@ -224,6 +320,7 @@ def make_generate_fn(
                 tools=tools or [],
                 config=config,
                 trace_capture=trace_capture,
+                trace_path=trace_path,
             )
         else:
             response = await model.generate(chat_messages, config=config)
@@ -579,6 +676,7 @@ async def _run_tool_loop(
     label: str = "tool",
     max_turns: int = MAX_TOOL_LOOP_TURNS,
     warn_turns: int = WARN_TOOL_LOOP_TURNS,
+    trace_path: Path | None = None,
 ) -> tuple[list["ChatMessage"], ModelOutput]:
     """Run a tool loop with per-turn logging and an infinite-loop guard.
 
@@ -586,6 +684,7 @@ async def _run_tool_loop(
     - INFO log per turn (tokens, timing, tool calls, content preview)
     - WARNING when turn count hits warn_turns
     - RuntimeError when turn count exceeds max_turns
+    - Optional partial trace written to disk after each turn
     """
     t0 = time.monotonic()
     turn = 0
@@ -631,7 +730,11 @@ async def _run_tool_loop(
             messages.extend(tool_messages)
             if tool_output is not None:
                 output = tool_output
-        else:
+
+        if trace_path is not None:
+            _persist_partial_trace(messages, trace_path, label, turn, time.monotonic() - t0)
+
+        if not output.message.tool_calls:
             elapsed_total = time.monotonic() - t0
             logger.info("[%s] completed: %d turns in %.1fs", label, turn, elapsed_total)
             return messages, output
@@ -650,6 +753,7 @@ async def multi_turn_generate(
     follow_up_tools: list[Tool] | None = None,
     config: GenerateConfig | None = None,
     trace_capture: dict | None = None,
+    trace_path: Path | None = None,
 ) -> str:
     """
     Run a multi-turn conversation with optional tool use.
@@ -669,6 +773,8 @@ async def multi_turn_generate(
         config: Optional generation config
         trace_capture: Optional dict; when provided, the full LLMTrace is stored
             under ``trace_capture["trace"]`` before returning.
+        trace_path: Optional path; when provided, a partial JSON trace is written
+            to disk after each LLM turn for live observability.
 
     Returns:
         The final completion string
@@ -691,6 +797,7 @@ async def multi_turn_generate(
             tools,
             config,
             label="initial",
+            trace_path=trace_path,
         )
         last_nonempty = output.completion
 
@@ -706,6 +813,7 @@ async def multi_turn_generate(
                     follow_up_tools,
                     config,
                     label=f"follow-up-{i + 1}",
+                    trace_path=trace_path,
                 )
             else:
                 t_fu = time.monotonic()
@@ -719,6 +827,11 @@ async def multi_turn_generate(
                     len(follow_ups),
                     _summarize_output(output, elapsed_fu),
                 )
+                # Persist after plain follow-up turns too
+                if trace_path is not None:
+                    _persist_partial_trace(
+                        messages, trace_path, f"follow-up-{i + 1}", 1, time.monotonic() - t0
+                    )
 
             if output.completion and output.completion.strip():
                 last_nonempty = output.completion
@@ -728,6 +841,7 @@ async def multi_turn_generate(
 
         elapsed_total = time.monotonic() - t0
         logger.info("multi_turn_generate completed in %.1fs", elapsed_total)
+        _finalize_live_trace(trace_path, messages, elapsed_total)
         return last_nonempty
     else:
         # Simple generation without tools
@@ -759,6 +873,7 @@ async def multi_turn_generate(
 
         elapsed_total = time.monotonic() - t0
         logger.info("multi_turn_generate completed in %.1fs", elapsed_total)
+        _finalize_live_trace(trace_path, messages, elapsed_total)
         return last_nonempty
 
 

@@ -85,12 +85,18 @@ async def propose_model_task(
         propose_model_spec,
     )
     from causal_ssm_agent.utils.config import get_config
-    from causal_ssm_agent.utils.llm import attach_trace, make_orchestrator_generate_fn
+    from causal_ssm_agent.utils.llm import (
+        attach_trace,
+        make_live_trace_path,
+        make_orchestrator_generate_fn,
+    )
 
     config = get_config()
     model = get_model(config.stage4_prior_elicitation.model)
     trace_capture: dict = {}
-    generate = make_orchestrator_generate_fn(model, trace_capture=trace_capture)
+    generate = make_orchestrator_generate_fn(
+        model, trace_capture=trace_capture, trace_path=make_live_trace_path("stage-4")
+    )
 
     data_summary = build_raw_data_summary(raw_data)
 
