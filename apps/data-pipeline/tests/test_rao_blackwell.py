@@ -354,6 +354,63 @@ class TestObsWeights:
         w = _obs_weight_quadrature(y, m, P, H, d, obs_mask, "gamma", params)
         assert jnp.isfinite(w)
 
+    def test_bernoulli_probit_weight_finite(self):
+        """Bernoulli probit obs weight should be finite."""
+        m = jnp.array([0.5, 0.3])
+        P = jnp.eye(2) * 0.3
+        H = jnp.eye(2)
+        d = jnp.zeros(2)
+        y = jnp.array([1.0, 0.0])
+        obs_mask = jnp.ones(2, dtype=bool)
+        params = {"manifest_cov": jnp.eye(2) * 0.1}
+
+        w = _obs_weight_quadrature(y, m, P, H, d, obs_mask, "bernoulli", params, link="probit")
+        assert jnp.isfinite(w), f"Bernoulli probit weight = {w}"
+
+    def test_gamma_inverse_weight_finite(self):
+        """Gamma inverse obs weight should be finite."""
+        m = jnp.array([2.0, 1.5])  # positive eta → mean = 1/eta
+        P = jnp.eye(2) * 0.1
+        H = jnp.eye(2)
+        d = jnp.zeros(2)
+        y = jnp.array([0.5, 0.8])  # positive observations
+        obs_mask = jnp.ones(2, dtype=bool)
+        params = {"obs_shape": 2.0}
+
+        w = _obs_weight_quadrature(y, m, P, H, d, obs_mask, "gamma", params, link="inverse")
+        assert jnp.isfinite(w), f"Gamma inverse weight = {w}"
+
+    def test_beta_probit_weight_finite(self):
+        """Beta probit obs weight should be finite."""
+        m = jnp.array([0.3, -0.2])
+        P = jnp.eye(2) * 0.3
+        H = jnp.eye(2)
+        d = jnp.zeros(2)
+        y = jnp.array([0.3, 0.7])  # in (0, 1)
+        obs_mask = jnp.ones(2, dtype=bool)
+        params = {"obs_concentration": 10.0}
+
+        w = _obs_weight_quadrature(y, m, P, H, d, obs_mask, "beta", params, link="probit")
+        assert jnp.isfinite(w), f"Beta probit weight = {w}"
+
+    def test_probit_weight_differs_from_logit(self):
+        """Probit and logit links should give different quadrature weights."""
+        m = jnp.array([1.0, -0.5])
+        P = jnp.eye(2) * 0.3
+        H = jnp.eye(2)
+        d = jnp.zeros(2)
+        y = jnp.array([1.0, 0.0])
+        obs_mask = jnp.ones(2, dtype=bool)
+        params = {"manifest_cov": jnp.eye(2) * 0.1}
+
+        w_logit = _obs_weight_quadrature(y, m, P, H, d, obs_mask, "bernoulli", params)
+        w_probit = _obs_weight_quadrature(
+            y, m, P, H, d, obs_mask, "bernoulli", params, link="probit"
+        )
+        assert w_logit != w_probit, (
+            f"Logit ({w_logit}) and probit ({w_probit}) should differ at non-zero eta"
+        )
+
     def test_weight_varies_with_mean(self):
         """Obs weight should change when predicted mean changes."""
         P = jnp.eye(2) * 0.3

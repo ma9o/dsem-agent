@@ -343,6 +343,82 @@ class TestPPCDataclasses:
         assert r.to_dict()["overall_passed"] is False
 
 
+class TestLinkFunctionSimulation:
+    """Tests for forward simulation with non-default link functions."""
+
+    def test_forward_simulate_bernoulli_probit(self):
+        """Probit Bernoulli produces valid binary-range observations."""
+        samples = _make_samples(n_draws=10, n_latent=2, n_manifest=2, obs_sd=0.1)
+        times = jnp.arange(15, dtype=float)
+
+        y_sim = simulate_posterior_predictive(
+            samples=samples,
+            times=times,
+            manifest_dist="bernoulli",
+            manifest_links=["probit", "probit"],
+            n_subsample=10,
+        )
+
+        assert y_sim.shape == (10, 15, 2)
+        assert jnp.all(jnp.isfinite(y_sim))
+        # Bernoulli samples should be 0 or 1
+        assert jnp.all((y_sim == 0) | (y_sim == 1))
+
+    def test_forward_simulate_gamma_inverse(self):
+        """Inverse Gamma produces positive observations."""
+        samples = _make_samples(n_draws=10, n_latent=2, n_manifest=2)
+        samples["obs_shape"] = jnp.array(2.0)
+        times = jnp.arange(15, dtype=float)
+
+        y_sim = simulate_posterior_predictive(
+            samples=samples,
+            times=times,
+            manifest_dist="gamma",
+            manifest_links=["inverse", "inverse"],
+            n_subsample=10,
+        )
+
+        assert y_sim.shape == (10, 15, 2)
+        assert jnp.all(jnp.isfinite(y_sim))
+        assert jnp.all(y_sim > 0)
+
+    def test_forward_simulate_beta_probit(self):
+        """Probit Beta produces observations in (0, 1)."""
+        samples = _make_samples(n_draws=10, n_latent=2, n_manifest=2, obs_sd=0.1)
+        times = jnp.arange(15, dtype=float)
+
+        y_sim = simulate_posterior_predictive(
+            samples=samples,
+            times=times,
+            manifest_dist="beta",
+            manifest_links=["probit", "probit"],
+            n_subsample=10,
+        )
+
+        assert y_sim.shape == (10, 15, 2)
+        assert jnp.all(jnp.isfinite(y_sim))
+        # Beta samples should be in [0, 1] (clipping may produce boundary values)
+        assert jnp.all((y_sim >= 0) & (y_sim <= 1))
+
+    def test_mixed_links_dispatch(self):
+        """Mixed distribution with non-default links uses correct dispatch."""
+        samples = _make_samples(n_draws=10, n_latent=2, n_manifest=2, obs_sd=0.1)
+        times = jnp.arange(10, dtype=float)
+
+        # Channel 0: Bernoulli probit, Channel 1: Bernoulli logit (default)
+        y_sim = simulate_posterior_predictive(
+            samples=samples,
+            times=times,
+            manifest_dists=["bernoulli", "bernoulli"],
+            manifest_links=["probit", "logit"],
+            n_subsample=10,
+        )
+
+        assert y_sim.shape == (10, 10, 2)
+        assert jnp.all(jnp.isfinite(y_sim))
+        assert jnp.all((y_sim == 0) | (y_sim == 1))
+
+
 class TestRunPPC:
     """Integration test for run_posterior_predictive_checks."""
 
