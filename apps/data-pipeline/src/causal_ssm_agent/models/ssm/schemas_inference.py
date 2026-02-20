@@ -167,6 +167,8 @@ class ParameterIdentification(BaseModel):
     name: str
     classification: ParameterClassification
     contraction_ratio: float | None = None
+    profile_x: list[float] | None = None
+    profile_ll: list[float] | None = None
 
 
 class ParametricIdSummary(BaseModel):
@@ -184,6 +186,7 @@ class ParametricIdResult(BaseModel):
     t_rule: TRuleResult | None = None
     summary: ParametricIdSummary | None = None
     per_param_classification: list[ParameterIdentification] | None = None
+    threshold: float | None = None
     error: str | None = None
 
 

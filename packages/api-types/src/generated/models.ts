@@ -502,6 +502,7 @@ export interface ParametricIdResult {
   t_rule?: TRuleResult | null;
   summary?: ParametricIdSummary | null;
   per_param_classification?: ParameterIdentification[] | null;
+  threshold?: number | null;
   error?: string | null;
 }
 /**
@@ -540,6 +541,8 @@ export interface ParameterIdentification {
   name: string;
   classification: "identified" | "practically_unidentifiable" | "structurally_unidentifiable";
   contraction_ratio?: number | null;
+  profile_x?: number[] | null;
+  profile_ll?: number[] | null;
 }
 export interface Stage5Contract {
   intervention_results: TreatmentEffectContract[];

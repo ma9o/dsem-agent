@@ -106,6 +106,21 @@ def parametric_id_task(
         result.print_report()
         summary = result.summary()
 
+        # Build per-parameter classifications with profile curve data
+        per_param = []
+        for name in result.parameter_names:
+            profile = result.parameter_profiles[name]
+            classification = summary[name]
+            peak_ll = float(jnp.max(profile["profile_ll"]))
+            per_param.append(
+                {
+                    "name": name,
+                    "classification": classification,
+                    "profile_x": [float(v) for v in profile["grid_con"]],
+                    "profile_ll": [float(v) - peak_ll for v in profile["profile_ll"]],
+                }
+            )
+
         return {
             "checked": True,
             "t_rule": {
@@ -114,6 +129,8 @@ def parametric_id_task(
                 "n_moments": t_rule.n_moments,
             },
             "summary": summary,
+            "per_param_classification": per_param,
+            "threshold": float(result.threshold),
             "n_parameters": len(result.parameter_names),
             "parameter_names": result.parameter_names,
         }

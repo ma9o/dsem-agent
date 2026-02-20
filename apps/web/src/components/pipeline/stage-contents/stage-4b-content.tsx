@@ -17,7 +17,7 @@ export default function Stage4bContent({ data }: { data: Stage4bData }) {
       )}
       {pid.t_rule && <TRuleCard tRule={pid.t_rule} />}
       {pid.per_param_classification && pid.per_param_classification.length > 0 && (
-        <WeakParamsList params={pid.per_param_classification} />
+        <WeakParamsList params={pid.per_param_classification} threshold={pid.threshold} />
       )}
     </div>
   );
