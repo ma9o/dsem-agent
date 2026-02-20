@@ -14,18 +14,28 @@ Use when:
 - This is the universal backend for all SSM inference
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import jax
 import jax.numpy as jnp
 import jax.random as random
 import jax.scipy.linalg as jla
 
-from causal_ssm_agent.models.likelihoods.base import (
-    CTParams,
-    InitialStateParams,
-    MeasurementParams,
+from causal_ssm_agent.models.likelihoods.kernels import (
+    build_observation_kernel,
+    build_transition_kernel,
 )
-from causal_ssm_agent.models.likelihoods.emissions import get_emission_fn
 from causal_ssm_agent.models.ssm.discretization import discretize_system, discretize_system_batched
+
+if TYPE_CHECKING:
+    from causal_ssm_agent.models.likelihoods.base import (
+        CTParams,
+        InitialStateParams,
+        MeasurementParams,
+    )
+    from causal_ssm_agent.orchestrator.schemas_model import DistributionFamily, LinkFunction
 
 # =============================================================================
 # JAX-native systematic resampling (gradient-safe on all platforms)
@@ -72,18 +82,16 @@ class SSMAdapter:
     Maps the continuous-time structure (drift, diffusion, measurement) into
     initial_sample, transition_sample, and observation_log_prob.
 
-    Supports non-Gaussian observation and process noise families:
-        - manifest_dist: "gaussian", "poisson", "student_t", "gamma"
-        - diffusion_dist: "gaussian", "student_t"
+    Used by the bootstrap PF fallback (non-Gaussian dynamics, block_rb disabled).
     """
 
     def __init__(
         self,
         n_latent: int,
         n_manifest: int,
-        manifest_dist: str = "gaussian",
-        diffusion_dist: str = "gaussian",
-        manifest_link: str = "identity",
+        manifest_dist: DistributionFamily,
+        diffusion_dist: DistributionFamily,
+        manifest_link: LinkFunction,
     ):
         self.n_latent = n_latent
         self.n_manifest = n_manifest
@@ -130,15 +138,17 @@ class SSMAdapter:
     ) -> float:
         """Compute log p(y | x) under measurement model.
 
-        Delegates to canonical emission functions in emissions.py.
+        Builds an ObservationKernel on-the-fly for the bootstrap PF path.
         """
         H = params["lambda_mat"]
         d = params["manifest_means"]
         R = params["manifest_cov"]
         mask_float = obs_mask.astype(jnp.float32)
         extra = {k: v for k, v in params.items() if k.startswith("obs_")}
-        emission_fn = get_emission_fn(self.manifest_dist, extra, link=self.manifest_link)
-        return emission_fn(y, x, H, d, R, mask_float)
+        obs_kernel = build_observation_kernel(
+            self.manifest_dist, self.manifest_link, extra, manifest_cov=R
+        )
+        return obs_kernel.emission_fn(y, x, H, d, R, mask_float)
 
 
 # =============================================================================
@@ -158,8 +168,8 @@ class ParticleLikelihood:
         n_manifest: Number of manifest indicators
         n_particles: Number of particles (default 200)
         rng_key: Fixed JAX random key for deterministic PF
-        manifest_dist: Observation noise family
-        diffusion_dist: Process noise family
+        manifest_dist: Observation noise family (DistributionFamily enum)
+        diffusion_dist: Process noise family (DistributionFamily enum or list)
         ess_threshold: ESS/N threshold for resampling
     """
 
@@ -169,11 +179,11 @@ class ParticleLikelihood:
         n_manifest: int,
         n_particles: int = 200,
         rng_key: jax.Array | None = None,
-        manifest_dist: str = "gaussian",
-        diffusion_dist: str | list[str] = "gaussian",
+        manifest_dist: DistributionFamily | str = "gaussian",
+        diffusion_dist: DistributionFamily | str | list = "gaussian",
         ess_threshold: float = 0.5,
         block_rb: bool = True,
-        manifest_link: str = "identity",
+        manifest_link: LinkFunction | str = "identity",
     ):
         self.n_latent = n_latent
         self.n_manifest = n_manifest
@@ -186,33 +196,31 @@ class ParticleLikelihood:
         self._block_rb = block_rb
 
         # Normalize diffusion_dist to per-variable list
-        if isinstance(diffusion_dist, str):
+        if isinstance(diffusion_dist, (str, type(manifest_dist))):
+            # Scalar — broadcast to all latents
             self.diffusion_dist = diffusion_dist
             self._per_var_diffusion = [diffusion_dist] * n_latent
         else:
             self._per_var_diffusion = list(diffusion_dist)
             # Determine dispatch mode
-            unique = set(self._per_var_diffusion)
+            unique = {str(d) for d in self._per_var_diffusion}
             if unique == {"gaussian"}:
                 self.diffusion_dist = "gaussian"
             elif "gaussian" not in unique:
-                # All non-Gaussian — pick the first non-Gaussian type
                 self.diffusion_dist = self._per_var_diffusion[0]
             else:
                 self.diffusion_dist = "mixed"
 
         # When block_rb is disabled and mixed, collapse to first non-Gaussian
-        # type to skip block RBPF dispatch. Gaussian stays Gaussian — the
-        # dispatch in compute_log_likelihood checks _block_rb to skip RBPF.
         if not block_rb and self.diffusion_dist == "mixed":
-            s_types = [d for d in self._per_var_diffusion if d != "gaussian"]
+            s_types = [d for d in self._per_var_diffusion if str(d) != "gaussian"]
             self.diffusion_dist = s_types[0] if s_types else "student_t"
 
         # Pre-compute partition indices for mixed mode (static, not traced)
         if self.diffusion_dist == "mixed":
             from causal_ssm_agent.models.likelihoods.block_rb import partition_indices
 
-            self._g_idx, self._s_idx = partition_indices(self._per_var_diffusion)
+            self._g_idx, self._s_idx = partition_indices([str(d) for d in self._per_var_diffusion])
             s_types = [self._per_var_diffusion[int(i)] for i in self._s_idx]
             self._diffusion_dist_s = s_types[0] if s_types else "student_t"
 
@@ -251,18 +259,13 @@ class ParticleLikelihood:
         clean_obs = jnp.nan_to_num(observations, nan=0.0)
 
         # --- Pre-discretize CT→DT for all T timesteps (once, not per particle) ---
-        # This is the key optimization: matrix exponential + Lyapunov solve is
-        # O(n³) per timestep and identical across particles. Pre-computing avoids
-        # redundant work inside propagate_sample.
         Ad, Qd, cd = discretize_system_batched(
             ct_params.drift, ct_params.diffusion_cov, ct_params.cint, time_intervals
         )
         if cd is None:
             cd = jnp.zeros((len(time_intervals), n))
 
-        # Pre-compute Cholesky of Qd for all timesteps (once, not per particle).
-        # cuthbert vmaps propagate_sample over N_PF particles with model_inputs
-        # broadcast — without this, each particle redundantly recomputes Cholesky.
+        # Pre-compute Cholesky of Qd for all timesteps
         jitter = jnp.eye(n) * 1e-6
         chol_Qd = jax.vmap(lambda Q: jla.cholesky(Q + jitter, lower=True))(Qd)
 
@@ -277,49 +280,51 @@ class ParticleLikelihood:
         if extra_params:
             params.update(extra_params)
 
+        # --- Build kernels once ---
+        from causal_ssm_agent.orchestrator.schemas_model import DistributionFamily, LinkFunction
+
+        dist = DistributionFamily(self.manifest_dist)
+        link = LinkFunction(self.manifest_link)
+        obs_extra = {k: v for k, v in params.items() if k.startswith("obs_")}
+        obs_kernel = build_observation_kernel(
+            dist, link, obs_extra, manifest_cov=measurement_params.manifest_cov
+        )
+
         # Build Feynman-Kac model closures.
-        # When dynamics are Gaussian and block_rb is enabled, use
-        # Rao-Blackwellized callbacks (Kalman filter inside each particle).
-        # Mixed + block_rb: block RBPF marginalizes Gaussian subset, samples rest.
-        # Otherwise fall back to bootstrap PF callbacks.
         if self.diffusion_dist == "gaussian" and self._block_rb:
             from causal_ssm_agent.models.likelihoods.rao_blackwell import make_rb_callbacks
 
             init_sample, propagate_sample, log_potential = make_rb_callbacks(
-                n_latent=n,
-                n_manifest=self.n_manifest,
-                manifest_dist=self.manifest_dist,
                 params=params,
-                extra_params=extra_params or {},
                 m0=initial_state.mean,
                 P0=initial_state.cov,
-                manifest_link=self.manifest_link,
+                obs_kernel=obs_kernel,
             )
         elif self.diffusion_dist == "mixed":
             from causal_ssm_agent.models.likelihoods.block_rb import make_block_rb_callbacks
 
-            block_extra = dict(extra_params or {})
-            block_extra["diffusion_dist_s"] = self._diffusion_dist_s
+            trans_extra = {k: v for k, v in params.items() if k.startswith("proc_")}
+            trans_kernel = build_transition_kernel(
+                DistributionFamily(self._diffusion_dist_s), trans_extra
+            )
 
             init_sample, propagate_sample, log_potential = make_block_rb_callbacks(
                 n_latent=n,
-                n_manifest=self.n_manifest,
-                manifest_dist=self.manifest_dist,
                 params=params,
-                extra_params=block_extra,
                 m0=initial_state.mean,
                 P0=initial_state.cov,
                 g_idx=self._g_idx,
                 s_idx=self._s_idx,
-                manifest_link=self.manifest_link,
+                obs_kernel=obs_kernel,
+                trans_kernel=trans_kernel,
             )
         else:
             adapter = SSMAdapter(
                 self.n_latent,
                 self.n_manifest,
-                self.manifest_dist,
-                self.diffusion_dist,
-                manifest_link=self.manifest_link,
+                dist,
+                DistributionFamily(self.diffusion_dist),
+                manifest_link=link,
             )
 
             def init_sample(key, _model_inputs):
@@ -345,9 +350,6 @@ class ParticleLikelihood:
                 return adapter.observation_log_prob(obs, state, params, mask)
 
         # Build model_inputs with leading temporal dimension T.
-        # cuthbert convention: model_inputs[0] → init_prepare (sample particles
-        # and weight against obs[0]); model_inputs[k] for k=1..T-1 → propagate
-        # with dt[k] and weight against obs[k].
         model_inputs = {
             "observation": clean_obs,
             "obs_mask": obs_mask.astype(jnp.float32),

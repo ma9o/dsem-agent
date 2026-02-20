@@ -19,19 +19,24 @@ Cross-coupling:
 - Shared observations: quadrature marginalizes over G-block only, fixing x_s.
 """
 
-from typing import NamedTuple
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, NamedTuple
 
 import jax
 import jax.numpy as jnp
 import jax.random as random
 import jax.scipy.linalg as jla
 
-from causal_ssm_agent.models.likelihoods.emissions import get_emission_fn
 from causal_ssm_agent.models.likelihoods.rao_blackwell import (
     _kalman_predict,
+    _kalman_update_gaussian,
     _linearized_update,
     _unscented_sigma_points,
 )
+
+if TYPE_CHECKING:
+    from causal_ssm_agent.models.likelihoods.kernels import ObservationKernel, TransitionKernel
 
 # =============================================================================
 # BlockRBState — hybrid state carried per particle
@@ -147,17 +152,15 @@ def extract_obs_subblocks(
 
 def make_block_rb_callbacks(
     n_latent: int,
-    n_manifest: int,  # noqa: ARG001
-    manifest_dist: str,
     params: dict,
-    extra_params: dict,
     m0: jnp.ndarray,
     P0: jnp.ndarray,
     g_idx: jnp.ndarray,
     s_idx: jnp.ndarray,
+    obs_kernel: ObservationKernel,
+    trans_kernel: TransitionKernel,
     quadrature: str = "unscented",
     n_quadrature: int = 5,
-    manifest_link: str = "identity",
 ):
     """Build Feynman-Kac callbacks for block Rao-Blackwell particle filter.
 
@@ -167,14 +170,13 @@ def make_block_rb_callbacks(
 
     Args:
         n_latent: Total latent state dimension.
-        n_manifest: Observation dimension.
-        manifest_dist: Observation distribution.
         params: Dict with lambda_mat, manifest_means, manifest_cov, etc.
-        extra_params: Dict with obs_df, obs_shape, proc_df, etc.
         m0: Initial state mean (n_latent,).
         P0: Initial state covariance (n_latent, n_latent).
         g_idx: Indices of Gaussian (Kalman-marginalized) variables.
         s_idx: Indices of sampled (bootstrap PF) variables.
+        obs_kernel: Pre-resolved observation model.
+        trans_kernel: Pre-resolved transition noise model (for sampled block).
         quadrature: "unscented" or "gauss_hermite".
         n_quadrature: Number of quadrature points per dimension.
 
@@ -197,15 +199,6 @@ def make_block_rb_callbacks(
     P0_gg = P0[jnp.ix_(g_idx, g_idx)]
     P0_ss = P0[jnp.ix_(s_idx, s_idx)]
 
-    # Merge extra_params into params for observation model
-    obs_params = {**params, **extra_params}
-
-    # Process noise df for sampled block
-    proc_df = extra_params.get("proc_df", 5.0)
-
-    # Diffusion distribution for sampled block
-    diffusion_dist = extra_params.get("diffusion_dist_s", "student_t")
-
     def init_sample(key, _model_inputs):
         """Initialize: Kalman stats for G-block, sample for S-block."""
         chol_P0_ss = jla.cholesky(P0_ss + jnp.eye(n_s) * 1e-6, lower=True)
@@ -226,11 +219,11 @@ def make_block_rb_callbacks(
         3. Sample S-block with G-block posterior mean as point estimate.
         4. Linearized update on G-block (EKF-style, for covariance bounding).
         """
-        Ad_t = model_inputs["Ad"]  # (n, n) full discrete drift
-        Qd_t = model_inputs["Qd"]  # (n, n) full discrete diffusion cov
-        cd_t = model_inputs["cd"]  # (n,) full discrete intercept
-        y_t = model_inputs["observation"]  # (n_manifest,)
-        mask_t = model_inputs["obs_mask"]  # (n_manifest,)
+        Ad_t = model_inputs["Ad"]
+        Qd_t = model_inputs["Qd"]
+        cd_t = model_inputs["cd"]
+        y_t = model_inputs["observation"]
+        mask_t = model_inputs["obs_mask"]
 
         # Extract sub-blocks
         A_gg = Ad_t[jnp.ix_(g_idx, g_idx)]
@@ -246,57 +239,25 @@ def make_block_rb_callbacks(
         m_g = state.g_mean
 
         # --- Step 1: Kalman predict on G-block ---
-        # m_pred_g = A_gg @ m_g + A_gs @ x_s + c_g
-        # The S->G coupling enters as a known input.
-        c_g_eff = c_g + A_gs @ x_s  # effective intercept includes S-block input
+        c_g_eff = c_g + A_gs @ x_s
         m_pred_g, P_pred_g = _kalman_predict(m_g, state.g_cov, A_gg, Q_gg, c_g_eff)
 
-        # --- Step 2: Sample S-block ---
-        # x_s_new = A_sg @ m_g + A_ss @ x_s + c_s + noise
-        # G->S coupling uses posterior mean as point estimate.
+        # --- Step 2: Sample S-block using transition kernel ---
         mean_s = A_sg @ m_g + A_ss @ x_s + c_s
         chol_Q_ss = jla.cholesky(Q_ss + jnp.eye(n_s) * 1e-6, lower=True)
-
-        if diffusion_dist == "student_t":
-            df = jnp.maximum(proc_df, 2.1)
-            key_z, key_chi2 = random.split(key)
-            z = random.normal(key_z, (n_s,))
-            chi2_sample = random.gamma(key_chi2, df / 2.0) * 2.0
-            scale = jnp.sqrt((df - 2.0) / chi2_sample)
-            x_s_new = mean_s + chol_Q_ss @ (z * scale)
-        else:
-            x_s_new = mean_s + chol_Q_ss @ random.normal(key, (n_s,))
+        x_s_new = mean_s + trans_kernel.sample_noise_fn(key, chol_Q_ss)
 
         # --- Step 3: Linearized update on G-block ---
-        # Condition on observation to keep covariances bounded.
-        # Absorb the S-block contribution into the intercept so the
-        # effective observation model for x_g is:
-        #   y = H_g @ x_g + d_eff + noise,  d_eff = d + H_s @ x_s_new
-        # For Gaussian obs this is equivalent to subtracting H_s @ x_s from y.
-        # For non-Gaussian obs (Poisson, Gamma) it is essential: the link
-        # function is nonlinear, so we cannot subtract H_s @ x_s from y —
-        # we must include it in the linear predictor that enters exp().
+        # Absorb S-block contribution into effective intercept.
         d_eff = d + H_s @ x_s_new
 
-        if manifest_dist == "gaussian":
-            from causal_ssm_agent.models.likelihoods.rao_blackwell import (
-                _kalman_update_gaussian,
-            )
-
+        if obs_kernel.is_gaussian:
             m_upd_g, P_upd_g, _ = _kalman_update_gaussian(
                 m_pred_g, P_pred_g, H_g, R, d_eff, y_t, mask_t
             )
         else:
             m_upd_g, P_upd_g = _linearized_update(
-                m_pred_g,
-                P_pred_g,
-                y_t,
-                H_g,
-                d_eff,
-                mask_t,
-                manifest_dist,
-                obs_params,
-                link=manifest_link,
+                m_pred_g, P_pred_g, y_t, H_g, d_eff, mask_t, obs_kernel
             )
 
         return BlockRBState(
@@ -311,8 +272,7 @@ def make_block_rb_callbacks(
         """Compute log observation weight.
 
         Integrates p(y | x_g, x_s) over x_g via quadrature, fixing x_s at
-        the particle's sampled value. This is the marginal likelihood
-        contribution from this timestep.
+        the particle's sampled value.
         """
         y_t = model_inputs["observation"]
         mask_t = model_inputs["obs_mask"]
@@ -320,10 +280,7 @@ def make_block_rb_callbacks(
         mask_float = mask_t.astype(jnp.float32)
         n_observed = jnp.sum(mask_float)
 
-        if manifest_dist == "gaussian":
-            # Exact: y ~ N(H_g @ x_g + H_s @ x_s + d, R)
-            # Marginalize x_g ~ N(m_pred_g, P_pred_g):
-            # y | x_s ~ N(H_g @ m_pred_g + H_s @ x_s + d, H_g @ P_pred_g @ H_g' + R)
+        if obs_kernel.is_gaussian:
             y_pred = H_g @ state.g_pred_mean + H_s @ x_s + d
             S = H_g @ state.g_pred_cov @ H_g.T + R
 
@@ -340,8 +297,6 @@ def make_block_rb_callbacks(
             log_w = -0.5 * (n_observed * jnp.log(2 * jnp.pi) + logdet + mahal)
             return jnp.where(n_observed > 0, log_w, 0.0)
         else:
-            # Non-Gaussian obs: quadrature over G-block, fixing S-block.
-            # Generate sigma points for G-block.
             if quadrature == "unscented":
                 sigma_pts_g, sigma_wts = _unscented_sigma_points(
                     state.g_pred_mean, state.g_pred_cov
@@ -356,15 +311,11 @@ def make_block_rb_callbacks(
                 sigma_pts_g = state.g_pred_mean[None, :] + gh_nodes @ L.T
                 sigma_wts = gh_wts
 
-            # For each sigma point, reconstruct full latent state and evaluate obs LL.
-            emission_fn = get_emission_fn(manifest_dist, obs_params, link=manifest_link)
-
             def eval_one(x_g):
-                # Reconstruct full state: place G and S at their indices.
                 full_x = jnp.zeros(n_latent)
                 full_x = full_x.at[g_idx].set(x_g)
                 full_x = full_x.at[s_idx].set(x_s)
-                return emission_fn(y_t, full_x, H, d, R, mask_float)
+                return obs_kernel.emission_fn(y_t, full_x, H, d, R, mask_float)
 
             log_obs_vals = jax.vmap(eval_one)(sigma_pts_g)
             log_weights = jnp.log(jnp.maximum(sigma_wts, 1e-30))
