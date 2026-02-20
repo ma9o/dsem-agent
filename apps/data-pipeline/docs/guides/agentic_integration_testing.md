@@ -15,13 +15,45 @@ The key insight: never make the browser do the heavy lifting. Use programmatic c
 
 ## Prerequisites
 
-Three services must be running:
+You need three **dedicated** services for integration testing. Do NOT reuse the existing dev server on port 3000 — these are isolated test instances.
 
-| Service | Port | Start command |
-|---------|------|---------------|
-| Next.js frontend | 3001 | `cd apps/web && bun run dev -p 3001` |
-| Prefect server | 4200 | `prefect server start` |
-| Pipeline deployment | — | `cd apps/data-pipeline && uv run python -m causal_ssm_agent.flows.pipeline` |
+### 1. Check for Next.js dev lock
+
+The Next.js dev server acquires a lock at `apps/web/.next/dev/lock`. You cannot run two instances from the same `apps/web/` directory. Before starting the test server, check:
+
+```bash
+ls apps/web/.next/dev/lock 2>/dev/null && echo "LOCKED" || echo "OK"
+```
+
+If **LOCKED**: the user already has a dev server running from this worktree. Ask them to switch that terminal to this branch and restart on port 3001, or stop it manually. Do NOT kill the process yourself.
+
+### 2. Start services (in order)
+
+Start these three services in separate terminals (or background them). **Order matters** — Prefect must be up before the pipeline deployment registers.
+
+| # | Service | Port | Start command | What it does |
+|---|---------|------|---------------|--------------|
+| 1 | Prefect server | 4200 | `cd apps/data-pipeline && uv run prefect server start` | Central API coordinator |
+| 2 | Pipeline deployment | — | `cd apps/data-pipeline && uv run python -m causal_ssm_agent.flows.pipeline` | Calls `.serve()` to register the `causal-inference` deployment and poll for triggered runs |
+| 3 | Next.js frontend | 3001 | `cd apps/web && bun run dev -p 3001` | Web UI for session resume and stage visualization |
+
+### 3. Health-check all three
+
+```bash
+# Prefect server
+curl -sf http://localhost:4200/api/health && echo "prefect ok"
+
+# Pipeline deployment registered
+curl -s -X POST http://localhost:4200/api/deployments/filter \
+  -H 'Content-Type: application/json' \
+  -d '{"deployments":{"name":{"any_":["causal-inference"]}}}' \
+  | jq -r '.[0].id' && echo "deployment ok"
+
+# Next.js frontend
+curl -sf -o /dev/null http://localhost:3001 && echo "next.js ok"
+```
+
+All three must succeed before proceeding.
 
 The `.mcp.json` at the worktree root must configure `next-devtools-mcp` for `browser_eval` access.
 
