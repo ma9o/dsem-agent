@@ -17,6 +17,19 @@ The key insight: never make the browser do the heavy lifting. Use programmatic c
 
 You need three **dedicated** services for integration testing. Do NOT reuse the existing dev server on port 3000 — these are isolated test instances.
 
+### 0. Copy gitignored files from master
+
+Several files needed at runtime are gitignored. Copy them from the main worktree:
+
+```bash
+# Environment variables (OPENROUTER_API_KEY, etc.) — pipeline fails at Stage 1a without these
+cp ../main/.env .env
+
+# Real Google Takeout test data (~37 MB) — do NOT generate synthetic data
+cp ../main/apps/data-pipeline/data/raw/test_user/MyActivity.json \
+   apps/data-pipeline/data/raw/test_user/MyActivity.json
+```
+
 ### 1. Check for Next.js dev lock
 
 The Next.js dev server acquires a lock at `apps/web/.next/dev/lock`. You cannot run two instances from the same `apps/web/` directory. Before starting the test server, check:
@@ -34,7 +47,7 @@ Start these three services in separate terminals (or background them). **Order m
 | # | Service | Port | Start command | What it does |
 |---|---------|------|---------------|--------------|
 | 1 | Prefect server | 4200 | `cd apps/data-pipeline && uv run prefect server start` | Central API coordinator |
-| 2 | Pipeline deployment | — | `cd apps/data-pipeline && uv run python -m causal_ssm_agent.flows.pipeline` | Calls `.serve()` to register the `causal-inference` deployment and poll for triggered runs |
+| 2 | Pipeline deployment | — | `cd apps/data-pipeline && PREFECT_API_URL=http://localhost:4200/api uv run python -m causal_ssm_agent.flows.pipeline` | Calls `.serve()` to register the `causal-inference` deployment and poll for triggered runs |
 | 3 | Next.js frontend | 3001 | `cd apps/web && bun run dev -p 3001` | Web UI for session resume and stage visualization |
 
 ### 3. Health-check all three
@@ -120,7 +133,30 @@ Using `next-devtools-mcp`'s `browser_eval` tool:
 5. Screenshot the progress bar (should show session code badge)
 ```
 
-### 6. Screenshot stages as they complete
+### 6. Monitor pipeline progress via live trace files
+
+The pipeline writes partial JSON to `results/{run_id}/{stage_id}.json` after each LLM turn. Check these alongside Prefect logs to see real-time progress:
+
+```bash
+# List available stage results
+ls -l apps/data-pipeline/results/$RUN_ID/
+
+# Check a running stage's live metadata
+python3 -c "
+import json, sys
+data = json.load(open(sys.argv[1]))
+live = data.get('_live', {})
+if live:
+    print(f'Turn {live[\"turn\"]} | {live[\"elapsed_seconds\"]}s | {live[\"label\"]}')
+    print(f'Messages: {len(data[\"llm_trace\"][\"messages\"])}')
+else:
+    print('Stage completed')
+" apps/data-pipeline/results/$RUN_ID/stage-1a.json
+```
+
+These files are the same ones the frontend polls via `/api/results/{runId}/{stage}`. A file with `_live` metadata is still in-progress; without it, the stage is done.
+
+### 7. Screenshot stages as they complete
 
 Poll and screenshot as the pipeline progresses:
 
