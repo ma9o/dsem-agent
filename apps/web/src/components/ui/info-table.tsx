@@ -29,7 +29,15 @@ declare module "@tanstack/react-table" {
   interface ColumnMeta<TData, TValue> {
     align?: "left" | "center" | "right";
     mono?: boolean;
+    /** Thresholding function: "fail" → red bg, "warn" → orange bg, undefined → default. */
+    severity?: (value: TValue, row: TData) => "fail" | "warn" | undefined;
   }
+}
+
+function severityClass(level: "fail" | "warn" | undefined): string | undefined {
+  if (level === "fail") return "bg-destructive/10";
+  if (level === "warn") return "bg-warning/15";
+  return undefined;
 }
 
 // ---------- HeaderWithTooltip helper ----------
@@ -253,11 +261,12 @@ export function InfoTable<TData>({
                         : meta?.align === "center"
                           ? "text-center"
                           : undefined;
+                    const sev = meta?.severity?.(cell.getValue(), cell.row.original);
 
                     return (
                       <TableCell
                         key={cell.id}
-                        className={cn(alignClass, meta?.mono && "font-mono")}
+                        className={cn(alignClass, meta?.mono && "font-mono", severityClass(sev))}
                       >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </TableCell>
