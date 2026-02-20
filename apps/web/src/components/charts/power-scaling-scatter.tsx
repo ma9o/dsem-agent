@@ -31,8 +31,8 @@ export function PowerScalingScatter({ results }: PowerScalingScatterProps) {
   }
 
   return (
-    <div className="min-h-56 h-full w-full">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="min-h-56 h-full w-full flex flex-col">
+      <ResponsiveContainer width="100%" height="100%" className="flex-1">
         <ScatterChart margin={{ top: 10, right: 20, left: 10, bottom: 30 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
           <XAxis
@@ -84,6 +84,12 @@ export function PowerScalingScatter({ results }: PowerScalingScatterProps) {
             strokeDasharray="4 4"
             strokeOpacity={0.5}
           />
+          <ReferenceLine
+            y={0.05}
+            stroke="var(--muted-foreground)"
+            strokeDasharray="4 4"
+            strokeOpacity={0.5}
+          />
           {Array.from(groups.entries()).map(([diagnosis, items]) => (
             <Scatter
               key={diagnosis}
@@ -94,6 +100,17 @@ export function PowerScalingScatter({ results }: PowerScalingScatterProps) {
           ))}
         </ScatterChart>
       </ResponsiveContainer>
+      <div className="flex items-center justify-center gap-4 pt-1 text-[10px] text-muted-foreground">
+        {(["well_identified", "prior_dominated", "prior_data_conflict"] as const).map((d) => (
+          <span key={d} className="inline-flex items-center gap-1">
+            <span
+              className="inline-block h-2 w-2 rounded-full"
+              style={{ backgroundColor: diagnosisColor[d] }}
+            />
+            {diagnosisLabel[d]}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

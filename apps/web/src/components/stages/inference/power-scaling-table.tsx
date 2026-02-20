@@ -44,7 +44,7 @@ const baseColumns = [
     header: () => (
       <HeaderWithTooltip
         label="Lik. Sens."
-        tooltip="How much the posterior changes when the likelihood is scaled. High values indicate the data is informative."
+        tooltip="How much the posterior changes when the likelihood is scaled. Values > 0.05 suggest data-prior tension if prior sensitivity is also high."
       />
     ),
     cell: (info) => formatNumber(info.getValue()),

@@ -216,21 +216,30 @@ export function DiagnosticsAccordion({
           <span className="inline-flex items-center gap-1.5 flex-wrap">
             Power Scaling Diagnostics
             <StatTooltip explanation="Tests whether posteriors are driven by data (good) or priors (concerning). Scales the likelihood and prior to detect sensitivity." />
-            <Badge
-              variant={
-                powerScaling.every((p) => p.diagnosis === "well_identified") ? "success" : "warning"
+            {(() => {
+              const nOk = powerScaling.filter((p) => p.diagnosis === "well_identified").length;
+              const nPrior = powerScaling.filter((p) => p.diagnosis === "prior_dominated").length;
+              const nConflict = powerScaling.filter((p) => p.diagnosis === "prior_data_conflict").length;
+              if (nOk === powerScaling.length) {
+                return <Badge variant="success">{nOk}/{powerScaling.length} OK</Badge>;
               }
-            >
-              {powerScaling.filter((p) => p.diagnosis === "well_identified").length}/
-              {powerScaling.length} OK
-            </Badge>
+              return (
+                <>
+                  <Badge variant="success">{nOk}/{powerScaling.length} OK</Badge>
+                  {nPrior > 0 && <Badge variant="warning">{nPrior} prior-dominated</Badge>}
+                  {nConflict > 0 && <Badge variant="destructive">{nConflict} prior-data conflict</Badge>}
+                </>
+              );
+            })()}
           </span>
         </AccordionTrigger>
         <AccordionContent>
           {powerScaling.length >= 2 ? (
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid gap-4 lg:grid-cols-3">
+              <div className="lg:col-span-2">
+                <PowerScalingTable results={powerScaling} />
+              </div>
               <PowerScalingScatter results={powerScaling} />
-              <PowerScalingTable results={powerScaling} />
             </div>
           ) : (
             <PowerScalingTable results={powerScaling} />
