@@ -12,7 +12,6 @@ from pathlib import Path
 
 from prefect import flow
 from prefect.artifacts import create_markdown_artifact, create_table_artifact
-from prefect.utilities.annotations import unmapped
 
 from causal_ssm_agent.utils.aggregations import flatten_aggregated_data
 from causal_ssm_agent.utils.data import get_sample_chunks, load_query
@@ -29,7 +28,7 @@ from .stages import (
     load_worker_chunks,
     # Web persistence
     persist_web_result,
-    populate_indicators,
+    populate_all_indicators,
     # Stage 0
     preprocess_raw_input,
     # Stage 1a
@@ -242,14 +241,16 @@ async def causal_inference_pipeline(
     worker_chunks = load_worker_chunks(lines)
     print(f"Loaded {len(worker_chunks)} worker chunks")
 
-    worker_results = populate_indicators.map(
-        worker_chunks,
-        question=unmapped(question),
-        causal_spec=unmapped(causal_spec),
+    # Single task processes all chunks via asyncio.gather + Semaphore.
+    # This avoids Prefect's ThreadPoolTaskRunner which deadlocks with async HTTP tasks.
+    all_worker_results = await populate_all_indicators(
+        worker_chunks, question=question, causal_spec=causal_spec,
     )
-    resolved_worker_results = [
-        wr.result() if hasattr(wr, "result") else wr for wr in worker_results
-    ]
+    # Filter out failed chunks (None) for downstream consumers
+    resolved_worker_results = [wr for wr in all_worker_results if wr is not None]
+    n_failed = len(all_worker_results) - len(resolved_worker_results)
+    if n_failed:
+        print(f"  {n_failed}/{len(all_worker_results)} workers failed")
 
     # Combine raw worker results
     raw_data = combine_worker_results(resolved_worker_results)
@@ -278,7 +279,17 @@ async def causal_inference_pipeline(
     )
     worker_statuses = []
     for i, chunk in enumerate(worker_chunks):
-        wr = resolved_worker_results[i] if i < len(resolved_worker_results) else None
+        wr = all_worker_results[i] if i < len(all_worker_results) else None
+        if wr is None:
+            worker_statuses.append(
+                {
+                    "worker_id": i,
+                    "status": "failed",
+                    "n_extractions": 0,
+                    "chunk_size": chunk.count("\n") + 1 if chunk else 0,
+                }
+            )
+            continue
         output = getattr(wr, "output", None)
         dataframe = getattr(wr, "dataframe", None)
         n_extractions = (

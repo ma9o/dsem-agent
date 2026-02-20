@@ -53,9 +53,8 @@ export const STAGES: StageMeta[] = [
     label: "Data Extraction",
     number: "2",
     hasGate: false,
-    prefectTaskName: "populate_indicators",
+    prefectTaskName: "populate_all_indicators",
     loadingHint: "Extracting indicator values from your data...",
-    isFanOut: true,
   },
   {
     id: "stage-3",

@@ -7,6 +7,7 @@ This is the "E" (Extract) in ETL. Transformation (aggregation) happens in Stage 
 """
 
 import asyncio
+import logging
 
 from prefect import task
 from prefect.cache_policies import INPUTS
@@ -15,21 +16,7 @@ from causal_ssm_agent.utils.config import get_config
 from causal_ssm_agent.utils.data import chunk_lines, get_worker_chunk_size
 from causal_ssm_agent.workers.agents import WorkerResult, process_chunk_async
 
-# Lazy-initialized semaphore limits concurrent LLM calls to stay under
-# API rate limits and avoid exhausting local resources.
-# We track the event loop because Prefect's task runner may use a different
-# loop than where the semaphore was first created, causing RuntimeError.
-_worker_semaphore: asyncio.Semaphore | None = None
-_worker_semaphore_loop: asyncio.AbstractEventLoop | None = None
-
-
-def _get_worker_semaphore() -> asyncio.Semaphore:
-    global _worker_semaphore, _worker_semaphore_loop
-    loop = asyncio.get_running_loop()
-    if _worker_semaphore is None or _worker_semaphore_loop is not loop:
-        _worker_semaphore = asyncio.Semaphore(get_config().stage2_workers.max_concurrent)
-        _worker_semaphore_loop = loop
-    return _worker_semaphore
+logger = logging.getLogger(__name__)
 
 
 @task(cache_policy=INPUTS, result_serializer="json")
@@ -38,19 +25,45 @@ def load_worker_chunks(lines: list[str]) -> list[str]:
     return chunk_lines(lines, chunk_size=get_worker_chunk_size())
 
 
-@task(
-    cache_policy=INPUTS,
-    persist_result=True,
-    retries=2,
-    retry_delay_seconds=10,
-)
-async def populate_indicators(chunk: str, question: str, causal_spec: dict) -> WorkerResult:
-    """Worker extracts indicator values from a chunk.
+async def populate_all_indicators(
+    chunks: list[str], question: str, causal_spec: dict
+) -> list[WorkerResult | None]:
+    """Process all worker chunks using asyncio.gather with concurrency control.
+
+    This is a plain async function (not a Prefect task) to avoid the overhead of
+    Prefect serializing 1234 chunks for task run metadata. Concurrency is managed
+    via asyncio.Semaphore.
 
     Returns:
-        WorkerResult containing:
-        - output: Validated WorkerOutput with extractions
-        - dataframe: Polars DataFrame with columns (indicator, value, timestamp)
+        List parallel to ``chunks`` — WorkerResult on success, None on failure.
     """
-    async with _get_worker_semaphore():
-        return await process_chunk_async(chunk, question, causal_spec)
+    import sys
+    print(f"[stage2] Starting populate_all_indicators with {len(chunks)} chunks", flush=True)
+    sys.stdout.flush()
+    config = get_config()
+    sem = asyncio.Semaphore(config.stage2_workers.max_concurrent)
+    n = len(chunks)
+    completed = 0
+
+    async def process_one(i: int, chunk: str) -> WorkerResult | None:
+        nonlocal completed
+        async with sem:
+            try:
+                if i < 3:
+                    print(f"[stage2] Worker {i} starting", flush=True)
+                result = await process_chunk_async(chunk, question, causal_spec)
+                completed += 1
+                if completed % 10 == 0 or completed == n:
+                    print(f"[stage2] Workers: {completed}/{n} completed", flush=True)
+                return result
+            except Exception as exc:
+                completed += 1
+                print(f"[stage2] Chunk {i}/{n} failed: {exc}", flush=True)
+                return None
+
+    print(f"[stage2] Creating {n} coroutines", flush=True)
+    tasks = [process_one(i, chunk) for i, chunk in enumerate(chunks)]
+    print(f"[stage2] Starting asyncio.gather", flush=True)
+    result = await asyncio.gather(*tasks)
+    print(f"[stage2] asyncio.gather complete", flush=True)
+    return result

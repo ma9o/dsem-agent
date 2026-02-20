@@ -16,7 +16,7 @@ from .stage1b_measurement import (
 )
 from .stage2_workers import (
     load_worker_chunks,
-    populate_indicators,
+    populate_all_indicators,
 )
 from .stage3_validation import (
     aggregate_measurements,
@@ -48,7 +48,7 @@ __all__ = [
     "build_causal_spec",
     # Stage 2: Extract
     "load_worker_chunks",
-    "populate_indicators",
+    "populate_all_indicators",
     # Stage 3: Validate & Aggregate
     "aggregate_measurements",
     "combine_worker_results",
