@@ -557,7 +557,7 @@
       ]
     },
     "LOODiagnostics": {
-      "description": "Leave-one-out cross-validation diagnostics (ArviZ).",
+      "description": "Leave-one-out cross-validation diagnostics (ArviZ).\n\nUses one-step-ahead predictive log-likelihoods from the filter's\ninnovation decomposition. Each LOO \"observation\" is one complete\ntimestep (all manifest variables at time t), not individual cells.",
       "properties": {
         "elpd_loo": {
           "title": "Elpd Loo",
@@ -574,6 +574,11 @@
         "n_data_points": {
           "title": "N Data Points",
           "type": "integer"
+        },
+        "observation_unit": {
+          "default": "timestep",
+          "title": "Observation Unit",
+          "type": "string"
         },
         "pareto_k": {
           "anyOf": [
@@ -621,6 +626,7 @@
       "required": [
         "elpd_loo",
         "n_data_points",
+        "observation_unit",
         "p_loo",
         "se"
       ],
@@ -1168,7 +1174,7 @@
           },
           "title": "Rep Values",
           "type": "array"
-        },
+        }
       },
       "required": [
         "observed_value",

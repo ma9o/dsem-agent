@@ -21,22 +21,22 @@ export function ParetoKChart({ loo }: ParetoKChartProps) {
   if (!loo.pareto_k || loo.pareto_k.length === 0) return null;
 
   const data = loo.pareto_k.map((k, i) => ({
-    observation: i + 1,
+    timestep: i + 1,
     k,
   }));
 
   return (
     <div className="space-y-2">
-      <span className="text-xs font-mono text-muted-foreground">Pareto k per Observation</span>
+      <span className="text-xs font-mono text-muted-foreground">Pareto k per Timestep</span>
       <div className="h-44 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <ScatterChart margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
             <XAxis
-              dataKey="observation"
+              dataKey="timestep"
               type="number"
               tick={{ fontSize: 10 }}
-              label={{ value: "Observation", position: "insideBottom", offset: -2, fontSize: 10 }}
+              label={{ value: "Timestep", position: "insideBottom", offset: -2, fontSize: 10 }}
             />
             <YAxis
               dataKey="k"
@@ -72,8 +72,8 @@ export function ParetoKChart({ loo }: ParetoKChartProps) {
         </ResponsiveContainer>
       </div>
       <p className="text-xs text-muted-foreground">
-        Pareto k diagnostic per observation. Values above 0.7 indicate the observation is
-        highly influential and LOO estimate may be unreliable.
+        Pareto k diagnostic per timestep (one-step-ahead predictive). Values above 0.7 indicate
+        the timestep is highly influential and LOO estimate may be unreliable.
       </p>
     </div>
   );

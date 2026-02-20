@@ -714,12 +714,17 @@ export interface SVIDiagnostics {
 }
 /**
  * Leave-one-out cross-validation diagnostics (ArviZ).
+ *
+ * Uses one-step-ahead predictive log-likelihoods from the filter's
+ * innovation decomposition. Each LOO "observation" is one complete
+ * timestep (all manifest variables at time t), not individual cells.
  */
 export interface LOODiagnostics {
   elpd_loo: number;
   p_loo: number;
   se: number;
   n_data_points: number;
+  observation_unit: string;
   pareto_k?: number[] | null;
   n_bad_k?: number | null;
   loo_pit?: number[] | null;
