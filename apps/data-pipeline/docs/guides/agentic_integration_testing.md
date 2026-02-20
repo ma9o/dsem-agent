@@ -23,7 +23,8 @@ Several files needed at runtime are gitignored. Copy them from the main worktree
 
 ```bash
 # Environment variables (OPENROUTER_API_KEY, etc.) — pipeline fails at Stage 1a without these
-cp ../main/.env .env
+# The pipeline's load_dotenv reads from apps/data-pipeline/.env, so copy there:
+cp ../main/apps/data-pipeline/.env apps/data-pipeline/.env
 
 # Real Google Takeout test data (~37 MB) — do NOT generate synthetic data
 cp ../main/apps/data-pipeline/data/raw/test_user/MyActivity.json \
@@ -38,7 +39,20 @@ The Next.js dev server acquires a lock at `apps/web/.next/dev/lock`. You cannot 
 ls apps/web/.next/dev/lock 2>/dev/null && echo "LOCKED" || echo "OK"
 ```
 
-If **LOCKED**: the user already has a dev server running from this worktree. Ask them to switch that terminal to this branch and restart on port 3001, or stop it manually. Do NOT kill the process yourself.
+If **LOCKED**: check whether a Next.js process is actually running, since stale locks can survive crashed/killed servers:
+
+```bash
+# Check if any process is actually using the lock
+lsof apps/web/.next/dev/lock 2>/dev/null
+# Or check if a Next.js dev server is running from this directory
+pgrep -f "next dev" && echo "RUNNING" || echo "NOT RUNNING"
+```
+
+- If a process **is running**: the user already has a dev server running from this worktree. Ask them to switch that terminal to this branch and restart on port 3001, or stop it manually. Do NOT kill the process yourself.
+- If **no process is running** (stale lock): remove the lock file and proceed:
+  ```bash
+  rm apps/web/.next/dev/lock
+  ```
 
 ### 2. Start services (in order)
 

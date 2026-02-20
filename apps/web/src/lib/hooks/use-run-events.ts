@@ -68,10 +68,12 @@ export function useRunEvents(runId: string | null) {
     [queryClient, runId],
   );
 
+  // Hydrate initial state from Prefect REST API (snapshot),
+  // then subscribe to WebSocket for live updates (deltas).
+  // Prefect's WebSocket does NOT replay historical events.
   useEffect(() => {
     if (!runId) return;
 
-    // Initialize progress
     queryClient.setQueryData(["pipeline", runId, "status"], initialProgress());
 
     if (isMockMode()) {
@@ -85,6 +87,32 @@ export function useRunEvents(runId: string | null) {
       return cleanup;
     }
 
+    // Abort controller ensures stale fetches (from React Strict Mode double-invocation)
+    // don't apply after this effect instance is cleaned up.
+    const ac = new AbortController();
+
+    // 1. Snapshot: hydrate current state from Prefect REST API.
+    //    The WebSocket only delivers future events — this fills in history.
+    fetch(`/api/stages/${runId}`, { signal: ac.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((snapshot: Record<string, { status: string; startedAt?: string; completedAt?: string }> | null) => {
+        if (!snapshot) return;
+        for (const [stageId, info] of Object.entries(snapshot)) {
+          const status = info.status as StageRunStatus;
+          const eventTime = info.completedAt
+            ? new Date(info.completedAt).getTime()
+            : info.startedAt
+              ? new Date(info.startedAt).getTime()
+              : undefined;
+          updateStage(stageId as StageId, status, eventTime);
+          if (status === "completed") {
+            queryClient.invalidateQueries({ queryKey: ["pipeline", runId, "stage", stageId] });
+          }
+        }
+      })
+      .catch(() => {});
+
+    // 2. Stream: subscribe to WebSocket for live events going forward
     const wsUrl = "ws://localhost:4200/api/events/out";
     const ws = new ReconnectingWebSocket(wsUrl, [], {
       maxRetries: MAX_RECONNECT_ATTEMPTS,
@@ -96,11 +124,15 @@ export function useRunEvents(runId: string | null) {
 
     ws.onopen = () => {
       // Prefect's /api/events/out requires a filter message before it streams events.
-      // Without this, the server waits indefinitely and sends nothing.
+      // `occurred.since` controls backfill depth; `occurred.until` MUST extend into
+      // the future — without it, Prefect only sends backfill and stops streaming.
+      const since = new Date(Date.now() - 15 * 60 * 1000).toISOString(); // 15 min ago
+      const until = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // +24h
       ws.send(
         JSON.stringify({
           type: "filter",
           filter: {
+            occurred: { since, until },
             event: { prefix: ["prefect.task-run."] },
             related: {
               resources_in_roles: [[`prefect.flow-run.${runId}`, "flow-run"]],
@@ -112,9 +144,12 @@ export function useRunEvents(runId: string | null) {
 
     ws.onmessage = (event: MessageEvent) => {
       try {
-        const data = JSON.parse(event.data);
+        const msg = JSON.parse(event.data);
 
-        const taskName = data.resource?.["prefect.task-run.name"];
+        // Prefect wraps events in { type: "event", event: { ... } }
+        const data = msg.type === "event" ? msg.event : msg;
+
+        const taskName = data.resource?.["prefect.resource.name"];
         if (!taskName) return;
 
         const stage = STAGES.find((s) => taskName.startsWith(s.prefectTaskName));
@@ -125,7 +160,11 @@ export function useRunEvents(runId: string | null) {
 
         if (data.event === "prefect.task-run.Running") {
           updateStage(stage.id, "running", eventTime);
-        } else if (data.event === "prefect.task-run.Completed") {
+        } else if (
+          data.event === "prefect.task-run.Completed" ||
+          // Prefect emits "Cached" (state-type COMPLETED) for cache-hit results
+          data.resource?.["prefect.state-type"] === "COMPLETED"
+        ) {
           updateStage(stage.id, "completed", eventTime);
           queryClient.invalidateQueries({ queryKey: ["pipeline", runId, "stage", stage.id] });
         } else if (data.event === "prefect.task-run.Failed") {
@@ -143,6 +182,7 @@ export function useRunEvents(runId: string | null) {
     };
 
     return () => {
+      ac.abort();
       ws.close();
       wsRef.current = null;
     };
