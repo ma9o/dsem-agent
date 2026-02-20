@@ -1,15 +1,22 @@
 "use client";
 
-import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { HeaderWithTooltip, InfoTable } from "@/components/ui/info-table";
 import { Tooltip } from "@/components/ui/tooltip";
 import { evaluatePdf } from "@/lib/utils/distributions";
 import { formatNumber } from "@/lib/utils/format";
 import type { ParameterSpec, PriorProposal } from "@causal-ssm/api-types";
-import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
+import { type ColumnDef, createColumnHelper } from "@tanstack/react-table";
 import { ExternalLink } from "lucide-react";
-import { Area, AreaChart, ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, YAxis } from "recharts";
+import { useMemo } from "react";
+import {
+  Area,
+  AreaChart,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 interface PriorRow extends PriorProposal {
   search_context?: string;
@@ -19,7 +26,9 @@ const col = createColumnHelper<PriorRow>();
 
 /** Compact inline density chart with axes. */
 function DensitySparkline({ prior }: { prior: PriorRow }) {
-  const data = prior.density_points ?? evaluatePdf(prior.distribution, prior.params as Record<string, number>, 60);
+  const data =
+    prior.density_points ??
+    evaluatePdf(prior.distribution, prior.params as Record<string, number>, 60);
   return (
     <div className="h-16 w-36">
       <ResponsiveContainer width="100%" height="100%">
@@ -37,7 +46,10 @@ function DensitySparkline({ prior }: { prior: PriorRow }) {
           <RechartsTooltip
             formatter={(v: number | string | undefined) => {
               const numeric = typeof v === "number" ? v : Number(v);
-              return [Number.isFinite(numeric) ? formatNumber(numeric, 4) : "--", "density"] as const;
+              return [
+                Number.isFinite(numeric) ? formatNumber(numeric, 4) : "--",
+                "density",
+              ] as const;
             }}
             labelFormatter={(l: unknown) => {
               const numeric = typeof l === "number" ? l : Number(l);
@@ -70,9 +82,7 @@ function formatParams(params: Record<string, number>): string {
 const baseColumns = [
   col.accessor("parameter", {
     header: "Parameter",
-    cell: (info) => (
-      <span className="font-medium font-mono text-xs">{info.getValue()}</span>
-    ),
+    cell: (info) => <span className="font-medium font-mono text-xs">{info.getValue()}</span>,
   }),
   col.accessor("distribution", {
     header: "Distribution",
@@ -95,9 +105,7 @@ const baseColumns = [
   col.accessor("reasoning", {
     header: "Reasoning",
     cell: (info) => (
-      <span className="max-w-xs text-xs text-muted-foreground line-clamp-2">
-        {info.getValue()}
-      </span>
+      <span className="max-w-xs text-xs text-muted-foreground line-clamp-2">{info.getValue()}</span>
     ),
   }),
   col.display({
@@ -126,9 +134,7 @@ const baseColumns = [
                   <p className="font-medium">{source.title}</p>
                   <p className="text-muted-foreground">{source.snippet}</p>
                   {source.effect_size && (
-                    <span className="text-muted-foreground">
-                      Effect: {source.effect_size}
-                    </span>
+                    <span className="text-muted-foreground">Effect: {source.effect_size}</span>
                   )}
                 </div>
               }
@@ -157,7 +163,7 @@ const baseColumns = [
     },
     meta: { align: "center" },
   }),
- ] as ColumnDef<PriorRow, unknown>[];
+] as ColumnDef<PriorRow, unknown>[];
 
 const searchContextColumn = col.accessor("search_context", {
   header: () => (
@@ -167,13 +173,14 @@ const searchContextColumn = col.accessor("search_context", {
     />
   ),
   cell: (info) => (
-    <span className="max-w-xs text-xs text-muted-foreground italic">
-      {info.getValue() || "--"}
-    </span>
+    <span className="max-w-xs text-xs text-muted-foreground italic">{info.getValue() || "--"}</span>
   ),
 }) as ColumnDef<PriorRow, unknown>;
 
-export function PriorTable({ priors, parameters }: { priors: PriorProposal[]; parameters?: ParameterSpec[] }) {
+export function PriorTable({
+  priors,
+  parameters,
+}: { priors: PriorProposal[]; parameters?: ParameterSpec[] }) {
   const paramMap = useMemo(() => {
     const map = new Map<string, ParameterSpec>();
     for (const p of parameters ?? []) map.set(p.name, p);
@@ -192,5 +199,5 @@ export function PriorTable({ priors, parameters }: { priors: PriorProposal[]; pa
     [hasSearchContext],
   );
 
-  return <InfoTable columns={columns} data={rows} />;
+  return <InfoTable columns={columns} data={rows} estimateRowHeight={72} />;
 }

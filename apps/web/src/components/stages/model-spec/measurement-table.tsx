@@ -6,14 +6,14 @@ import { StatTooltip } from "@/components/ui/stat-tooltip";
 import { formatNumber } from "@/lib/utils/format";
 import { buildHistogram } from "@/lib/utils/histogram";
 import type { Extraction, LikelihoodSpec } from "@causal-ssm/api-types";
-import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
+import { type ColumnDef, createColumnHelper } from "@tanstack/react-table";
 import {
   Bar,
   CartesianGrid,
   ComposedChart,
   Line,
-  ResponsiveContainer,
   Tooltip as RechartsTooltip,
+  ResponsiveContainer,
   XAxis,
   YAxis,
 } from "recharts";
@@ -25,7 +25,6 @@ export interface MeasurementRow {
   extractions: Extraction[];
   priorSamples?: number[];
 }
-
 
 function buildCountFrequency(values: number[]): Array<{ binCenter: number; count: number }> {
   const freq = new Map<number, number>();
@@ -190,9 +189,7 @@ const columns: ColumnDef<MeasurementRow, unknown>[] = [
   col.display({
     id: "link",
     header: "Link",
-    cell: ({ row }) => (
-      <Badge variant="secondary">{linkLabel(row.original.likelihood.link)}</Badge>
-    ),
+    cell: ({ row }) => <Badge variant="secondary">{linkLabel(row.original.likelihood.link)}</Badge>,
   }),
   col.display({
     id: "chart",
@@ -211,7 +208,8 @@ const columns: ColumnDef<MeasurementRow, unknown>[] = [
       const numericValues = row.original.extractions
         .map((e) => (typeof e.value === "boolean" ? (e.value ? 1 : 0) : Number(e.value)))
         .filter((v) => !Number.isNaN(v));
-      if (numericValues.length === 0) return <span className="text-xs text-muted-foreground">--</span>;
+      if (numericValues.length === 0)
+        return <span className="text-xs text-muted-foreground">--</span>;
       const mean = numericValues.reduce((s, v) => s + v, 0) / numericValues.length;
       return (
         <span className="font-mono text-xs text-muted-foreground whitespace-nowrap">
@@ -250,5 +248,5 @@ export function MeasurementTable({
     priorSamples: priorPredictiveSamples?.[lik.variable],
   }));
 
-  return <InfoTable columns={columns} data={rows} />;
+  return <InfoTable columns={columns} data={rows} estimateRowHeight={88} />;
 }
