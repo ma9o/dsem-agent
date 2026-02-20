@@ -45,78 +45,30 @@ See [`docs/index.md`](docs/index.md) for the full documentation structure.
 ## Structure
 
 ```
-causal-ssm-agent/
-├── data/
-│   ├── raw/           # Raw input data (gitignored)
-│   ├── processed/     # Converted text chunks (gitignored)
-│   ├── queries/       # Test queries for pipeline
-│   └── eval/          # Eval questions (questions/{N}_{name}/)
-├── docs/
-│   ├── modeling/      # Theoretical foundations (scope, assumptions, theory, estimation)
-│   ├── reference/     # Technical specs (schemas, pipeline, mplus-parity)
-│   ├── guides/        # Practical usage (quickstart, data, evals)
-│   └── papers/        # Reference papers (Asparouhov 2017, etc.)
-├── evals/             # Inspect AI evals (eval{N}_{name}.py) + scripts/
-├── src/causal_ssm_agent/
-│   ├── orchestrator/  # Two-stage model specification (latent + measurement)
-│   │   ├── agents.py  # Stage 1a: latent model, Stage 1b: measurement model
-│   │   ├── stage1a.py          # Stage 1a orchestration logic
-│   │   ├── stage1b.py          # Stage 1b orchestration logic
-│   │   ├── stage4_orchestrator.py   # Stage 4 orchestrator logic
-│   │   ├── scoring.py          # Model scoring
-│   │   ├── prompts/   # LLM prompts for all stages
-│   │   │   ├── latent_model.py      # Stage 1a prompts
-│   │   │   ├── measurement_model.py # Stage 1b prompts
-│   │   │   └── model_proposal.py    # Stage 4 model specification prompts
-│   │   ├── schemas.py        # Construct, Indicator, LatentModel, MeasurementModel, CausalSpec
-│   │   └── schemas_model.py  # ModelSpec, ParameterSpec for Stage 4
-│   ├── workers/       # Indicator extraction + prior research LLMs
-│   │   ├── agents.py         # Stage 2 worker agents
-│   │   ├── core.py           # Worker execution core
-│   │   ├── schemas.py        # Worker output schemas
-│   │   ├── schemas_prior.py  # PriorProposal, PriorValidationResult
-│   │   ├── prior_research.py # Stage 4 worker prior research
-│   │   └── prompts/          # Worker prompts
-│   ├── models/        # NumPyro state-space model specification
-│   │   ├── ssm/                # State-space model implementation
-│   │   │   ├── model.py        # SSMModel, SSMSpec, SSMPriors
-│   │   │   ├── inference.py    # fit() dispatcher + InferenceResult
-│   │   │   ├── hessmc2.py      # Hess-MC² (SMC with CoV L-kernels)
-│   │   │   ├── pgas.py         # PGAS (Gibbs CSMC + MALA parameters)
-│   │   │   ├── tempered_smc.py # Tempered SMC + preconditioned HMC/MALA
-│   │   │   ├── tempered_core.py # Core SMC loop shared by tempered/laplace/svi/dpf
-│   │   │   ├── laplace_em.py   # IEKS + Laplace-approximated marginal likelihood
-│   │   │   ├── structured_vi.py # Backward-factored structured VI
-│   │   │   ├── dpf.py          # Differentiable PF with learned proposal
-│   │   │   ├── nuts_da.py      # NUTS Data Augmentation (joint param + state)
-│   │   │   ├── counterfactual.py # Do-operator for intervention effects
-│   │   │   ├── mcmc_utils.py   # Shared MCMC utilities (HMC step, mass matrix)
-│   │   │   ├── utils.py        # Shared site discovery and matrix assembly
-│   │   │   └── discretization.py # CT→DT conversion (incl. batched vmap)
-│   │   ├── likelihoods/        # State-space likelihood backends
-│   │   │   ├── base.py         # Protocol, CTParams, MeasurementParams, InitialStateParams
-│   │   │   ├── kalman.py       # Kalman filter via cuthbert moments filter
-│   │   │   ├── particle.py     # Bootstrap PF via cuthbert (auto-upgrades to RBPF)
-│   │   │   ├── emissions.py    # Canonical emission log-prob functions
-│   │   │   ├── rao_blackwell.py # Rao-Blackwell PF (Kalman + quadrature)
-│   │   │   ├── block_rb.py     # Block RBPF for mixed Gaussian/non-Gaussian dynamics
-│   │   │   ├── graph_analysis.py # First-pass RB: graph analysis + RBPartition
-│   │   │   └── composed.py     # ComposedLikelihood: Kalman sub-LL + PF sub-LL
-│   │   ├── ssm_builder.py      # SSMModelBuilder for pipeline integration
-│   │   └── prior_predictive.py # Prior predictive validation
-│   ├── flows/         # Prefect pipeline + stages/
-│   │   └── stages/    # stage1a..4_model, stage4b_parametric_id, stage5_inference
-│   └── utils/         # Shared utilities (config, llm, data, parametric_id, etc.)
-├── benchmarks/        # Inference method benchmarks (parameter recovery)
-│   ├── problems/      # Standardized test problems (ground truths)
-│   │   ├── four_latent.py          # 4-latent Gaussian LGSS (Stress→Fatigue→Focus→Perf)
-│   │   └── three_latent_robust.py  # 3-latent Student-t (Arousal→Valence→Engagement)
-│   ├── metrics.py     # Recovery metrics (RMSE, coverage, reporting)
-│   ├── modal_infra.py # Shared Modal GPU setup
-│   ├── run.py         # Unified CLI (--method pgas/tempered_smc/all)
-│   └── results.md     # Empirical results across methods
-├── notebooks/         # PyMC showcase notebooks (tracked)
-├── scratchpad/        # Temporary work files (gitignored contents)
-├── tests/             # pytest tests (test_{name}.py)
-└── tools/             # CLI tools + UIs (dag_cli.py, dag_explorer.py, dag_diagnostics.py, model_inspector.py, ci.py)
+causal-ssm-agent/                  # Turborepo monorepo
+├── apps/
+│   ├── data-pipeline/             # Python – Prefect pipeline + NumPyro models
+│   │   ├── src/causal_ssm_agent/
+│   │   │   ├── orchestrator/      # LLM model specification (latent + measurement)
+│   │   │   ├── workers/           # Indicator extraction + prior research LLMs
+│   │   │   ├── models/            # NumPyro SSM, likelihoods, prior/posterior predictive
+│   │   │   ├── flows/             # Prefect pipeline stages (1a → 5)
+│   │   │   └── utils/             # Shared utilities (config, llm, data, identifiability)
+│   │   ├── benchmarks/            # Inference method benchmarks (parameter recovery)
+│   │   ├── data/                  # Raw, processed, queries, eval data
+│   │   ├── docs/                  # Modeling theory, reference specs, guides
+│   │   ├── evals/                 # Inspect AI evals
+│   │   ├── notebooks/             # Showcase notebooks
+│   │   ├── tests/                 # pytest tests
+│   │   └── tools/                 # CLI tools + UIs
+│   └── web/                       # Next.js frontend
+│       └── src/
+│           ├── app/               # Next.js app router pages
+│           ├── components/        # React components
+│           └── lib/               # Client-side utilities
+├── packages/
+│   ├── api-types/                 # Generated TypeScript types (from pipeline schemas)
+│   └── typescript-config/         # Shared TS config
+├── docs/                          # Top-level codegen guide
+└── scratchpad/                    # Temporary work files (gitignored)
 ```
