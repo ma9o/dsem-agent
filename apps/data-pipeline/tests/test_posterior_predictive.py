@@ -182,7 +182,7 @@ class TestDiagnosticChecks:
 
         # Should flag at least one variable
         assert len(warnings) > 0
-        assert any(w.check == "calibration" for w in warnings)
+        assert any(w.check_type == "calibration" for w in warnings)
 
     def test_autocorrelation_detection(self):
         """Correlated residuals should be flagged."""
@@ -206,7 +206,7 @@ class TestDiagnosticChecks:
         warnings = _check_residual_autocorrelation(y_sim, observations, manifest_names)
 
         assert len(warnings) > 0
-        assert any(w.check == "autocorrelation" for w in warnings)
+        assert any(w.check_type == "autocorrelation" for w in warnings)
 
     def test_variance_ratio_detection(self):
         """Scale mismatch should be flagged."""
@@ -224,7 +224,7 @@ class TestDiagnosticChecks:
         warnings = _check_variance_ratio(y_sim, observations, manifest_names)
 
         assert len(warnings) > 0
-        assert any(w.check == "variance" for w in warnings)
+        assert any(w.check_type == "variance" for w in warnings)
 
     def test_nan_handling(self):
         """NaN observations should be skipped without errors."""
@@ -305,11 +305,11 @@ class TestGetRelevantManifestVariables:
 
 
 class TestPPCDataclasses:
-    """Tests for PPCWarning and PPCResult dataclasses."""
+    """Tests for PPCWarning and PPCResult Pydantic models."""
 
     def test_ppc_warning_to_dict(self):
-        w = PPCWarning(variable="x", check="calibration", message="bad", value=0.5)
-        d = w.to_dict()
+        w = PPCWarning(variable="x", check_type="calibration", message="bad", value=0.5)
+        d = w.model_dump()
         assert d == {
             "variable": "x",
             "check_type": "calibration",
@@ -319,15 +319,15 @@ class TestPPCDataclasses:
         }
 
     def test_ppc_warning_to_dict_failed(self):
-        w = PPCWarning(variable="x", check="calibration", message="bad", value=0.5, passed=False)
-        d = w.to_dict()
+        w = PPCWarning(variable="x", check_type="calibration", message="bad", value=0.5, passed=False)
+        d = w.model_dump()
         assert d["passed"] is False
         assert d["check_type"] == "calibration"
 
     def test_ppc_result_to_dict(self):
-        w = PPCWarning(variable="x", check="calibration", message="bad", value=0.5)
-        r = PPCResult(warnings=[w], checked=True, n_subsample=50)
-        d = r.to_dict()
+        w = PPCWarning(variable="x", check_type="calibration", message="bad", value=0.5)
+        r = PPCResult(per_variable_warnings=[w], checked=True, n_subsample=50)
+        d = r.model_dump()
         assert d["checked"] is True
         assert d["n_subsample"] == 50
         assert d["overall_passed"] is True
@@ -337,10 +337,10 @@ class TestPPCDataclasses:
         assert d["test_stats"] == []
 
     def test_ppc_result_overall_passed_false(self):
-        w = PPCWarning(variable="x", check="calibration", message="bad", value=0.5, passed=False)
-        r = PPCResult(warnings=[w], checked=True, n_subsample=50)
+        w = PPCWarning(variable="x", check_type="calibration", message="bad", value=0.5, passed=False)
+        r = PPCResult(per_variable_warnings=[w], checked=True, n_subsample=50)
         assert r.overall_passed is False
-        assert r.to_dict()["overall_passed"] is False
+        assert r.model_dump()["overall_passed"] is False
 
 
 class TestLinkFunctionSimulation:
@@ -443,4 +443,4 @@ class TestRunPPC:
         assert isinstance(result, PPCResult)
         assert result.checked is True
         assert result.n_subsample == 20
-        assert isinstance(result.warnings, list)
+        assert isinstance(result.per_variable_warnings, list)
