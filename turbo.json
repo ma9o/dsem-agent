@@ -21,6 +21,9 @@
     },
     "type-check": {
       "dependsOn": ["^build"]
+    },
+    "codegen:check": {
+      "cache": false
     }
   }
 }
