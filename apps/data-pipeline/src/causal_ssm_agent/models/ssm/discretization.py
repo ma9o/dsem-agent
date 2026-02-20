@@ -4,7 +4,7 @@ Implements the mathematical operations needed for continuous-to-discrete
 transformation in state-space models:
 
 1. Matrix exponential: exp(A*dt) for discrete drift
-2. Lyapunov solver: A*Q + Q*A' = -GG' for asymptotic diffusion (Kronecker vectorization)
+2. Lyapunov solver: A*Q + Q*A' = -GG' for asymptotic diffusion
 3. Discrete diffusion: Q_dt = Q_inf - exp(A*dt)*Q_inf*exp(A*dt)'
 4. Discrete CINT: c_dt = A^{-1}*(exp(A*dt) - I)*c
 
@@ -12,11 +12,25 @@ This module is decoupled from state marginalization (Kalman/UKF/Particle)
 to support different inference strategies.
 """
 
+import jax
 import jax.numpy as jnp
 import jax.scipy.linalg as jla
 from jax import vmap
 
 
+def _kron_lyapunov_solve(A: jnp.ndarray, Q: jnp.ndarray) -> jnp.ndarray:
+    """Solve AX + XA' = -Q via Kronecker vectorization.
+
+    (I ⊗ A + A ⊗ I) vec(X) = vec(-Q). O(n^6) but fully differentiable.
+    """
+    n = A.shape[0]
+    I_n = jnp.eye(n)
+    M = jnp.kron(I_n, A) + jnp.kron(A, I_n)
+    X_vec = jla.solve(M, (-Q).reshape(-1))
+    return X_vec.reshape(n, n)
+
+
+@jax.custom_vjp
 def solve_lyapunov(A: jnp.ndarray, Q: jnp.ndarray) -> jnp.ndarray:
     """Solve the continuous Lyapunov equation: A*X + X*A' = -Q.
 
@@ -25,10 +39,10 @@ def solve_lyapunov(A: jnp.ndarray, Q: jnp.ndarray) -> jnp.ndarray:
     For a stable system (eigenvalues of A have negative real parts),
     this gives the stationary covariance of the process.
 
-    Uses Kronecker vectorization: vec(AX + XA') = (I ⊗ A + A ⊗ I) vec(X),
-    so vec(X) = (I ⊗ A + A ⊗ I)^{-1} vec(-Q). This is O(n^6) but fully
-    differentiable in JAX (unlike Bartels-Stewart which uses Schur decomposition).
-    Fine for the small state dimensions (2-4) used in this project.
+    Forward pass uses Bartels-Stewart (Schur decomposition) via JAX's
+    Sylvester solver for numerical stability. Backward pass uses implicit
+    differentiation with Kronecker vectorization, since JAX lacks a
+    differentiation rule for 'schur'.
 
     Args:
         A: n x n drift matrix (must be stable for unique solution)
@@ -37,12 +51,29 @@ def solve_lyapunov(A: jnp.ndarray, Q: jnp.ndarray) -> jnp.ndarray:
     Returns:
         X: n x n solution matrix (asymptotic covariance)
     """
-    n = A.shape[0]
-    I_n = jnp.eye(n)
-    # (I ⊗ A + A ⊗ I) vec(X) = vec(-Q)
-    M = jnp.kron(I_n, A) + jnp.kron(A, I_n)
-    X_vec = jla.solve(M, (-Q).reshape(-1))
-    return X_vec.reshape(n, n)
+    return jla.solve_sylvester(A, A.T, -Q)
+
+
+def _solve_lyapunov_fwd(A, Q):
+    X = solve_lyapunov(A, Q)
+    return X, (A, X)
+
+
+def _solve_lyapunov_bwd(res, g):
+    """VJP via implicit differentiation of AX + XA' = -Q.
+
+    The adjoint equation is A'V + VA = g, solved via Kronecker vectorization.
+    Then: grad_A = -(V @ X' + V' @ X), grad_Q = -V.
+    """
+    A, X = res
+    # Solve adjoint Lyapunov: A'V + VA = g  =>  solve_lyap(A', -g) = V
+    V = _kron_lyapunov_solve(A.T, -g)
+    grad_A = -(V @ X.T + V.T @ X)
+    grad_Q = -V
+    return grad_A, grad_Q
+
+
+solve_lyapunov.defvjp(_solve_lyapunov_fwd, _solve_lyapunov_bwd)
 
 
 def compute_asymptotic_diffusion(drift: jnp.ndarray, diffusion_cov: jnp.ndarray) -> jnp.ndarray:
