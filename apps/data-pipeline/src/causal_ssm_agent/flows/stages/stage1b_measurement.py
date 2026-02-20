@@ -11,7 +11,11 @@ from causal_ssm_agent.orchestrator.agents import build_causal_spec as _build_cau
 from causal_ssm_agent.orchestrator.stage1b import run_stage1b
 from causal_ssm_agent.utils.config import get_config
 from causal_ssm_agent.utils.data import chunk_lines, get_orchestrator_chunk_size
-from causal_ssm_agent.utils.llm import attach_trace, make_orchestrator_generate_fn
+from causal_ssm_agent.utils.llm import (
+    attach_trace,
+    make_live_trace_path,
+    make_orchestrator_generate_fn,
+)
 
 
 @task(cache_policy=INPUTS, result_serializer="json")
@@ -53,7 +57,9 @@ async def propose_measurement_with_identifiability_fix(
     """
     model = get_model(get_config().stage1_structure_proposal.model)
     trace_capture: dict = {}
-    generate = make_orchestrator_generate_fn(model, trace_capture=trace_capture)
+    generate = make_orchestrator_generate_fn(
+        model, trace_capture=trace_capture, trace_path=make_live_trace_path("stage-1b")
+    )
     result = await run_stage1b(
         question=question,
         latent_model=latent_model,

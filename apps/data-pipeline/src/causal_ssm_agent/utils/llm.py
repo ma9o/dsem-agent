@@ -1,7 +1,11 @@
 """Shared LLM utilities for multi-turn generation."""
 
 import json
+import logging
+import time
 from collections.abc import Awaitable, Callable
+import dataclasses
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from inspect_ai.model import (
@@ -12,9 +16,12 @@ from inspect_ai.model import (
     GenerateConfig,
     Model,
     ModelOutput,
+    execute_tools,
 )
 from inspect_ai.tool import Tool, tool
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from inspect_ai.model import ChatMessage
@@ -127,6 +134,83 @@ def _build_trace(all_messages: list["ChatMessage"], output: ModelOutput) -> LLMT
 
 
 # ---------------------------------------------------------------------------
+# Live trace persistence (intermediate disk writes)
+# ---------------------------------------------------------------------------
+
+_RESULT_STORAGE = Path("results")
+
+
+def make_live_trace_path(stage_id: str) -> Path:
+    """Create a path for live trace persistence.
+
+    Writes to the same ``results/{flow_run_id}/{stage_id}.json`` file that
+    ``persist_web_result`` will eventually overwrite with the full stage output.
+    This lets the frontend display intermediate LLM conversation state while
+    a stage is still running.
+
+    Uses the Prefect flow run ID when running inside a flow, otherwise
+    falls back to a timestamp-based directory.
+
+    Args:
+        stage_id: Stage identifier (e.g. "stage-1a", "stage-4")
+
+    Returns:
+        Path like ``results/{run_id}/{stage_id}.json``
+    """
+    run_id = None
+    try:
+        from prefect.runtime import flow_run
+
+        run_id = flow_run.id
+    except Exception:
+        pass
+    if run_id is None:
+        run_id = time.strftime("%Y%m%d-%H%M%S")
+    return _RESULT_STORAGE / str(run_id) / f"{stage_id}.json"
+
+
+def _persist_partial_trace(
+    messages: list["ChatMessage"],
+    trace_path: Path,
+    label: str,
+    turn: int,
+    elapsed: float,
+) -> None:
+    """Write accumulated messages to disk as a partial stage result.
+
+    Uses the same schema the frontend expects (``llm_trace`` matching the
+    ``LLMTrace`` TypeScript interface) so the frontend can render intermediate
+    conversation state. Adds ``_live.status`` and ``_live.turn`` metadata.
+
+    Overwrites the file each turn. Failures are logged but never bubble up.
+    """
+    try:
+        trace_path.parent.mkdir(parents=True, exist_ok=True)
+        trace_messages = [dataclasses.asdict(_chat_message_to_trace(m)) for m in messages]
+        partial = {
+            "llm_trace": {
+                "messages": trace_messages,
+                "model": "",
+                "total_time_seconds": round(elapsed, 1),
+                "usage": {
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "total_tokens": 0,
+                },
+            },
+            "_live": {
+                "status": "running",
+                "label": label,
+                "turn": turn,
+                "elapsed_seconds": round(elapsed, 1),
+            },
+        }
+        trace_path.write_text(json.dumps(partial, indent=2, default=str))
+    except Exception:
+        logger.debug("Failed to write partial trace to %s", trace_path, exc_info=True)
+
+
+# ---------------------------------------------------------------------------
 # Type aliases for generate functions (unified)
 # ---------------------------------------------------------------------------
 
@@ -180,6 +264,7 @@ def make_generate_fn(
     model: Model,
     config: GenerateConfig | None = None,
     trace_capture: dict | None = None,
+    trace_path: Path | None = None,
 ) -> GenerateFn:
     """Create a generate function for LLM calls.
 
@@ -190,6 +275,8 @@ def make_generate_fn(
         model: The model to use for generation
         config: Optional generation config (uses get_generate_config() if None)
         trace_capture: Optional dict for capturing the LLM trace
+        trace_path: Optional path for live trace persistence (partial JSON written
+            after each LLM turn so agents can inspect mid-run state)
 
     Returns:
         An async function that handles multi-turn generation with tools and follow-ups
@@ -212,6 +299,7 @@ def make_generate_fn(
                 tools=tools or [],
                 config=config,
                 trace_capture=trace_capture,
+                trace_path=trace_path,
             )
         else:
             response = await model.generate(chat_messages, config=config)
@@ -534,6 +622,104 @@ def parse_date():
 
 
 # ---------------------------------------------------------------------------
+# Per-turn logging helpers
+# ---------------------------------------------------------------------------
+
+MAX_TOOL_LOOP_TURNS = 25
+WARN_TOOL_LOOP_TURNS = 10
+
+
+def _summarize_output(output: ModelOutput, elapsed: float) -> str:
+    """One-line summary of a ModelOutput for logging."""
+    parts = []
+    if output.usage:
+        parts.append(f"tokens(in={output.usage.input_tokens},out={output.usage.output_tokens})")
+    parts.append(f"time={elapsed:.1f}s")
+    if output.message.tool_calls:
+        names = [tc.function for tc in output.message.tool_calls]
+        parts.append(f"tool_calls={names}")
+    else:
+        parts.append(f"stop={output.stop_reason or 'end_turn'}")
+    text = output.completion or ""
+    preview = text[:120].replace("\n", " ")
+    if preview:
+        parts.append(f'preview="{preview}..."' if len(text) > 120 else f'preview="{preview}"')
+    return " | ".join(parts)
+
+
+async def _run_tool_loop(
+    messages: list["ChatMessage"],
+    model: Model,
+    tools: list[Tool],
+    config: GenerateConfig | None,
+    label: str = "tool",
+    max_turns: int = MAX_TOOL_LOOP_TURNS,
+    warn_turns: int = WARN_TOOL_LOOP_TURNS,
+    trace_path: Path | None = None,
+) -> tuple[list["ChatMessage"], ModelOutput]:
+    """Run a tool loop with per-turn logging and an infinite-loop guard.
+
+    Replaces model.generate_loop() with identical semantics but adds:
+    - INFO log per turn (tokens, timing, tool calls, content preview)
+    - WARNING when turn count hits warn_turns
+    - RuntimeError when turn count exceeds max_turns
+    - Optional partial trace written to disk after each turn
+    """
+    t0 = time.monotonic()
+    turn = 0
+
+    while True:
+        turn += 1
+        if turn > max_turns:
+            elapsed = time.monotonic() - t0
+            logger.error(
+                "[%s] exceeded %d turns (elapsed=%.1fs). Terminating.",
+                label,
+                max_turns,
+                elapsed,
+            )
+            raise RuntimeError(f"LLM {label} loop exceeded {max_turns} turns without converging.")
+        if turn == warn_turns:
+            elapsed = time.monotonic() - t0
+            logger.warning(
+                "[%s] reached %d turns (elapsed=%.1fs). Possible infinite loop.",
+                label,
+                warn_turns,
+                elapsed,
+            )
+
+        t_turn = time.monotonic()
+        output = await model.generate(input=messages, tools=tools, config=config)
+        messages.append(output.message)
+        elapsed_turn = time.monotonic() - t_turn
+
+        logger.info(
+            "[%s] turn=%d | %s",
+            label,
+            turn,
+            _summarize_output(output, elapsed_turn),
+        )
+
+        if output.message.tool_calls:
+            tool_messages, tool_output = await execute_tools(
+                messages,
+                tools,
+                config.max_tool_output if config else None,
+            )
+            messages.extend(tool_messages)
+            if tool_output is not None:
+                output = tool_output
+
+        if trace_path is not None:
+            _persist_partial_trace(messages, trace_path, label, turn, time.monotonic() - t0)
+
+        if not output.message.tool_calls:
+            elapsed_total = time.monotonic() - t0
+            logger.info("[%s] completed: %d turns in %.1fs", label, turn, elapsed_total)
+            return messages, output
+
+
+# ---------------------------------------------------------------------------
 # Multi-turn generation
 # ---------------------------------------------------------------------------
 
@@ -546,15 +732,19 @@ async def multi_turn_generate(
     follow_up_tools: list[Tool] | None = None,
     config: GenerateConfig | None = None,
     trace_capture: dict | None = None,
+    trace_path: Path | None = None,
 ) -> str:
     """
     Run a multi-turn conversation with optional tool use.
+
+    Uses a manual tool loop (via _run_tool_loop) instead of model.generate_loop()
+    to provide per-turn logging, timing, and an infinite-loop safety guard.
 
     Args:
         messages: Initial messages (typically system + user prompt)
         model: The model to use for generation
         follow_ups: List of follow-up user prompts to send after each response (default: none)
-        tools: Optional list of tools the model can use on the first turn (enables generate_loop)
+        tools: Optional list of tools the model can use on the first turn
         follow_up_tools: Optional list of tools for follow-up (self-review) turns.
             Defaults to None, meaning follow-up turns use no tools (plain generation).
             This prevents the LLM from re-invoking validation tools during self-review
@@ -562,60 +752,107 @@ async def multi_turn_generate(
         config: Optional generation config
         trace_capture: Optional dict; when provided, the full LLMTrace is stored
             under ``trace_capture["trace"]`` before returning.
+        trace_path: Optional path; when provided, a partial JSON trace is written
+            to disk after each LLM turn for live observability.
 
     Returns:
         The final completion string
     """
+    t0 = time.monotonic()
     messages = list(messages)  # Don't mutate original
     follow_ups = follow_ups or []
 
+    logger.info(
+        "multi_turn_generate starting (tools=%d, follow_ups=%d)",
+        len(tools or []),
+        len(follow_ups),
+    )
+
     if tools:
-        # Use generate_loop for tool-enabled generation
-        final_messages, output = await model.generate_loop(
+        # Tool-enabled generation with per-turn logging
+        messages, output = await _run_tool_loop(
             messages,
-            tools=tools,
-            config=config,
+            model,
+            tools,
+            config,
+            label="initial",
+            trace_path=trace_path,
         )
-        messages = list(final_messages)
         last_nonempty = output.completion
 
-        # Follow-up turns: use follow_up_tools if provided, otherwise no tools
-        for prompt in follow_ups:
+        # Follow-up turns
+        for i, prompt in enumerate(follow_ups):
+            logger.info("Follow-up %d/%d starting", i + 1, len(follow_ups))
             messages.append(ChatMessageUser(content=prompt))
+
             if follow_up_tools:
-                final_messages, output = await model.generate_loop(
+                messages, output = await _run_tool_loop(
                     messages,
-                    tools=follow_up_tools,
-                    config=config,
+                    model,
+                    follow_up_tools,
+                    config,
+                    label=f"follow-up-{i + 1}",
+                    trace_path=trace_path,
                 )
-                messages = list(final_messages)
             else:
+                t_fu = time.monotonic()
                 response = await model.generate(messages, config=config)
                 messages.append(ChatMessageAssistant(content=response.completion))
                 output = response
+                elapsed_fu = time.monotonic() - t_fu
+                logger.info(
+                    "Follow-up %d/%d | %s",
+                    i + 1,
+                    len(follow_ups),
+                    _summarize_output(output, elapsed_fu),
+                )
+                # Persist after plain follow-up turns too
+                if trace_path is not None:
+                    _persist_partial_trace(
+                        messages, trace_path, f"follow-up-{i + 1}", 1, time.monotonic() - t0
+                    )
+
             if output.completion and output.completion.strip():
                 last_nonempty = output.completion
 
         if trace_capture is not None:
             trace_capture["trace"] = _build_trace(messages, output)
 
+        elapsed_total = time.monotonic() - t0
+        logger.info("multi_turn_generate completed in %.1fs", elapsed_total)
+        # No finalization needed — persist_web_result overwrites with full stage output
         return last_nonempty
     else:
         # Simple generation without tools
+        t_gen = time.monotonic()
         response = await model.generate(messages, config=config)
         messages.append(ChatMessageAssistant(content=response.completion))
+        elapsed_gen = time.monotonic() - t_gen
+        logger.info("single-turn | %s", _summarize_output(response, elapsed_gen))
         last_nonempty = response.completion
 
-        for prompt in follow_ups:
+        for i, prompt in enumerate(follow_ups):
+            logger.info("Follow-up %d/%d starting", i + 1, len(follow_ups))
             messages.append(ChatMessageUser(content=prompt))
+            t_fu = time.monotonic()
             response = await model.generate(messages, config=config)
             messages.append(ChatMessageAssistant(content=response.completion))
+            elapsed_fu = time.monotonic() - t_fu
+            logger.info(
+                "Follow-up %d/%d | %s",
+                i + 1,
+                len(follow_ups),
+                _summarize_output(response, elapsed_fu),
+            )
             if response.completion and response.completion.strip():
                 last_nonempty = response.completion
 
         if trace_capture is not None:
             trace_capture["trace"] = _build_trace(messages, response)
 
+        elapsed_total = time.monotonic() - t0
+        logger.info("multi_turn_generate completed in %.1fs", elapsed_total)
+        # No finalization needed — persist_web_result overwrites with full stage output
         return last_nonempty
 
 
