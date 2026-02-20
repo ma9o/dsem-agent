@@ -3,7 +3,6 @@
 import dataclasses
 import json
 import logging
-import tempfile
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -144,49 +143,16 @@ def _build_trace(all_messages: list["ChatMessage"], output: ModelOutput) -> LLMT
 # Live trace persistence (intermediate disk writes)
 # ---------------------------------------------------------------------------
 
-_LIVE_TRACE_DIR = Path(tempfile.gettempdir()) / "causal-pipeline-traces"
-
-
-def get_live_trace_dir() -> Path:
-    """Return the directory where live traces are written.
-
-    Live traces are partial JSON files updated after each LLM turn,
-    allowing agents to inspect intermediate conversation state while
-    a stage is still running.
-
-    Files are named ``{label}-live.json`` within a flow-run subdirectory.
-    """
-    return _LIVE_TRACE_DIR
-
-
-def _persist_partial_trace(
-    messages: list["ChatMessage"],
-    trace_path: Path,
-    label: str,
-    turn: int,
-    elapsed: float,
-) -> None:
-    """Write accumulated messages to disk as a partial trace.
-
-    Overwrites the file each turn so the agent always reads the latest state.
-    Failures are logged but never bubble up — this is best-effort observability.
-    """
-    try:
-        trace_path.parent.mkdir(parents=True, exist_ok=True)
-        partial = {
-            "label": label,
-            "turn": turn,
-            "elapsed_seconds": round(elapsed, 1),
-            "status": "running",
-            "messages": [dataclasses.asdict(_chat_message_to_trace(m)) for m in messages],
-        }
-        trace_path.write_text(json.dumps(partial, indent=2, default=str))
-    except Exception:
-        logger.debug("Failed to write partial trace to %s", trace_path, exc_info=True)
+_RESULT_STORAGE = Path("results")
 
 
 def make_live_trace_path(stage_id: str) -> Path:
     """Create a path for live trace persistence.
+
+    Writes to the same ``results/{flow_run_id}/{stage_id}.json`` file that
+    ``persist_web_result`` will eventually overwrite with the full stage output.
+    This lets the frontend display intermediate LLM conversation state while
+    a stage is still running.
 
     Uses the Prefect flow run ID when running inside a flow, otherwise
     falls back to a timestamp-based directory.
@@ -195,7 +161,7 @@ def make_live_trace_path(stage_id: str) -> Path:
         stage_id: Stage identifier (e.g. "stage-1a", "stage-4")
 
     Returns:
-        Path like ``/tmp/causal-pipeline-traces/{run_id}/{stage_id}-live.json``
+        Path like ``results/{run_id}/{stage_id}.json``
     """
     run_id = None
     try:
@@ -206,29 +172,48 @@ def make_live_trace_path(stage_id: str) -> Path:
         pass
     if run_id is None:
         run_id = time.strftime("%Y%m%d-%H%M%S")
-    return _LIVE_TRACE_DIR / str(run_id) / f"{stage_id}-live.json"
+    return _RESULT_STORAGE / str(run_id) / f"{stage_id}.json"
 
 
-def _finalize_live_trace(
-    trace_path: Path | None,
+def _persist_partial_trace(
     messages: list["ChatMessage"],
+    trace_path: Path,
+    label: str,
+    turn: int,
     elapsed: float,
 ) -> None:
-    """Mark a live trace file as completed.
+    """Write accumulated messages to disk as a partial stage result.
 
-    Overwrites the running trace with a final snapshot that has status="completed".
+    Uses the same schema the frontend expects (``llm_trace`` matching the
+    ``LLMTrace`` TypeScript interface) so the frontend can render intermediate
+    conversation state. Adds ``_live.status`` and ``_live.turn`` metadata.
+
+    Overwrites the file each turn. Failures are logged but never bubble up.
     """
-    if trace_path is None:
-        return
     try:
-        final = {
-            "status": "completed",
-            "elapsed_seconds": round(elapsed, 1),
-            "messages": [dataclasses.asdict(_chat_message_to_trace(m)) for m in messages],
+        trace_path.parent.mkdir(parents=True, exist_ok=True)
+        trace_messages = [dataclasses.asdict(_chat_message_to_trace(m)) for m in messages]
+        partial = {
+            "llm_trace": {
+                "messages": trace_messages,
+                "model": "",
+                "total_time_seconds": round(elapsed, 1),
+                "usage": {
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "total_tokens": 0,
+                },
+            },
+            "_live": {
+                "status": "running",
+                "label": label,
+                "turn": turn,
+                "elapsed_seconds": round(elapsed, 1),
+            },
         }
-        trace_path.write_text(json.dumps(final, indent=2, default=str))
+        trace_path.write_text(json.dumps(partial, indent=2, default=str))
     except Exception:
-        logger.debug("Failed to finalize live trace at %s", trace_path, exc_info=True)
+        logger.debug("Failed to write partial trace to %s", trace_path, exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -841,7 +826,7 @@ async def multi_turn_generate(
 
         elapsed_total = time.monotonic() - t0
         logger.info("multi_turn_generate completed in %.1fs", elapsed_total)
-        _finalize_live_trace(trace_path, messages, elapsed_total)
+        # No finalization needed — persist_web_result overwrites with full stage output
         return last_nonempty
     else:
         # Simple generation without tools
@@ -873,7 +858,7 @@ async def multi_turn_generate(
 
         elapsed_total = time.monotonic() - t0
         logger.info("multi_turn_generate completed in %.1fs", elapsed_total)
-        _finalize_live_trace(trace_path, messages, elapsed_total)
+        # No finalization needed — persist_web_result overwrites with full stage output
         return last_nonempty
 
 
