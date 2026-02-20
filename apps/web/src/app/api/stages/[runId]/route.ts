@@ -38,8 +38,9 @@ export async function GET(
         body: JSON.stringify({
           flow_runs: { id: { any_: [runId] } },
           task_runs: { name: { like_: `${stage.prefectTaskName}%` } },
-          // Fan-out stages have many tasks; others have one
-          limit: stage.isFanOut ? 1000 : 1,
+          // Fan-out stages have many tasks; others have one.
+          // Prefect API max limit is 200.
+          limit: stage.isFanOut ? 200 : 1,
           sort: "EXPECTED_START_TIME_DESC",
         }),
       });
@@ -58,10 +59,20 @@ export async function GET(
       const allCompleted = runs.every((r) => r.state.type === "COMPLETED");
 
       let status: string;
-      if (hasFailed) status = "failed";
-      else if (allCompleted) status = "completed";
-      else if (hasRunning) status = "running";
-      else status = "running"; // Some pending = still in progress
+      if (stage.isFanOut) {
+        // Fan-out: individual worker failures don't fail the stage —
+        // the stage is "running" until all workers finish, then we report
+        // the aggregate via workerProgress.
+        if (allCompleted) status = "completed";
+        else if (runs.every((r) => r.state.type === "COMPLETED" || r.state.type === "FAILED"))
+          status = "completed"; // All done (some may have failed)
+        else status = "running";
+      } else {
+        if (hasFailed) status = "failed";
+        else if (allCompleted) status = "completed";
+        else if (hasRunning) status = "running";
+        else status = "running"; // Some pending = still in progress
+      }
 
       const earliest = runs.reduce((a, b) =>
         (a.start_time ?? "") < (b.start_time ?? "") ? a : b,
