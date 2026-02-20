@@ -102,6 +102,7 @@ function paramSymbol(name: string): string {
     kappa: "\\kappa",
     theta: "\\theta",
     omega: "\\omega",
+    cor: "\\psi",
   };
 
   const parts = name.split("_");
