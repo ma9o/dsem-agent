@@ -6,11 +6,25 @@ Each worker returns a Polars DataFrame with (indicator, value, timestamp) tuples
 This is the "E" (Extract) in ETL. Transformation (aggregation) happens in Stage 3.
 """
 
+import asyncio
+
 from prefect import task
 from prefect.cache_policies import INPUTS
 
+from causal_ssm_agent.utils.config import get_config
 from causal_ssm_agent.utils.data import chunk_lines, get_worker_chunk_size
 from causal_ssm_agent.workers.agents import WorkerResult, process_chunk_async
+
+# Lazy-initialized semaphore limits concurrent LLM calls to stay under
+# API rate limits and avoid exhausting local resources.
+_worker_semaphore: asyncio.Semaphore | None = None
+
+
+def _get_worker_semaphore() -> asyncio.Semaphore:
+    global _worker_semaphore
+    if _worker_semaphore is None:
+        _worker_semaphore = asyncio.Semaphore(get_config().stage2_workers.max_concurrent)
+    return _worker_semaphore
 
 
 @task(cache_policy=INPUTS, result_serializer="json")
@@ -33,4 +47,5 @@ async def populate_indicators(chunk: str, question: str, causal_spec: dict) -> W
         - output: Validated WorkerOutput with extractions
         - dataframe: Polars DataFrame with columns (indicator, value, timestamp)
     """
-    return await process_chunk_async(chunk, question, causal_spec)
+    async with _get_worker_semaphore():
+        return await process_chunk_async(chunk, question, causal_spec)

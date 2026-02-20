@@ -31,6 +31,7 @@ class Stage2Config:
 
     model: str
     chunk_size: int
+    max_concurrent: int = 50
 
 
 @dataclass(frozen=True)

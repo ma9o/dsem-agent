@@ -11,7 +11,8 @@ stage1_structure_proposal:
 # Workers process chunks in parallel to populate dimensions and suggest graph edits
 stage2_workers:
   model: openrouter/google/gemini-3-flash-preview
-  chunk_size: 20  # Lines per chunk for each worker
+  chunk_size: 20     # Lines per chunk for each worker
+  max_concurrent: 50 # Max parallel LLM calls (OpenRouter limit: 275 RPM)
 
 # Stage 3: Identifiability & Sensitivity Analysis
 # Uses y0 (Pearl's ID algorithm) - no LLM needed
