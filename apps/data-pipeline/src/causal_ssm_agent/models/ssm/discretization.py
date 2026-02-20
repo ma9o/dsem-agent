@@ -4,7 +4,7 @@ Implements the mathematical operations needed for continuous-to-discrete
 transformation in state-space models:
 
 1. Matrix exponential: exp(A*dt) for discrete drift
-2. Lyapunov solver: A*Q + Q*A' = -GG' for asymptotic diffusion
+2. Lyapunov solver: A*Q + Q*A' = -GG' for asymptotic diffusion (Kronecker vectorization)
 3. Discrete diffusion: Q_dt = Q_inf - exp(A*dt)*Q_inf*exp(A*dt)'
 4. Discrete CINT: c_dt = A^{-1}*(exp(A*dt) - I)*c
 
@@ -25,8 +25,10 @@ def solve_lyapunov(A: jnp.ndarray, Q: jnp.ndarray) -> jnp.ndarray:
     For a stable system (eigenvalues of A have negative real parts),
     this gives the stationary covariance of the process.
 
-    Uses Bartels-Stewart (Schur decomposition) via JAX's Sylvester solver,
-    which is O(n^3) vs O(n^6) for the Kronecker vectorization approach.
+    Uses Kronecker vectorization: vec(AX + XA') = (I ⊗ A + A ⊗ I) vec(X),
+    so vec(X) = (I ⊗ A + A ⊗ I)^{-1} vec(-Q). This is O(n^6) but fully
+    differentiable in JAX (unlike Bartels-Stewart which uses Schur decomposition).
+    Fine for the small state dimensions (2-4) used in this project.
 
     Args:
         A: n x n drift matrix (must be stable for unique solution)
@@ -35,8 +37,12 @@ def solve_lyapunov(A: jnp.ndarray, Q: jnp.ndarray) -> jnp.ndarray:
     Returns:
         X: n x n solution matrix (asymptotic covariance)
     """
-    # AX + XA' = -Q is Sylvester AX + XB = C with B=A', C=-Q
-    return jla.solve_sylvester(A, A.T, -Q)
+    n = A.shape[0]
+    I_n = jnp.eye(n)
+    # (I ⊗ A + A ⊗ I) vec(X) = vec(-Q)
+    M = jnp.kron(I_n, A) + jnp.kron(A, I_n)
+    X_vec = jla.solve(M, (-Q).reshape(-1))
+    return X_vec.reshape(n, n)
 
 
 def compute_asymptotic_diffusion(drift: jnp.ndarray, diffusion_cov: jnp.ndarray) -> jnp.ndarray:
