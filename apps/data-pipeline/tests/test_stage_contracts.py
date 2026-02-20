@@ -53,12 +53,6 @@ def valid_stage_payloads() -> dict[str, dict]:
             },
             "outcome_name": "Perf",
             "treatments": ["Stress"],
-            "graph_properties": {
-                "is_acyclic": True,
-                "n_constructs": 2,
-                "n_edges": 1,
-                "has_single_outcome": True,
-            },
             "context": "latent model context",
         },
         "stage-1b": {
@@ -118,7 +112,6 @@ def valid_stage_payloads() -> dict[str, dict]:
                 {"indicator": "stress_score", "value": 1.2, "timestamp": "2024-01-01T00:00:00Z"},
                 {"indicator": "late_night", "value": True, "timestamp": "2024-01-02T00:00:00Z"},
             ],
-            "total_extractions": 3,
             "per_indicator_counts": {"stress_score": 2, "late_night": 1},
         },
         "stage-3": {
@@ -214,7 +207,6 @@ def valid_stage_payloads() -> dict[str, dict]:
             ],
             "ppc": {
                 "per_variable_warnings": [],
-                "overall_passed": True,
                 "checked": True,
                 "overlays": [],
                 "test_stats": [],

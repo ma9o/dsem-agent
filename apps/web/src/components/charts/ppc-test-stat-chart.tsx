@@ -22,7 +22,8 @@ interface PPCTestStatChartProps {
 
 export function PPCTestStatChart({ stat }: PPCTestStatChartProps) {
   const bins = buildHistogram(stat.rep_values);
-  const isExtreme = stat.p_value < 0.05 || stat.p_value > 0.95;
+  const pValue = stat.rep_values.filter((v) => v >= stat.observed_value).length / stat.rep_values.length;
+  const isExtreme = pValue < 0.05 || pValue > 0.95;
 
   return (
     <div className="space-y-2">
@@ -31,7 +32,7 @@ export function PPCTestStatChart({ stat }: PPCTestStatChartProps) {
           T = {stat.stat_name}({stat.variable})
         </span>
         <Badge variant={isExtreme ? "destructive" : "success"} className="text-[10px]">
-          p = {formatNumber(stat.p_value, 2)}
+          p = {formatNumber(pValue, 2)}
         </Badge>
       </div>
       <div className="h-36 w-full">

@@ -295,35 +295,6 @@
       "title": "GateOverrideContract",
       "type": "object"
     },
-    "GraphPropertiesContract": {
-      "additionalProperties": false,
-      "properties": {
-        "is_acyclic": {
-          "title": "Is Acyclic",
-          "type": "boolean"
-        },
-        "n_constructs": {
-          "title": "N Constructs",
-          "type": "integer"
-        },
-        "n_edges": {
-          "title": "N Edges",
-          "type": "integer"
-        },
-        "has_single_outcome": {
-          "title": "Has Single Outcome",
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "has_single_outcome",
-        "is_acyclic",
-        "n_constructs",
-        "n_edges"
-      ],
-      "title": "GraphPropertiesContract",
-      "type": "object"
-    },
     "IdentifiabilityStatus": {
       "description": "Status of causal effect identifiability.",
       "properties": {
@@ -1123,10 +1094,6 @@
           "title": "Per Variable Warnings",
           "type": "array"
         },
-        "overall_passed": {
-          "title": "Overall Passed",
-          "type": "boolean"
-        },
         "checked": {
           "anyOf": [
             {
@@ -1167,7 +1134,6 @@
         }
       },
       "required": [
-        "overall_passed",
         "overlays",
         "per_variable_warnings",
         "test_stats"
@@ -1203,14 +1169,9 @@
           "title": "Rep Values",
           "type": "array"
         },
-        "p_value": {
-          "title": "P Value",
-          "type": "number"
-        }
       },
       "required": [
         "observed_value",
-        "p_value",
         "rep_values",
         "stat_name",
         "variable"
@@ -1909,9 +1870,6 @@
           "title": "Treatments",
           "type": "array"
         },
-        "graph_properties": {
-          "$ref": "#/$defs/GraphPropertiesContract"
-        },
         "llm_trace": {
           "anyOf": [
             {
@@ -1937,7 +1895,6 @@
         }
       },
       "required": [
-        "graph_properties",
         "latent_model",
         "outcome_name",
         "treatments"
@@ -2021,10 +1978,6 @@
           "title": "Combined Extractions Sample",
           "type": "array"
         },
-        "total_extractions": {
-          "title": "Total Extractions",
-          "type": "integer"
-        },
         "per_indicator_counts": {
           "additionalProperties": {
             "type": "integer"
@@ -2048,7 +2001,6 @@
       "required": [
         "combined_extractions_sample",
         "per_indicator_counts",
-        "total_extractions",
         "workers"
       ],
       "title": "Stage2Contract",
@@ -2561,11 +2513,6 @@
           "title": "Output Tokens",
           "type": "integer"
         },
-        "total_tokens": {
-          "default": 0,
-          "title": "Total Tokens",
-          "type": "integer"
-        },
         "reasoning_tokens": {
           "anyOf": [
             {
@@ -2583,8 +2530,7 @@
       "type": "object",
       "required": [
         "input_tokens",
-        "output_tokens",
-        "total_tokens"
+        "output_tokens"
       ]
     },
     "TreatmentEffectContract": {

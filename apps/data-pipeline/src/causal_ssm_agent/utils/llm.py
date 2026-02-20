@@ -50,7 +50,6 @@ class TraceUsage(BaseModel):
 
     input_tokens: int = 0
     output_tokens: int = 0
-    total_tokens: int = 0
     reasoning_tokens: int | None = None
 
 
@@ -121,7 +120,6 @@ def _build_trace(all_messages: list["ChatMessage"], output: ModelOutput) -> LLMT
         usage = TraceUsage(
             input_tokens=output.usage.input_tokens,
             output_tokens=output.usage.output_tokens,
-            total_tokens=output.usage.total_tokens,
             reasoning_tokens=output.usage.reasoning_tokens,
         )
     return LLMTrace(

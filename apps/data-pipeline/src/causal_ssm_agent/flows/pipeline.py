@@ -142,8 +142,8 @@ async def causal_inference_pipeline(
     latent_model = stage1a_result["latent_model"]
     outcome = stage1a_result["outcome_name"]
     treatments = stage1a_result["treatments"]
-    n_constructs = stage1a_result["graph_properties"]["n_constructs"]
-    n_edges = stage1a_result["graph_properties"]["n_edges"]
+    n_constructs = len(latent_model["constructs"])
+    n_edges = len(latent_model["edges"])
     print(f"Proposed {n_constructs} constructs with {n_edges} causal edges")
 
     if not outcome:
@@ -312,7 +312,6 @@ async def causal_inference_pipeline(
         {
             "workers": worker_statuses,
             "combined_extractions_sample": combined_extractions_sample,
-            "total_extractions": n_observations,
             "per_indicator_counts": per_ind_counts,
             "context": (
                 "Stage 2 dispatches worker LLMs to extract indicator observations from raw "

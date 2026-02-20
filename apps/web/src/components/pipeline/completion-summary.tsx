@@ -91,7 +91,7 @@ export function CompletionSummary({ runId }: { runId: string }) {
               {sensitiveCount} sensitivity warning{sensitiveCount !== 1 && "s"}
             </Badge>
           )}
-          {data.ppc.overall_passed ? (
+          {data.ppc.per_variable_warnings.every((w) => w.passed) ? (
             <Badge variant="success">PPC passed</Badge>
           ) : (
             <Badge variant="destructive">PPC failed</Badge>

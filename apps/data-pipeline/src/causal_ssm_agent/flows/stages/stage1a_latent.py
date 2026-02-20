@@ -46,12 +46,6 @@ async def propose_latent_model(question: str) -> dict:
         "latent_model": latent_model,
         "outcome_name": outcome or "",
         "treatments": treatments,
-        "graph_properties": {
-            "is_acyclic": True,
-            "n_constructs": len(latent_model["constructs"]),
-            "n_edges": len(latent_model["edges"]),
-            "has_single_outcome": outcome is not None,
-        },
         "context": (
             "Stage 1a proposes a latent causal model based on domain knowledge alone. "
             "The model specifies theoretical constructs and their causal relationships."

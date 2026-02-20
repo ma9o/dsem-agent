@@ -254,8 +254,8 @@ export function DiagnosticsAccordion({
           <span className="inline-flex items-center gap-1.5 flex-wrap">
             Posterior Predictive Checks
             <StatTooltip explanation="Simulates data from the fitted model and compares to observed data. Includes per-variable warnings, overlay plots, and test statistics." />
-            <Badge variant={ppc.overall_passed ? "success" : "destructive"}>
-              {ppc.overall_passed ? "Passed" : "Failed"}
+            <Badge variant={ppc.per_variable_warnings.every((w) => w.passed) ? "success" : "destructive"}>
+              {ppc.per_variable_warnings.every((w) => w.passed) ? "Passed" : "Failed"}
             </Badge>
           </span>
         </AccordionTrigger>

@@ -68,22 +68,12 @@ class Stage0Contract(BaseModel):
     context: str | None = None
 
 
-class GraphPropertiesContract(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    is_acyclic: bool
-    n_constructs: int
-    n_edges: int
-    has_single_outcome: bool
-
-
 class Stage1aContract(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     latent_model: LatentModel
     outcome_name: str
     treatments: list[str]
-    graph_properties: GraphPropertiesContract
     llm_trace: LLMTrace | None = None
     context: str | None = None
 
@@ -121,7 +111,6 @@ class Stage2Contract(BaseModel):
 
     workers: list[WorkerStatusContract]
     combined_extractions_sample: list[ExtractionContract]
-    total_extractions: int
     per_indicator_counts: dict[str, int]
     context: str | None = None
 
@@ -223,7 +212,6 @@ class PPCResultContract(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     per_variable_warnings: list[PPCWarning]
-    overall_passed: bool
     checked: bool | None = None
     n_subsample: int | None = None
     overlays: list[PPCOverlay] = Field(default_factory=list)

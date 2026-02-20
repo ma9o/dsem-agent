@@ -12,7 +12,7 @@ from typing import Literal
 import jax
 import jax.numpy as jnp
 from jax import lax, vmap
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field
 
 from causal_ssm_agent.models.ssm.constants import MIN_DT
 from causal_ssm_agent.models.ssm.discretization import discretize_system_batched
@@ -89,7 +89,6 @@ class PPCTestStat(BaseModel):
     stat_name: Literal["mean", "sd", "min", "max"]
     observed_value: float
     rep_values: list[float]
-    p_value: float
 
 
 class PPCResult(BaseModel):
@@ -100,11 +99,6 @@ class PPCResult(BaseModel):
     n_subsample: int = 0
     overlays: list[PPCOverlay] = Field(default_factory=list)
     test_stats: list[PPCTestStat] = Field(default_factory=list)
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def overall_passed(self) -> bool:
-        return all(w.passed for w in self.per_variable_warnings) if self.per_variable_warnings else True
 
 
 # ---------------------------------------------------------------------------
@@ -950,17 +944,12 @@ def _compute_test_stats(
                 y_rep_valid = y_rep_j[valid_idx]
                 rep_stats.append(float(stat_fn(y_rep_valid)))
 
-            # Posterior predictive p-value: P(T(y_rep) >= T(y_obs))
-            rep_arr = jnp.array(rep_stats)
-            p_value = float(jnp.mean(rep_arr >= obs_stat))
-
             test_stats.append(
                 PPCTestStat(
                     variable=name,
                     stat_name=stat_name,
                     observed_value=obs_stat,
                     rep_values=rep_stats,
-                    p_value=p_value,
                 )
             )
 

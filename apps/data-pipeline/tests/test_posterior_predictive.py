@@ -330,18 +330,10 @@ class TestPPCDataclasses:
         d = r.model_dump()
         assert d["checked"] is True
         assert d["n_subsample"] == 50
-        assert d["overall_passed"] is True
         assert len(d["per_variable_warnings"]) == 1
         assert d["per_variable_warnings"][0]["variable"] == "x"
         assert d["overlays"] == []
         assert d["test_stats"] == []
-
-    def test_ppc_result_overall_passed_false(self):
-        w = PPCWarning(variable="x", check_type="calibration", message="bad", value=0.5, passed=False)
-        r = PPCResult(per_variable_warnings=[w], checked=True, n_subsample=50)
-        assert r.overall_passed is False
-        assert r.model_dump()["overall_passed"] is False
-
 
 class TestLinkFunctionSimulation:
     """Tests for forward simulation with non-default link functions."""

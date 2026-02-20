@@ -85,7 +85,6 @@ export interface Stage1AContract {
   latent_model: LatentModel;
   outcome_name: string;
   treatments: string[];
-  graph_properties: GraphPropertiesContract;
   llm_trace?: LLMTrace | null;
   context?: string | null;
 }
@@ -152,12 +151,6 @@ export interface CausalEdge {
    */
   lagged: boolean;
 }
-export interface GraphPropertiesContract {
-  is_acyclic: boolean;
-  n_constructs: number;
-  n_edges: number;
-  has_single_outcome: boolean;
-}
 /**
  * Full trace of an LLM multi-turn conversation.
  */
@@ -189,7 +182,6 @@ export interface TraceMessage {
 export interface TraceUsage {
   input_tokens: number;
   output_tokens: number;
-  total_tokens: number;
   reasoning_tokens?: number | null;
 }
 export interface Stage1BContract {
@@ -316,7 +308,6 @@ export interface GateOverrideContract {
 export interface Stage2Contract {
   workers: WorkerStatusContract[];
   combined_extractions_sample: ExtractionContract[];
-  total_extractions: number;
   per_indicator_counts: {
     [k: string]: number | undefined;
   };
@@ -595,7 +586,6 @@ export interface PowerScalingResultContract {
 }
 export interface PPCResultContract {
   per_variable_warnings: PPCWarning[];
-  overall_passed: boolean;
   checked?: boolean | null;
   n_subsample?: number | null;
   overlays: PPCOverlay[];
@@ -639,7 +629,6 @@ export interface PPCTestStat {
   stat_name: "mean" | "sd" | "min" | "max";
   observed_value: number;
   rep_values: number[];
-  p_value: number;
 }
 export interface InferenceMetadataContract {
   method: string;
