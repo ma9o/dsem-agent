@@ -21,6 +21,7 @@ from causal_ssm_agent.models.likelihoods.base import (
     InitialStateParams,
     MeasurementParams,
 )
+from causal_ssm_agent.models.likelihoods.kernels import build_observation_kernel
 from causal_ssm_agent.models.likelihoods.rao_blackwell import (
     _gauss_hermite_1d,
     _kalman_predict,
@@ -30,10 +31,26 @@ from causal_ssm_agent.models.likelihoods.rao_blackwell import (
     _obs_weight_quadrature,
     _unscented_sigma_points,
 )
+from causal_ssm_agent.orchestrator.schemas_model import DistributionFamily, LinkFunction
 
 # =============================================================================
 # Helpers
 # =============================================================================
+
+# Canonical link for each distribution (used when tests don't specify one)
+_CANONICAL_LINK = {
+    "gaussian": "identity",
+    "student_t": "identity",
+    "poisson": "log",
+    "gamma": "log",
+    "negative_binomial": "log",
+    "bernoulli": "logit",
+    "beta": "logit",
+}
+
+
+def _canonical_link(manifest_dist: str) -> str:
+    return _CANONICAL_LINK.get(str(manifest_dist), "identity")
 
 
 def _make_standard_params(n_latent=2, n_manifest=2):
@@ -87,12 +104,15 @@ def _run_rbpf(
     n_particles=200,
     rng_key=None,
     extra_params=None,
+    manifest_link=None,
 ):
     """Run RBPF and return log-likelihood."""
     from causal_ssm_agent.models.likelihoods.particle import ParticleLikelihood
 
     if rng_key is None:
         rng_key = random.PRNGKey(42)
+    if manifest_link is None:
+        manifest_link = _canonical_link(manifest_dist)
 
     backend = ParticleLikelihood(
         n_latent=init.mean.shape[0],
@@ -101,6 +121,7 @@ def _run_rbpf(
         rng_key=rng_key,
         manifest_dist=manifest_dist,
         diffusion_dist="gaussian",
+        manifest_link=manifest_link,
     )
     return backend.compute_log_likelihood(
         ct_params,
@@ -122,12 +143,15 @@ def _run_bootstrap_pf(
     n_particles=200,
     rng_key=None,
     extra_params=None,
+    manifest_link=None,
 ):
     """Run bootstrap PF (Student-t dynamics forces bootstrap) and return log-likelihood."""
     from causal_ssm_agent.models.likelihoods.particle import ParticleLikelihood
 
     if rng_key is None:
         rng_key = random.PRNGKey(42)
+    if manifest_link is None:
+        manifest_link = _canonical_link(manifest_dist)
 
     backend = ParticleLikelihood(
         n_latent=init.mean.shape[0],
@@ -136,6 +160,7 @@ def _run_bootstrap_pf(
         rng_key=rng_key,
         manifest_dist=manifest_dist,
         diffusion_dist="student_t",
+        manifest_link=manifest_link,
     )
     ep = {"proc_df": 100.0}
     if extra_params:
@@ -320,12 +345,13 @@ class TestObsWeights:
         m = jnp.array([0.5, 0.3])
         P = jnp.eye(2) * 0.3
         H = jnp.eye(2)
+        R = jnp.eye(2) * 0.1
         d = jnp.zeros(2)
         y = jnp.array([2.0, 1.0])
         obs_mask = jnp.ones(2, dtype=bool)
-        params = {"manifest_cov": jnp.eye(2) * 0.1}
+        ok = build_observation_kernel(DistributionFamily.POISSON, LinkFunction.LOG)
 
-        w = _obs_weight_quadrature(y, m, P, H, d, obs_mask, "poisson", params)
+        w = _obs_weight_quadrature(y, m, P, H, R, d, obs_mask, ok)
         assert jnp.isfinite(w)
 
     def test_student_t_weight_finite(self):
@@ -333,12 +359,16 @@ class TestObsWeights:
         m = jnp.array([0.5, 0.3])
         P = jnp.eye(2) * 0.3
         H = jnp.eye(2)
+        R = jnp.eye(2) * 0.1
         d = jnp.zeros(2)
         y = jnp.array([0.8, 0.1])
         obs_mask = jnp.ones(2, dtype=bool)
-        params = {"manifest_cov": jnp.eye(2) * 0.1, "obs_df": 5.0}
+        ok = build_observation_kernel(
+            DistributionFamily.STUDENT_T, LinkFunction.IDENTITY,
+            {"obs_df": 5.0}, manifest_cov=R,
+        )
 
-        w = _obs_weight_quadrature(y, m, P, H, d, obs_mask, "student_t", params)
+        w = _obs_weight_quadrature(y, m, P, H, R, d, obs_mask, ok)
         assert jnp.isfinite(w)
 
     def test_gamma_weight_finite(self):
@@ -346,28 +376,97 @@ class TestObsWeights:
         m = jnp.array([0.5, 0.3])
         P = jnp.eye(2) * 0.1
         H = jnp.eye(2)
+        R = jnp.eye(2) * 0.1
         d = jnp.zeros(2)
         y = jnp.array([1.5, 1.2])
         obs_mask = jnp.ones(2, dtype=bool)
-        params = {"obs_shape": 2.0}
+        ok = build_observation_kernel(
+            DistributionFamily.GAMMA, LinkFunction.LOG, {"obs_shape": 2.0},
+        )
 
-        w = _obs_weight_quadrature(y, m, P, H, d, obs_mask, "gamma", params)
+        w = _obs_weight_quadrature(y, m, P, H, R, d, obs_mask, ok)
         assert jnp.isfinite(w)
+
+    def test_bernoulli_probit_weight_finite(self):
+        """Bernoulli probit obs weight should be finite."""
+        m = jnp.array([0.5, 0.3])
+        P = jnp.eye(2) * 0.3
+        H = jnp.eye(2)
+        R = jnp.eye(2) * 0.1
+        d = jnp.zeros(2)
+        y = jnp.array([1.0, 0.0])
+        obs_mask = jnp.ones(2, dtype=bool)
+        ok = build_observation_kernel(DistributionFamily.BERNOULLI, LinkFunction.PROBIT)
+
+        w = _obs_weight_quadrature(y, m, P, H, R, d, obs_mask, ok)
+        assert jnp.isfinite(w), f"Bernoulli probit weight = {w}"
+
+    def test_gamma_inverse_weight_finite(self):
+        """Gamma inverse obs weight should be finite."""
+        m = jnp.array([2.0, 1.5])  # positive eta → mean = 1/eta
+        P = jnp.eye(2) * 0.1
+        H = jnp.eye(2)
+        R = jnp.eye(2) * 0.1
+        d = jnp.zeros(2)
+        y = jnp.array([0.5, 0.8])  # positive observations
+        obs_mask = jnp.ones(2, dtype=bool)
+        ok = build_observation_kernel(
+            DistributionFamily.GAMMA, LinkFunction.INVERSE, {"obs_shape": 2.0},
+        )
+
+        w = _obs_weight_quadrature(y, m, P, H, R, d, obs_mask, ok)
+        assert jnp.isfinite(w), f"Gamma inverse weight = {w}"
+
+    def test_beta_probit_weight_finite(self):
+        """Beta probit obs weight should be finite."""
+        m = jnp.array([0.3, -0.2])
+        P = jnp.eye(2) * 0.3
+        H = jnp.eye(2)
+        R = jnp.eye(2) * 0.1
+        d = jnp.zeros(2)
+        y = jnp.array([0.3, 0.7])  # in (0, 1)
+        obs_mask = jnp.ones(2, dtype=bool)
+        ok = build_observation_kernel(
+            DistributionFamily.BETA, LinkFunction.PROBIT, {"obs_concentration": 10.0},
+        )
+
+        w = _obs_weight_quadrature(y, m, P, H, R, d, obs_mask, ok)
+        assert jnp.isfinite(w), f"Beta probit weight = {w}"
+
+    def test_probit_weight_differs_from_logit(self):
+        """Probit and logit links should give different quadrature weights."""
+        m = jnp.array([1.0, -0.5])
+        P = jnp.eye(2) * 0.3
+        H = jnp.eye(2)
+        R = jnp.eye(2) * 0.1
+        d = jnp.zeros(2)
+        y = jnp.array([1.0, 0.0])
+        obs_mask = jnp.ones(2, dtype=bool)
+
+        ok_logit = build_observation_kernel(DistributionFamily.BERNOULLI, LinkFunction.LOGIT)
+        ok_probit = build_observation_kernel(DistributionFamily.BERNOULLI, LinkFunction.PROBIT)
+
+        w_logit = _obs_weight_quadrature(y, m, P, H, R, d, obs_mask, ok_logit)
+        w_probit = _obs_weight_quadrature(y, m, P, H, R, d, obs_mask, ok_probit)
+        assert w_logit != w_probit, (
+            f"Logit ({w_logit}) and probit ({w_probit}) should differ at non-zero eta"
+        )
 
     def test_weight_varies_with_mean(self):
         """Obs weight should change when predicted mean changes."""
         P = jnp.eye(2) * 0.3
         H = jnp.eye(2)
+        R = jnp.eye(2) * 0.1
         d = jnp.zeros(2)
         y = jnp.array([3.0, 2.0])
         obs_mask = jnp.ones(2, dtype=bool)
-        params = {}
+        ok = build_observation_kernel(DistributionFamily.POISSON, LinkFunction.LOG)
 
         m_good = jnp.array([jnp.log(3.0), jnp.log(2.0)])
         m_bad = jnp.array([-2.0, -2.0])
 
-        w_good = _obs_weight_quadrature(y, m_good, P, H, d, obs_mask, "poisson", params)
-        w_bad = _obs_weight_quadrature(y, m_bad, P, H, d, obs_mask, "poisson", params)
+        w_good = _obs_weight_quadrature(y, m_good, P, H, R, d, obs_mask, ok)
+        w_bad = _obs_weight_quadrature(y, m_bad, P, H, R, d, obs_mask, ok)
         assert w_good > w_bad
 
 
@@ -717,6 +816,7 @@ class TestParameterRecovery:
             n_manifest=1,
             lambda_mat=jnp.eye(1),
             manifest_dist=DistributionFamily.POISSON,
+            manifest_link=LinkFunction.LOG,
             diffusion_dist=DistributionFamily.GAUSSIAN,
         )
         model = SSMModel(spec, n_particles=200, pf_seed=42)
@@ -783,6 +883,7 @@ class TestParameterRecovery:
             n_manifest=1,
             lambda_mat=jnp.eye(1),
             manifest_dist=DistributionFamily.GAMMA,
+            manifest_link=LinkFunction.LOG,
             diffusion_dist=DistributionFamily.GAUSSIAN,
         )
         model = SSMModel(spec, n_particles=200, pf_seed=42)

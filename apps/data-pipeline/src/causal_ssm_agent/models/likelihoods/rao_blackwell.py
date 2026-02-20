@@ -16,13 +16,16 @@ The linearized update (EKF-style) conditions the Kalman state on the
 observation to keep covariances bounded across time.
 """
 
-from typing import NamedTuple
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, NamedTuple
 
 import jax
 import jax.numpy as jnp
 import jax.scipy.linalg as jla
 
-from causal_ssm_agent.models.likelihoods.emissions import get_emission_fn
+if TYPE_CHECKING:
+    from causal_ssm_agent.models.likelihoods.kernels import ObservationKernel
 
 # =============================================================================
 # RBState — Kalman sufficient statistics carried per particle
@@ -201,44 +204,6 @@ def _kalman_update_gaussian(
     return m_upd, P_upd, log_marg
 
 
-def _linearized_obs_params(
-    manifest_dist: str,
-    eta_pred: jnp.ndarray,
-    y: jnp.ndarray,
-    mask_float: jnp.ndarray,
-    params: dict,
-) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """Compute pseudo-observation noise and residual for linearized EKF update."""
-    n_manifest = eta_pred.shape[0]
-    if manifest_dist == "poisson":
-        rate = jnp.exp(eta_pred)
-        return jnp.diag(rate + 1e-8), (y - rate) * mask_float
-    elif manifest_dist == "negative_binomial":
-        mu = jnp.exp(eta_pred)
-        r = params.get("obs_r", 5.0)
-        # Var = mu + mu^2/r
-        var = mu + mu**2 / (r + 1e-8)
-        return jnp.diag(var + 1e-8), (y - mu) * mask_float
-    elif manifest_dist == "gamma":
-        mean_pred = jnp.exp(eta_pred)
-        shape = params.get("obs_shape", 1.0)
-        return jnp.diag(mean_pred**2 / (shape + 1e-8) + 1e-8), (y - mean_pred) * mask_float
-    elif manifest_dist == "bernoulli":
-        p = jax.nn.sigmoid(eta_pred)
-        var = p * (1.0 - p)
-        return jnp.diag(var + 1e-8), (y - p) * mask_float
-    elif manifest_dist == "beta":
-        p = jax.nn.sigmoid(eta_pred)
-        phi = params.get("obs_concentration", 10.0)
-        # Var of Beta(mean*phi, (1-mean)*phi) = mean*(1-mean)/(phi+1)
-        var = p * (1.0 - p) / (phi + 1.0)
-        return jnp.diag(var + 1e-8), (y - p) * mask_float
-    else:
-        # Gaussian, Student-t, or fallback
-        manifest_cov = params.get("manifest_cov", jnp.eye(n_manifest) * 0.1)
-        return manifest_cov + jnp.eye(n_manifest) * 1e-8, (y - eta_pred) * mask_float
-
-
 def _linearized_update(
     m: jnp.ndarray,
     P: jnp.ndarray,
@@ -246,21 +211,22 @@ def _linearized_update(
     H: jnp.ndarray,
     d: jnp.ndarray,
     obs_mask: jnp.ndarray,
-    manifest_dist: str,
-    params: dict,
+    obs_kernel: ObservationKernel,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """EKF-style linearized update for non-Gaussian observations.
 
-    Linearizes the observation model around the predicted mean to compute
-    approximate posterior moments. This keeps covariances bounded without
-    affecting the particle weights (weights use quadrature, not this update).
+    Uses the ObservationKernel's response_fn and variance_fn to compute
+    pseudo-observation noise and residual. This keeps covariances bounded
+    without affecting particle weights (weights use quadrature, not this update).
     """
     n = m.shape[0]
     n_manifest = H.shape[0]
     mask_float = obs_mask.astype(jnp.float32)
 
     eta_pred = H @ m + d
-    R_pseudo, v = _linearized_obs_params(manifest_dist, eta_pred, y, mask_float, params)
+    mean = obs_kernel.response_fn(eta_pred)
+    R_pseudo = obs_kernel.variance_fn(mean) + jnp.eye(n_manifest) * 1e-8
+    v = (y - mean) * mask_float
 
     # Inflate for missing
     large_var = 1e10
@@ -324,10 +290,10 @@ def _obs_weight_quadrature(
     pred_mean: jnp.ndarray,
     pred_cov: jnp.ndarray,
     H: jnp.ndarray,
+    R: jnp.ndarray,
     d: jnp.ndarray,
     obs_mask: jnp.ndarray,
-    manifest_dist: str,
-    params: dict,
+    obs_kernel: ObservationKernel,
     quadrature: str = "unscented",
     n_quadrature: int = 5,
 ) -> float:
@@ -341,23 +307,15 @@ def _obs_weight_quadrature(
     n_observed = jnp.sum(mask_float)
 
     if quadrature == "unscented":
-        # Sigma points in latent space
         sigma_pts, sigma_wts = _unscented_sigma_points(pred_mean, pred_cov)
     else:
-        # Gauss-Hermite in latent space
         gh_nodes, gh_wts = _multivariate_gauss_hermite(n_quadrature, n_latent)
-        # Transform from N(0,I) to N(pred_mean, pred_cov)
         L = jla.cholesky(pred_cov + jnp.eye(n_latent) * 1e-8, lower=True)
-        sigma_pts = pred_mean[None, :] + gh_nodes @ L.T  # (K, n_latent)
+        sigma_pts = pred_mean[None, :] + gh_nodes @ L.T
         sigma_wts = gh_wts
 
-    # Evaluate observation log-likelihood at each sigma point
-    R = params.get("manifest_cov", jnp.eye(y.shape[0]) * 0.1)
-    emission_fn = get_emission_fn(manifest_dist, params)
-    log_obs_vals = jax.vmap(lambda x: emission_fn(y, x, H, d, R, mask_float))(sigma_pts)
+    log_obs_vals = jax.vmap(lambda x: obs_kernel.emission_fn(y, x, H, d, R, mask_float))(sigma_pts)
 
-    # Log-sum-exp with weights: log(sum_i w_i * exp(log_obs_i))
-    # = logsumexp(log_obs_i + log(w_i))
     log_weights = jnp.log(jnp.maximum(sigma_wts, 1e-30))
     log_integral = jax.nn.logsumexp(log_obs_vals + log_weights)
 
@@ -370,13 +328,10 @@ def _obs_weight_quadrature(
 
 
 def make_rb_callbacks(
-    n_latent: int,  # noqa: ARG001
-    n_manifest: int,  # noqa: ARG001
-    manifest_dist: str,
     params: dict,
-    extra_params: dict,
     m0: jnp.ndarray,
     P0: jnp.ndarray,
+    obs_kernel: ObservationKernel,
     quadrature: str = "unscented",
     n_quadrature: int = 5,
 ):
@@ -387,13 +342,10 @@ def make_rb_callbacks(
     (cuthbert supports arbitrary pytree states).
 
     Args:
-        n_latent: Latent state dimension.
-        n_manifest: Observation dimension.
-        manifest_dist: Observation distribution ("gaussian", "poisson", "student_t", "gamma").
         params: Dict with lambda_mat, manifest_means, manifest_cov, etc.
-        extra_params: Dict with obs_df, obs_shape, etc.
         m0: Initial state mean (n_latent,).
         P0: Initial state covariance (n_latent, n_latent).
+        obs_kernel: Pre-resolved observation model (emission_fn, response_fn, etc.).
         quadrature: "unscented" or "gauss_hermite".
         n_quadrature: Number of quadrature points per dimension (for GH).
 
@@ -403,9 +355,6 @@ def make_rb_callbacks(
     H = params["lambda_mat"]  # (n_manifest, n_latent)
     d = params["manifest_means"]  # (n_manifest,)
     R = params["manifest_cov"]  # (n_manifest, n_manifest)
-
-    # Merge extra_params into params for observation model
-    obs_params = {**params, **extra_params}
 
     def init_sample(_key, _model_inputs):
         """Initialize particle as Kalman sufficient statistics (no sampling)."""
@@ -423,22 +372,18 @@ def make_rb_callbacks(
         2. Linearized update: condition on current observation (EKF-style)
            to keep covariances bounded. This does NOT affect weights.
         """
-        F_t = model_inputs["Ad"]  # (n, n)
-        Q_t = model_inputs["Qd"]  # (n, n)
-        c_t = model_inputs["cd"]  # (n,)
-        y_t = model_inputs["observation"]  # (n_manifest,)
-        mask_t = model_inputs["obs_mask"]  # (n_manifest,)
+        F_t = model_inputs["Ad"]
+        Q_t = model_inputs["Qd"]
+        c_t = model_inputs["cd"]
+        y_t = model_inputs["observation"]
+        mask_t = model_inputs["obs_mask"]
 
-        # Kalman predict
         m_pred, P_pred = _kalman_predict(state.mean, state.cov, F_t, Q_t, c_t)
 
-        # Linearized update to condition on observation
-        if manifest_dist == "gaussian":
+        if obs_kernel.is_gaussian:
             m_upd, P_upd, _ = _kalman_update_gaussian(m_pred, P_pred, H, R, d, y_t, mask_t)
         else:
-            m_upd, P_upd = _linearized_update(
-                m_pred, P_pred, y_t, H, d, mask_t, manifest_dist, obs_params
-            )
+            m_upd, P_upd = _linearized_update(m_pred, P_pred, y_t, H, d, mask_t, obs_kernel)
 
         return RBState(
             mean=m_upd,
@@ -456,7 +401,7 @@ def make_rb_callbacks(
         y_t = model_inputs["observation"]
         mask_t = model_inputs["obs_mask"]
 
-        if manifest_dist == "gaussian":
+        if obs_kernel.is_gaussian:
             return _obs_weight_gaussian(y_t, state.pred_mean, state.pred_cov, H, R, d, mask_t)
         else:
             return _obs_weight_quadrature(
@@ -464,10 +409,10 @@ def make_rb_callbacks(
                 state.pred_mean,
                 state.pred_cov,
                 H,
+                R,
                 d,
                 mask_t,
-                manifest_dist,
-                obs_params,
+                obs_kernel,
                 quadrature=quadrature,
                 n_quadrature=n_quadrature,
             )

@@ -443,11 +443,26 @@ def make_validate_measurement_model_tool(latent_model: "LatentModel") -> tuple[T
     return validate_measurement_model_tool(), capture
 
 
-def make_validate_model_spec_tool(causal_spec: dict) -> tuple[Tool, dict]:
+def make_validate_model_spec_tool(
+    causal_spec: dict,
+    *,
+    resolved_likelihoods: list[dict] | None = None,
+    ambiguous_indicators: list[dict] | None = None,
+    parameters: list[dict] | None = None,
+    loading_params: list[dict] | None = None,  # noqa: ARG001
+) -> tuple[Tool, dict]:
     """Create a validation tool for model spec, bound to a causal spec.
+
+    When skeleton parts (resolved_likelihoods, parameters, etc.) are provided,
+    validates ModelSpecDecisions and merges with the skeleton. Otherwise falls
+    back to validating a full ModelSpec dict (backward-compatible).
 
     Args:
         causal_spec: The full CausalSpec dict (to extract indicators for dtype checking)
+        resolved_likelihoods: Pre-computed deterministic likelihoods
+        ambiguous_indicators: Indicators needing LLM decisions
+        parameters: Pre-computed parameters
+        loading_params: Loading parameters needing constraint decisions
 
     Returns:
         Tuple of (tool, capture_dict). After generate_loop, check
@@ -456,6 +471,7 @@ def make_validate_model_spec_tool(causal_spec: dict) -> tuple[Tool, dict]:
     from causal_ssm_agent.utils.causal_spec import get_indicators
 
     indicators = get_indicators(causal_spec)
+    use_decisions_mode = resolved_likelihoods is not None and parameters is not None
     capture: dict = {}
 
     @tool
@@ -472,15 +488,33 @@ def make_validate_model_spec_tool(causal_spec: dict) -> tuple[Tool, dict]:
             Returns:
                 "VALID" if the spec passes validation, otherwise a list of all errors found.
             """
-            from causal_ssm_agent.orchestrator.schemas_model import validate_model_spec_dict
+            if use_decisions_mode:
+                from causal_ssm_agent.orchestrator.schemas_model import (
+                    validate_model_spec_decisions_dict,
+                )
 
-            return _validate_json_and_format(
-                model_spec_json,
-                lambda data: validate_model_spec_dict(data, indicators=indicators or None),
-                capture=capture,
-                capture_key="spec",
-                capture_result=True,
-            )
+                return _validate_json_and_format(
+                    model_spec_json,
+                    lambda data: validate_model_spec_decisions_dict(
+                        data,
+                        resolved_likelihoods=resolved_likelihoods,  # type: ignore[arg-type]
+                        ambiguous_indicators=ambiguous_indicators or [],
+                        parameters=parameters,  # type: ignore[arg-type]
+                    ),
+                    capture=capture,
+                    capture_key="spec",
+                    capture_result=True,
+                )
+            else:
+                from causal_ssm_agent.orchestrator.schemas_model import validate_model_spec_dict
+
+                return _validate_json_and_format(
+                    model_spec_json,
+                    lambda data: validate_model_spec_dict(data, indicators=indicators or None),
+                    capture=capture,
+                    capture_key="spec",
+                    capture_result=True,
+                )
 
         return execute
 

@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 from causal_ssm_agent.models.likelihoods.base import CTParams, InitialStateParams, MeasurementParams
 from causal_ssm_agent.models.ssm.constants import MIN_DT
-from causal_ssm_agent.orchestrator.schemas_model import DistributionFamily
+from causal_ssm_agent.orchestrator.schemas_model import DistributionFamily, LinkFunction
 
 
 @dataclass
@@ -64,6 +64,12 @@ class SSMSpec:
 
     # Per-channel observation noise (overrides scalar manifest_dist if set)
     manifest_dists: list[DistributionFamily] | None = None
+
+    # Link function (scalar fallback for all channels)
+    manifest_link: LinkFunction = LinkFunction.IDENTITY
+
+    # Per-channel link functions (overrides scalar manifest_link if set)
+    manifest_links: list[LinkFunction] | None = None
 
     # Toggle first-pass (unconditional, model-level) Rao-Blackwellization
     first_pass_rb: bool = True
@@ -463,12 +469,14 @@ class SSMModel:
         # Resolve per-variable diffusion dist — passed as-is to ParticleLikelihood
         # which handles its own list→scalar normalization internally.
         from causal_ssm_agent.models.likelihoods.graph_analysis import (
+            get_per_channel_links,
             get_per_channel_manifest,
             get_per_variable_diffusion,
         )
 
         per_var = get_per_variable_diffusion(spec)
         per_obs = get_per_channel_manifest(spec)
+        per_links = get_per_channel_links(spec)
 
         # First-pass RB analysis: identify decoupled Gaussian sub-blocks
         if spec.first_pass_rb:
@@ -508,10 +516,18 @@ class SSMModel:
 
                 # Determine manifest_dist for PF channels from per-channel info
                 pf_obs_dists = [per_obs[int(k)] for k in partition.obs_particle_idx]
-                pf_manifest_dist = spec.manifest_dist.value
+                pf_manifest_dist = spec.manifest_dist
                 for d in pf_obs_dists:
-                    if d != "gaussian":
+                    if d != DistributionFamily.GAUSSIAN:
                         pf_manifest_dist = d
+                        break
+
+                # Determine manifest_link for PF channels
+                pf_obs_links = [per_links[int(k)] for k in partition.obs_particle_idx]
+                pf_manifest_link = spec.manifest_link
+                for lk in pf_obs_links:
+                    if lk != LinkFunction.IDENTITY:
+                        pf_manifest_link = lk
                         break
 
                 return ComposedLikelihood(
@@ -528,6 +544,7 @@ class SSMModel:
                         manifest_dist=pf_manifest_dist,
                         diffusion_dist=particle_diffs,
                         block_rb=spec.second_pass_rb,
+                        manifest_link=pf_manifest_link,
                     ),
                 )
 
@@ -540,9 +557,10 @@ class SSMModel:
             n_manifest=spec.n_manifest,
             n_particles=self.n_particles,
             rng_key=self.pf_key,
-            manifest_dist=spec.manifest_dist.value,
+            manifest_dist=spec.manifest_dist,
             diffusion_dist=per_var,
             block_rb=spec.second_pass_rb,
+            manifest_link=spec.manifest_link,
         )
 
     def model(

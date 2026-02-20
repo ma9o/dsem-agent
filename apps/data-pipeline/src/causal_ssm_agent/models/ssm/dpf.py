@@ -33,7 +33,7 @@ import jax.random as random
 import jax.scipy.linalg as jla
 from numpyro.distributions import MultivariateNormal, Normal
 
-from causal_ssm_agent.models.likelihoods.emissions import get_emission_fn
+from causal_ssm_agent.models.likelihoods.kernels import build_observation_kernel
 from causal_ssm_agent.models.ssm.discretization import discretize_system_batched
 from causal_ssm_agent.models.ssm.tempered_core import run_tempered_smc
 
@@ -44,6 +44,7 @@ if TYPE_CHECKING:
         MeasurementParams,
     )
     from causal_ssm_agent.models.ssm.inference import InferenceResult
+    from causal_ssm_agent.orchestrator.schemas_model import DistributionFamily, LinkFunction
 
 # ---------------------------------------------------------------------------
 # Proposal network: Equinox MLP-parameterized Gaussian
@@ -349,6 +350,7 @@ def _train_proposal(
     d_meas,
     R,
     manifest_dist="gaussian",
+    manifest_link="identity",
     extra_params=None,
     n_train_seqs=50,
     n_train_steps=200,
@@ -363,7 +365,8 @@ def _train_proposal(
         D_latent: latent dimension
         n_manifest: observation dimension
         H, d_meas, R: measurement model
-        manifest_dist: emission type
+        manifest_dist: emission type (DistributionFamily enum or string)
+        manifest_link: link function (LinkFunction enum or string)
         extra_params: emission hyperparameters
         n_train_seqs: number of training sequences
         n_train_steps: gradient steps
@@ -377,6 +380,8 @@ def _train_proposal(
     """
     import optax
 
+    from causal_ssm_agent.orchestrator.schemas_model import DistributionFamily, LinkFunction
+
     rng_key = random.PRNGKey(seed)
 
     # Initialize proposal network
@@ -387,7 +392,9 @@ def _train_proposal(
     rng_key, data_key = random.split(rng_key)
     data_keys = random.split(data_key, n_train_seqs)
 
-    emission_fn = get_emission_fn(manifest_dist, extra_params)
+    obs_kernel = build_observation_kernel(
+        DistributionFamily(manifest_dist), LinkFunction(manifest_link), extra_params
+    )
     init_mean = jnp.zeros(D_latent)
     init_cov = jnp.eye(D_latent)
 
@@ -435,7 +442,7 @@ def _train_proposal(
             R,
             init_mean,
             init_cov,
-            emission_fn,
+            obs_kernel.emission_fn,
             n_particles_train,
             rng_key,
             soft_resample_alpha=0.5,
@@ -481,7 +488,8 @@ class DPFLikelihood:
         self,
         n_latent: int,
         n_manifest: int,
-        manifest_dist: str = "gaussian",
+        manifest_dist: DistributionFamily | str = "gaussian",
+        manifest_link: LinkFunction | str = "identity",
         n_particles: int = 100,
         proposal_net: ProposalNetwork | None = None,
         rng_key: jax.Array | None = None,
@@ -489,6 +497,7 @@ class DPFLikelihood:
         self.n_latent = n_latent
         self.n_manifest = n_manifest
         self.manifest_dist = manifest_dist
+        self.manifest_link = manifest_link
         self.n_particles = n_particles
         self.proposal_net = proposal_net
         self.rng_key = rng_key if rng_key is not None else random.PRNGKey(0)
@@ -517,7 +526,13 @@ class DPFLikelihood:
         if cd is None:
             cd = jnp.zeros((T, n))
 
-        emission_fn = get_emission_fn(self.manifest_dist, extra_params)
+        from causal_ssm_agent.orchestrator.schemas_model import DistributionFamily, LinkFunction
+
+        obs_kernel = build_observation_kernel(
+            DistributionFamily(self.manifest_dist),
+            LinkFunction(self.manifest_link),
+            extra_params,
+        )
 
         if self.proposal_net is None:
             raise ValueError("Proposal not trained. Call _train_proposal first.")
@@ -534,7 +549,7 @@ class DPFLikelihood:
             measurement_params.manifest_cov,
             initial_state.mean,
             initial_state.cov,
-            emission_fn,
+            obs_kernel.emission_fn,
             self.n_particles,
             self.rng_key,
             training=False,
@@ -582,17 +597,11 @@ def fit_dpf(
         T_train = min(T_data, 50)
 
     rng_key = random.PRNGKey(seed)
-
-    manifest_dist = (
-        model.spec.manifest_dist.value
-        if hasattr(model.spec.manifest_dist, "value")
-        else str(model.spec.manifest_dist)
-    )
+    spec = model.spec
 
     # Phase 1: Train proposal network
     # Extract measurement model from spec
     with jax.ensure_compile_time_eval():
-        spec = model.spec
         if isinstance(spec.lambda_mat, jnp.ndarray):
             H_train = spec.lambda_mat
         else:
@@ -616,7 +625,8 @@ def fit_dpf(
         H=H_train,
         d_meas=d_train,
         R=R_train,
-        manifest_dist=manifest_dist,
+        manifest_dist=spec.manifest_dist,
+        manifest_link=spec.manifest_link,
         n_train_seqs=n_train_seqs,
         n_train_steps=n_train_steps,
         n_particles_train=n_particles_train,
@@ -632,7 +642,8 @@ def fit_dpf(
     backend = DPFLikelihood(
         n_latent=spec.n_latent,
         n_manifest=spec.n_manifest,
-        manifest_dist=manifest_dist,
+        manifest_dist=spec.manifest_dist,
+        manifest_link=spec.manifest_link,
         n_particles=n_pf_particles,
         proposal_net=proposal_net,
         rng_key=dpf_key,

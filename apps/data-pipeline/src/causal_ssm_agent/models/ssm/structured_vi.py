@@ -24,7 +24,7 @@ import jax
 import jax.numpy as jnp
 import jax.random as random
 
-from causal_ssm_agent.models.likelihoods.emissions import get_emission_fn
+from causal_ssm_agent.models.likelihoods.kernels import build_observation_kernel
 from causal_ssm_agent.models.ssm.discretization import discretize_system_batched
 from causal_ssm_agent.models.ssm.tempered_core import run_tempered_smc
 
@@ -35,6 +35,7 @@ if TYPE_CHECKING:
         MeasurementParams,
     )
     from causal_ssm_agent.models.ssm.inference import InferenceResult
+    from causal_ssm_agent.orchestrator.schemas_model import DistributionFamily, LinkFunction
 
 # ---------------------------------------------------------------------------
 # Variational parameters and sampling
@@ -224,7 +225,8 @@ class StructuredVILikelihood:
         self,
         n_latent: int,
         n_manifest: int,
-        manifest_dist: str = "gaussian",
+        manifest_dist: DistributionFamily | str = "gaussian",
+        manifest_link: LinkFunction | str = "identity",
         n_vi_steps: int = 100,
         n_mc_samples: int = 4,
         vi_lr: float = 0.01,
@@ -232,6 +234,7 @@ class StructuredVILikelihood:
         self.n_latent = n_latent
         self.n_manifest = n_manifest
         self.manifest_dist = manifest_dist
+        self.manifest_link = manifest_link
         self.n_vi_steps = n_vi_steps
         self.n_mc_samples = n_mc_samples
         self.vi_lr = vi_lr
@@ -262,7 +265,13 @@ class StructuredVILikelihood:
         if cd is None:
             cd = jnp.zeros((T, n))
 
-        emission_fn = get_emission_fn(self.manifest_dist, extra_params)
+        from causal_ssm_agent.orchestrator.schemas_model import DistributionFamily, LinkFunction
+
+        obs_kernel = build_observation_kernel(
+            DistributionFamily(self.manifest_dist),
+            LinkFunction(self.manifest_link),
+            extra_params,
+        )
 
         H = measurement_params.lambda_mat
         d_meas = measurement_params.manifest_means
@@ -294,7 +303,7 @@ class StructuredVILikelihood:
                     R,
                     initial_state.mean,
                     initial_state.cov,
-                    emission_fn,
+                    obs_kernel.emission_fn,
                 )
 
             return jnp.mean(jax.vmap(_single_elbo)(keys))
@@ -347,15 +356,11 @@ def fit_structured_vi(
     Uses the ELBO from structured VI as the log-density for a tempered SMC
     sampler over the parameter space.
     """
-    manifest_dist = (
-        model.spec.manifest_dist.value
-        if hasattr(model.spec.manifest_dist, "value")
-        else str(model.spec.manifest_dist)
-    )
     backend = StructuredVILikelihood(
         n_latent=model.spec.n_latent,
         n_manifest=model.spec.n_manifest,
-        manifest_dist=manifest_dist,
+        manifest_dist=model.spec.manifest_dist,
+        manifest_link=model.spec.manifest_link,
         n_vi_steps=n_vi_steps,
         n_mc_samples=n_mc_samples,
         vi_lr=vi_lr,

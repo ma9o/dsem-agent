@@ -33,6 +33,21 @@ from causal_ssm_agent.models.likelihoods.block_rb import (
 # Helpers
 # =============================================================================
 
+# Canonical link for each distribution (used when tests don't specify one)
+_CANONICAL_LINK = {
+    "gaussian": "identity",
+    "student_t": "identity",
+    "poisson": "log",
+    "gamma": "log",
+    "negative_binomial": "log",
+    "bernoulli": "logit",
+    "beta": "logit",
+}
+
+
+def _canonical_link(manifest_dist: str) -> str:
+    return _CANONICAL_LINK.get(str(manifest_dist), "identity")
+
 
 def _make_mixed_params(n_g=1, n_s=1, n_manifest=2, cross_coupling=True):
     """Build test parameters for a mixed Gaussian/non-Gaussian model.
@@ -167,12 +182,15 @@ def _run_block_rbpf(
     n_particles=200,
     rng_key=None,
     extra_params=None,
+    manifest_link=None,
 ):
     """Run block RBPF with per-variable diffusion dists."""
     from causal_ssm_agent.models.likelihoods.particle import ParticleLikelihood
 
     if rng_key is None:
         rng_key = random.PRNGKey(42)
+    if manifest_link is None:
+        manifest_link = _canonical_link(manifest_dist)
 
     backend = ParticleLikelihood(
         n_latent=init.mean.shape[0],
@@ -181,6 +199,7 @@ def _run_block_rbpf(
         rng_key=rng_key,
         manifest_dist=manifest_dist,
         diffusion_dist=diffusion_dists,
+        manifest_link=manifest_link,
     )
     return backend.compute_log_likelihood(
         ct_params,
@@ -201,12 +220,15 @@ def _run_full_rbpf(
     manifest_dist="gaussian",
     n_particles=200,
     rng_key=None,
+    manifest_link=None,
 ):
     """Run full RBPF (all Gaussian)."""
     from causal_ssm_agent.models.likelihoods.particle import ParticleLikelihood
 
     if rng_key is None:
         rng_key = random.PRNGKey(42)
+    if manifest_link is None:
+        manifest_link = _canonical_link(manifest_dist)
 
     backend = ParticleLikelihood(
         n_latent=init.mean.shape[0],
@@ -215,6 +237,7 @@ def _run_full_rbpf(
         rng_key=rng_key,
         manifest_dist=manifest_dist,
         diffusion_dist="gaussian",
+        manifest_link=manifest_link,
     )
     return backend.compute_log_likelihood(
         ct_params,
@@ -236,12 +259,15 @@ def _run_bootstrap_pf(
     n_particles=200,
     rng_key=None,
     extra_params=None,
+    manifest_link=None,
 ):
     """Run bootstrap PF (all sampled)."""
     from causal_ssm_agent.models.likelihoods.particle import ParticleLikelihood
 
     if rng_key is None:
         rng_key = random.PRNGKey(42)
+    if manifest_link is None:
+        manifest_link = _canonical_link(manifest_dist)
 
     ep = {"proc_df": 100.0}
     if extra_params:
@@ -254,6 +280,7 @@ def _run_bootstrap_pf(
         rng_key=rng_key,
         manifest_dist=manifest_dist,
         diffusion_dist=diffusion_dist,
+        manifest_link=manifest_link,
     )
     return backend.compute_log_likelihood(
         ct_params,

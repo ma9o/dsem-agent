@@ -238,7 +238,13 @@ class TestParticleMissingData:
     def test_missing_dimension_not_penalized(self):
         """Missing dims should not incur huge log-det penalties."""
         n_latent, n_manifest = 1, 2
-        adapter = SSMAdapter(n_latent, n_manifest, manifest_dist="gaussian")
+        adapter = SSMAdapter(
+            n_latent,
+            n_manifest,
+            manifest_dist="gaussian",
+            diffusion_dist="gaussian",
+            manifest_link="identity",
+        )
 
         params = {
             "lambda_mat": jnp.array([[1.0], [1.0]]),
@@ -277,7 +283,11 @@ class TestStudentTProcessNoise:
         _, Qd, _ = discretize_system(drift, diffusion_cov, None, dt)
 
         adapter = SSMAdapter(
-            n_latent, n_manifest, manifest_dist="gaussian", diffusion_dist="student_t"
+            n_latent,
+            n_manifest,
+            manifest_dist="gaussian",
+            diffusion_dist="student_t",
+            manifest_link="identity",
         )
 
         params = {
@@ -611,6 +621,7 @@ class TestHighDimNonlinear:
             n_particles=300,
             manifest_dist="poisson",
             diffusion_dist="student_t",
+            manifest_link="log",
         )
         ll = backend.compute_log_likelihood(
             ct_params,

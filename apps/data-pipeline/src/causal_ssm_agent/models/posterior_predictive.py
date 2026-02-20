@@ -16,9 +16,10 @@ from pydantic import BaseModel, Field, computed_field
 
 from causal_ssm_agent.models.ssm.constants import MIN_DT
 from causal_ssm_agent.models.ssm.discretization import discretize_system_batched
-from causal_ssm_agent.orchestrator.schemas_model import DistributionFamily
+from causal_ssm_agent.orchestrator.schemas_model import DistributionFamily, LinkFunction
 
-# Integer indices for jax.lax.switch dispatch (per-channel distribution)
+# Integer indices for jax.lax.switch dispatch (per-channel distribution + link)
+# Default link entries (backward-compatible indices 0-6)
 _DIST_IDX: dict[str, int] = {
     DistributionFamily.GAUSSIAN: 0,
     DistributionFamily.STUDENT_T: 1,
@@ -27,6 +28,21 @@ _DIST_IDX: dict[str, int] = {
     DistributionFamily.BERNOULLI: 4,
     DistributionFamily.NEGATIVE_BINOMIAL: 5,
     DistributionFamily.BETA: 6,
+}
+
+# Combined (dist, link) dispatch — adds non-default link variants
+_DIST_LINK_IDX: dict[tuple[str, str], int] = {
+    (DistributionFamily.GAUSSIAN, LinkFunction.IDENTITY): 0,
+    (DistributionFamily.STUDENT_T, LinkFunction.IDENTITY): 1,
+    (DistributionFamily.POISSON, LinkFunction.LOG): 2,
+    (DistributionFamily.GAMMA, LinkFunction.LOG): 3,
+    (DistributionFamily.BERNOULLI, LinkFunction.LOGIT): 4,
+    (DistributionFamily.NEGATIVE_BINOMIAL, LinkFunction.LOG): 5,
+    (DistributionFamily.BETA, LinkFunction.LOGIT): 6,
+    # Non-default link variants
+    (DistributionFamily.GAMMA, LinkFunction.INVERSE): 7,
+    (DistributionFamily.BERNOULLI, LinkFunction.PROBIT): 8,
+    (DistributionFamily.BETA, LinkFunction.PROBIT): 9,
 }
 
 # ---------------------------------------------------------------------------
@@ -167,6 +183,7 @@ def _simulate_one_draw_nongaussian(
     obs_shape: float | None = None,
     obs_r: float | None = None,
     obs_concentration: float | None = None,
+    manifest_link: str | None = None,
 ) -> jnp.ndarray:
     """Simulate one trajectory for non-Gaussian observation noise.
 
@@ -208,11 +225,18 @@ def _simulate_one_draw_nongaussian(
             y_t = npdist.Poisson(rate=rate).sample(okey)
         elif manifest_dist == DistributionFamily.GAMMA:
             shape_param = obs_shape if obs_shape is not None else 2.0
-            scale = jnp.exp(loc) / shape_param
+            if manifest_link == LinkFunction.INVERSE:
+                mean = 1.0 / jnp.clip(loc, 1e-6, None)
+            else:
+                mean = jnp.exp(loc)
+            scale = mean / shape_param
             scale = jnp.maximum(scale, 1e-8)
             y_t = npdist.Gamma(concentration=shape_param, rate=1.0 / scale).sample(okey)
         elif manifest_dist == DistributionFamily.BERNOULLI:
-            p = jax.nn.sigmoid(loc)
+            if manifest_link == LinkFunction.PROBIT:
+                p = jax.scipy.stats.norm.cdf(loc)
+            else:
+                p = jax.nn.sigmoid(loc)
             y_t = npdist.Bernoulli(probs=p).sample(okey)
         elif manifest_dist == DistributionFamily.NEGATIVE_BINOMIAL:
             mu = jnp.exp(loc)
@@ -220,7 +244,10 @@ def _simulate_one_draw_nongaussian(
             probs = mu / (mu + r_val)
             y_t = npdist.NegativeBinomialProbs(total_count=r_val, probs=probs).sample(okey)
         elif manifest_dist == DistributionFamily.BETA:
-            mean = jax.nn.sigmoid(loc)
+            if manifest_link == LinkFunction.PROBIT:
+                mean = jax.scipy.stats.norm.cdf(loc)
+            else:
+                mean = jax.nn.sigmoid(loc)
             phi = obs_concentration if obs_concentration is not None else 10.0
             alpha = mean * phi
             beta_ = (1.0 - mean) * phi
@@ -240,8 +267,9 @@ def _simulate_one_draw_nongaussian(
 def _sample_channel(loc_j, key, dist_idx, std_j, df, shape_p, r_p, phi_p):
     """Sample one observation from a channel's distribution using jax.lax.switch.
 
-    All 7 distributions are compiled but only the one matching dist_idx executes.
+    All 10 distribution+link combos are compiled but only the matching one executes.
     Uses raw JAX random functions for switch-compatibility.
+    Indices 0-6: default link; 7: gamma+inverse; 8: bernoulli+probit; 9: beta+probit.
     """
 
     def _gauss(loc, k, s, _df, _sh, _r, _ph):
@@ -284,7 +312,36 @@ def _sample_channel(loc_j, key, dist_idx, std_j, df, shape_p, r_p, phi_p):
         g2 = jax.random.gamma(k2, beta_p)
         return g1 / jnp.maximum(g1 + g2, 1e-10)
 
-    branches = [_gauss, _student_t, _poisson, _gamma, _bernoulli, _negbin, _beta]
+    def _gamma_inv(loc, k, _s, _df, shape_v, _r, _ph):
+        mean = 1.0 / jnp.clip(loc, 1e-6, None)
+        scale = jnp.maximum(mean / jnp.maximum(shape_v, 1e-8), 1e-8)
+        return jax.random.gamma(k, shape_v) * scale
+
+    def _bernoulli_probit(loc, k, _s, _df, _sh, _r, _ph):
+        p = jax.scipy.stats.norm.cdf(loc)
+        return jax.random.bernoulli(k, p).astype(jnp.float32)
+
+    def _beta_probit(loc, k, _s, _df, _sh, _r, phi_v):
+        mean = jax.scipy.stats.norm.cdf(loc)
+        alpha = jnp.maximum(mean * phi_v, 1e-4)
+        beta_p = jnp.maximum((1.0 - mean) * phi_v, 1e-4)
+        k1, k2 = jax.random.split(k)
+        g1 = jax.random.gamma(k1, alpha)
+        g2 = jax.random.gamma(k2, beta_p)
+        return g1 / jnp.maximum(g1 + g2, 1e-10)
+
+    branches = [
+        _gauss,
+        _student_t,
+        _poisson,
+        _gamma,
+        _bernoulli,
+        _negbin,
+        _beta,
+        _gamma_inv,
+        _bernoulli_probit,
+        _beta_probit,
+    ]
     return jax.lax.switch(dist_idx, branches, loc_j, key, std_j, df, shape_p, r_p, phi_p)
 
 
@@ -308,11 +365,11 @@ def _simulate_one_draw_mixed(
     """Simulate one trajectory with per-channel distribution types.
 
     Uses jax.lax.switch + vmap for per-channel dispatch, so each manifest
-    variable can have a different observation noise distribution.
+    variable can have a different observation noise distribution and link function.
 
     Args:
         dist_indices: (n_manifest,) integer array mapping each channel to
-            a distribution type index (see _DIST_IDX).
+            a combined distribution+link type index (see _DIST_LINK_IDX).
 
     Returns:
         y_sim: (T, n_manifest) simulated observations
@@ -363,6 +420,7 @@ def simulate_posterior_predictive(
     times: jnp.ndarray,
     manifest_dist: str = "gaussian",
     manifest_dists: list[str] | None = None,
+    manifest_links: list[str] | None = None,
     n_subsample: int = 50,
     rng_seed: int = 42,
 ) -> jnp.ndarray:
@@ -379,6 +437,8 @@ def simulate_posterior_predictive(
         manifest_dists: Per-channel noise families. When provided and channels
             have different distributions, uses per-channel dispatch via
             jax.lax.switch. Overrides manifest_dist.
+        manifest_links: Per-channel link function strings. When provided,
+            used together with manifest_dists for combined dispatch.
         n_subsample: Number of posterior draws to use.
         rng_seed: Random seed for simulation.
 
@@ -444,9 +504,24 @@ def simulate_posterior_predictive(
 
     # Determine dispatch path: all-Gaussian, uniform non-Gaussian, or mixed
     effective_dists = manifest_dists if manifest_dists else None
+    effective_links = manifest_links if manifest_links else None
     unique_dists = set(effective_dists) if effective_dists else {manifest_dist}
     all_gaussian = unique_dists == {DistributionFamily.GAUSSIAN} or unique_dists == {"gaussian"}
-    is_mixed = effective_dists is not None and len(unique_dists) > 1
+
+    # Check if link functions introduce mixing (e.g. all bernoulli but some probit)
+    has_nondefault_link = False
+    if effective_links is not None:
+        has_nondefault_link = any(
+            lk not in (LinkFunction.IDENTITY, "identity") for lk in effective_links
+        )
+
+    is_mixed = (effective_dists is not None and len(unique_dists) > 1) or (
+        has_nondefault_link and not all_gaussian
+    )
+
+    # When links force mixed path but dists are scalar, broadcast to per-channel
+    if is_mixed and effective_dists is None:
+        effective_dists = [manifest_dist] * n_manifest
 
     if all_gaussian:
         # Fast path: correlated Gaussian observation noise via Cholesky
@@ -475,12 +550,21 @@ def simulate_posterior_predictive(
         y_sim = vmap(sim_one)(jnp.arange(n_use))
 
     elif is_mixed:
-        # Per-channel dispatch: different distributions for different channels
+        # Per-channel dispatch: different distributions/links for different channels
         t0_chol_sub = vmap(lambda cov: jnp.linalg.cholesky(cov + 1e-8 * jnp.eye(cov.shape[0])))(
             t0_cov_sub
         )
 
-        dist_indices = jnp.array([_DIST_IDX.get(d, 0) for d in effective_dists])
+        # Build combined (dist, link) indices
+        if effective_links is not None:
+            dist_indices = jnp.array(
+                [
+                    _DIST_LINK_IDX.get((d, lk), _DIST_IDX.get(d, 0))
+                    for d, lk in zip(effective_dists, effective_links)
+                ]
+            )
+        else:
+            dist_indices = jnp.array([_DIST_IDX.get(d, 0) for d in effective_dists])
 
         def _scalar(arr):
             if arr is None:
@@ -520,8 +604,9 @@ def simulate_posterior_predictive(
             t0_cov_sub
         )
 
-        # Resolve effective scalar distribution
+        # Resolve effective scalar distribution and link
         effective_dist = effective_dists[0] if effective_dists else manifest_dist
+        effective_link = effective_links[0] if effective_links else None
 
         def _scalar(arr):
             """Collapse a posterior draw array to a scalar mean."""
@@ -552,6 +637,7 @@ def simulate_posterior_predictive(
                 obs_shape=obs_shape_val,
                 obs_r=obs_r_val,
                 obs_concentration=obs_conc_val,
+                manifest_link=effective_link,
             )
 
         y_sim = vmap(sim_one)(jnp.arange(n_use))
@@ -930,6 +1016,7 @@ def run_posterior_predictive_checks(
     manifest_names: list[str],
     manifest_dist: str = "gaussian",
     manifest_dists: list[str] | None = None,
+    manifest_links: list[str] | None = None,
     n_subsample: int = 50,
     rng_seed: int = 42,
 ) -> PPCResult:
@@ -942,6 +1029,7 @@ def run_posterior_predictive_checks(
         manifest_names: list of manifest variable names
         manifest_dist: scalar observation noise family (fallback)
         manifest_dists: per-channel noise families (overrides manifest_dist)
+        manifest_links: per-channel link function strings
         n_subsample: number of posterior draws to forward-simulate
         rng_seed: random seed
 
@@ -953,6 +1041,7 @@ def run_posterior_predictive_checks(
         times=times,
         manifest_dist=manifest_dist,
         manifest_dists=manifest_dists,
+        manifest_links=manifest_links,
         n_subsample=n_subsample,
         rng_seed=rng_seed,
     )

@@ -53,6 +53,7 @@ class LinkFunction(StrEnum):
 
     IDENTITY = "identity"  # Gaussian
     LOG = "log"  # Poisson, Gamma, NegativeBinomial
+    INVERSE = "inverse"  # Gamma (canonical)
     LOGIT = "logit"  # Bernoulli, Beta
     PROBIT = "probit"  # Bernoulli
     CUMULATIVE_LOGIT = "cumulative_logit"  # OrderedLogistic
@@ -75,7 +76,7 @@ class ParameterConstraint(StrEnum):
 
     NONE = "none"  # Unconstrained (can be any real number)
     POSITIVE = "positive"  # Must be > 0 (variances, SDs)
-    UNIT_INTERVAL = "unit_interval"  # Must be in [0, 1] (probabilities, AR coefficients)
+    UNIT_INTERVAL = "unit_interval"  # Must be in [0, 1] (probabilities)
     CORRELATION = "correlation"  # Must be in [-1, 1]
 
 
@@ -98,17 +99,16 @@ VALID_LINKS_FOR_DISTRIBUTION: dict[DistributionFamily, set[LinkFunction]] = {
     DistributionFamily.NEGATIVE_BINOMIAL: {LinkFunction.LOG},
     DistributionFamily.GAUSSIAN: {LinkFunction.IDENTITY},
     DistributionFamily.STUDENT_T: {LinkFunction.IDENTITY},
-    DistributionFamily.GAMMA: {LinkFunction.LOG},
-    DistributionFamily.BETA: {LinkFunction.LOGIT},
+    DistributionFamily.GAMMA: {LinkFunction.LOG, LinkFunction.INVERSE},
+    DistributionFamily.BETA: {LinkFunction.LOGIT, LinkFunction.PROBIT},
     DistributionFamily.ORDERED_LOGISTIC: {LinkFunction.CUMULATIVE_LOGIT},
     DistributionFamily.CATEGORICAL: {LinkFunction.SOFTMAX},
 }
 
 EXPECTED_CONSTRAINT_FOR_ROLE: dict[ParameterRole, ParameterConstraint] = {
-    ParameterRole.AR_COEFFICIENT: ParameterConstraint.UNIT_INTERVAL,
+    ParameterRole.AR_COEFFICIENT: ParameterConstraint.CORRELATION,
     ParameterRole.RESIDUAL_SD: ParameterConstraint.POSITIVE,
     ParameterRole.FIXED_EFFECT: ParameterConstraint.NONE,
-    ParameterRole.LOADING: ParameterConstraint.POSITIVE,
     ParameterRole.CORRELATION: ParameterConstraint.CORRELATION,
     ParameterRole.RANDOM_INTERCEPT_SD: ParameterConstraint.POSITIVE,
 }
@@ -421,6 +421,200 @@ def validate_model_spec_dict(
             return None, [f"Unexpected validation error: {e}"]
 
     return None, errors
+
+
+# --- Decisions-only schema (LLM outputs only non-deterministic parts) ---
+
+
+class DistributionChoice(BaseModel):
+    """LLM's distribution/link choice for an indicator with ambiguous dtype."""
+
+    variable: str = Field(description="Name of the indicator variable")
+    distribution: DistributionFamily = Field(description="Chosen distribution")
+    link: LinkFunction = Field(description="Chosen link function")
+    reasoning: str = Field(description="Why this distribution/link")
+
+
+class LoadingConstraintChoice(BaseModel):
+    """LLM's decision on whether a loading should be positive or unconstrained."""
+
+    parameter: str = Field(description="Loading parameter name")
+    constraint: ParameterConstraint = Field(description="positive or none")
+    reasoning: str = Field(description="Why this constraint")
+
+
+class ModelSpecDecisions(BaseModel):
+    """LLM decisions for the non-deterministic parts of the model specification.
+
+    The deterministic parts (parameter enumeration, deterministic distributions/links,
+    role-based constraints) are pre-computed from the CausalSpec. The LLM only provides
+    the genuine decisions that require statistical judgment.
+    """
+
+    distribution_choices: list[DistributionChoice] = Field(
+        description="Distribution/link choices for indicators with ambiguous dtypes"
+    )
+    loading_constraints: list[LoadingConstraintChoice] = Field(
+        default_factory=list,
+        description="Constraint decisions for loading parameters",
+    )
+    search_contexts: dict[str, str] = Field(
+        description="Parameter name → literature search query for each parameter"
+    )
+    reasoning: str = Field(description="Overall reasoning for model design choices")
+
+
+def merge_decisions_to_spec(
+    resolved_likelihoods: list[dict],
+    parameters: list[dict],
+    decisions: ModelSpecDecisions,
+) -> tuple[ModelSpec | None, list[str]]:
+    """Merge pre-computed skeleton with LLM decisions into a full ModelSpec.
+
+    Args:
+        resolved_likelihoods: Pre-computed [{variable, distribution, link}]
+        parameters: Pre-computed [{name, role, constraint, description}]
+        decisions: LLM's decisions
+
+    Returns:
+        (ModelSpec or None, list of error messages)
+    """
+    errors: list[str] = []
+
+    # Build likelihoods: resolved + LLM choices
+    likelihoods = []
+    for rl in resolved_likelihoods:
+        likelihoods.append(
+            {
+                "variable": rl["variable"],
+                "distribution": rl["distribution"],
+                "link": rl["link"],
+                "reasoning": f"Deterministic: {rl.get('reasoning', 'dtype has single valid option')}",
+            }
+        )
+    for dc in decisions.distribution_choices:
+        likelihoods.append(
+            {
+                "variable": dc.variable,
+                "distribution": dc.distribution.value,
+                "link": dc.link.value,
+                "reasoning": dc.reasoning,
+            }
+        )
+
+    # Apply loading constraint decisions
+    loading_overrides = {lc.parameter: lc.constraint.value for lc in decisions.loading_constraints}
+    final_params = []
+    for p in parameters:
+        param = dict(p)
+        if param["role"] == "loading" and param["name"] in loading_overrides:
+            param["constraint"] = loading_overrides[param["name"]]
+        # Inject search_context from decisions
+        sc = decisions.search_contexts.get(param["name"], "")
+        if not sc:
+            errors.append(f"missing search_context for parameter '{param['name']}'")
+        param["search_context"] = sc
+        final_params.append(param)
+
+    if errors:
+        return None, errors
+
+    spec_dict = {
+        "likelihoods": likelihoods,
+        "parameters": final_params,
+        "reasoning": decisions.reasoning,
+    }
+    return validate_model_spec_dict(spec_dict)
+
+
+def validate_model_spec_decisions_dict(
+    data: dict,
+    resolved_likelihoods: list[dict],
+    ambiguous_indicators: list[dict],
+    parameters: list[dict],
+) -> tuple[ModelSpec | None, list[str]]:
+    """Validate a ModelSpecDecisions dict and merge with skeleton.
+
+    Args:
+        data: Raw dict to validate as ModelSpecDecisions
+        resolved_likelihoods: Pre-computed deterministic likelihoods
+        ambiguous_indicators: Indicators that need LLM decisions
+        parameters: Pre-computed parameters (with loading constraints TBD)
+
+    Returns:
+        (merged ModelSpec or None, list of error messages)
+    """
+    errors: list[str] = []
+
+    if not isinstance(data, dict):
+        return None, ["Input must be a dictionary"]
+
+    # Parse distribution_choices
+    dist_choices = data.get("distribution_choices", [])
+    if not isinstance(dist_choices, list):
+        errors.append("'distribution_choices' must be a list")
+        dist_choices = []
+
+    # Check coverage: every ambiguous indicator should have a decision
+    decided_vars = {dc.get("variable", "") for dc in dist_choices if isinstance(dc, dict)}
+    ambiguous_vars = {ai["variable"] for ai in ambiguous_indicators}
+    missing = ambiguous_vars - decided_vars
+    for var in sorted(missing):
+        errors.append(f"missing distribution_choice for ambiguous indicator '{var}'")
+
+    # Validate distribution_choices entries
+    valid_distributions = {e.value for e in DistributionFamily}
+    valid_links = {e.value for e in LinkFunction}
+    for i, dc in enumerate(dist_choices):
+        if not isinstance(dc, dict):
+            errors.append(f"distribution_choices[{i}]: must be a dictionary")
+            continue
+        dist = dc.get("distribution", "")
+        link = dc.get("link", "")
+        if dist and dist not in valid_distributions:
+            errors.append(
+                f"distribution_choices[{i}]: distribution '{dist}' invalid; "
+                f"must be one of {sorted(valid_distributions)}"
+            )
+        if link and link not in valid_links:
+            errors.append(
+                f"distribution_choices[{i}]: link '{link}' invalid; "
+                f"must be one of {sorted(valid_links)}"
+            )
+
+    # Validate loading_constraints entries
+    loading_constraints = data.get("loading_constraints", [])
+    if not isinstance(loading_constraints, list):
+        errors.append("'loading_constraints' must be a list")
+        loading_constraints = []
+
+    valid_constraints = {e.value for e in ParameterConstraint}
+    for i, lc in enumerate(loading_constraints):
+        if not isinstance(lc, dict):
+            errors.append(f"loading_constraints[{i}]: must be a dictionary")
+            continue
+        c = lc.get("constraint", "")
+        if c and c not in valid_constraints:
+            errors.append(
+                f"loading_constraints[{i}]: constraint '{c}' invalid; "
+                f"must be one of {sorted(valid_constraints)}"
+            )
+
+    # Check search_contexts is a dict
+    search_contexts = data.get("search_contexts", {})
+    if not isinstance(search_contexts, dict):
+        errors.append("'search_contexts' must be a dictionary")
+
+    if errors:
+        return None, errors
+
+    # Parse as ModelSpecDecisions and merge
+    try:
+        decisions = ModelSpecDecisions.model_validate(data)
+    except Exception as e:
+        return None, [f"Schema validation error: {e}"]
+
+    return merge_decisions_to_spec(resolved_likelihoods, parameters, decisions)
 
 
 # Result schemas for the orchestrator stage

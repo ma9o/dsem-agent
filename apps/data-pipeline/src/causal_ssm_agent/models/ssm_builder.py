@@ -22,6 +22,7 @@ from causal_ssm_agent.models.ssm import (
 from causal_ssm_agent.orchestrator.schemas import GRANULARITY_HOURS, compute_lag_hours
 from causal_ssm_agent.orchestrator.schemas_model import (
     DistributionFamily,
+    LinkFunction,
     ModelSpec,
     ParameterRole,
     validate_model_spec,
@@ -266,6 +267,16 @@ class SSMModelBuilder:
                 manifest_dist = nd
                 break
 
+        # Extract per-channel link functions from likelihoods
+        manifest_links: list[LinkFunction] = [lik.link for lik in model_spec.likelihoods]
+
+        # Scalar fallback: first non-identity link
+        manifest_link = LinkFunction.IDENTITY
+        for lk in manifest_links:
+            if lk != LinkFunction.IDENTITY:
+                manifest_link = lk
+                break
+
         # Derive latent names from AR parameter names (e.g. rho_X → X)
         latent_names = [p.name.removeprefix("rho_") for p in ar_params] if ar_params else None
 
@@ -312,6 +323,8 @@ class SSMModelBuilder:
             manifest_var="diag",
             manifest_dist=manifest_dist,
             manifest_dists=manifest_dists,
+            manifest_link=manifest_link,
+            manifest_links=manifest_links,
             t0_means="free",
             t0_var="diag",
             latent_names=latent_names,
@@ -506,10 +519,12 @@ class SSMModelBuilder:
                     dt = float(ref_days)
                 else:
                     dt = self._get_construct_dt_days(construct_name)
-                mu_ar = max(0.001, min(normalized.get("mu", 0.5), 0.999))
+                mu_ar = max(-0.999, min(normalized.get("mu", 0.5), 0.999))
+                if abs(mu_ar) < 0.001:
+                    mu_ar = 0.001  # avoid log(0)
                 sigma_ar = normalized.get("sigma", 0.2)
-                mu_drift = -math.log(mu_ar) / dt
-                sigma_drift = sigma_ar / (mu_ar * dt)  # delta method
+                mu_drift = -math.log(abs(mu_ar)) / dt
+                sigma_drift = sigma_ar / (abs(mu_ar) * dt)  # delta method
                 per_element.setdefault(attr, []).append(
                     (idx, {"mu": mu_drift, "sigma": sigma_drift})
                 )
@@ -745,7 +760,8 @@ class SSMModelBuilder:
                     # Scale sigma by ratio of exact to first-order
                     if idx in dt_diag_raw:
                         rho_mu, _rho_sigma = dt_diag_raw[idx]
-                        first_order_mu = -math.log(max(0.001, min(rho_mu, 0.999))) / dt
+                        rho_abs = max(0.001, min(abs(rho_mu), 0.999))
+                        first_order_mu = -math.log(rho_abs) / dt
                         if abs(first_order_mu) > 1e-10:
                             ratio = abs(float(A_exact[idx, idx])) / first_order_mu
                             if isinstance(sigma_arr, list) and idx < len(sigma_arr):
