@@ -127,7 +127,7 @@ class SSMAdapter:
             df = jnp.maximum(df, 2.1)
             key_z, key_chi2 = random.split(key)
             z = random.normal(key_z, (self.n_latent,))
-            chi2_sample = random.gamma(key_chi2, df / 2.0) * 2.0
+            chi2_sample = jnp.maximum(random.gamma(key_chi2, df / 2.0) * 2.0, 1e-8)
             scale = jnp.sqrt((df - 2.0) / chi2_sample)
             return mean + chol @ (z * scale)
         else:
@@ -327,6 +327,16 @@ class ParticleLikelihood:
                 manifest_link=link,
             )
 
+            # Build transition kernel for bootstrap PF (non-Gaussian dynamics)
+            trans_extra = {k: v for k, v in params.items() if k.startswith("proc_")}
+            trans_kernel = build_transition_kernel(
+                DistributionFamily(self.diffusion_dist), trans_extra
+            )
+
+            H = measurement_params.lambda_mat
+            d_meas = measurement_params.manifest_means
+            R = measurement_params.manifest_cov
+
             def init_sample(key, _model_inputs):
                 return adapter.initial_sample(key, params)
 
@@ -335,19 +345,13 @@ class ParticleLikelihood:
                 cd_t = model_inputs["cd"]
                 chol_Qd_t = model_inputs["chol_Qd"]
                 mean = Ad_t @ state + cd_t
-
-                df = params.get("proc_df", 5.0)
-                df = jnp.maximum(df, 2.1)
-                key_z, key_chi2 = random.split(key)
-                z = random.normal(key_z, (n,))
-                chi2_sample = random.gamma(key_chi2, df / 2.0) * 2.0
-                scale = jnp.sqrt((df - 2.0) / chi2_sample)
-                return mean + chol_Qd_t @ (z * scale)
+                return mean + trans_kernel.sample_noise_fn(key, chol_Qd_t)
 
             def log_potential(_state_prev, state, model_inputs):
                 obs = model_inputs["observation"]
                 mask = model_inputs["obs_mask"]
-                return adapter.observation_log_prob(obs, state, params, mask)
+                mask_float = mask.astype(jnp.float32)
+                return obs_kernel.emission_fn(obs, state, H, d_meas, R, mask_float)
 
         # Build model_inputs with leading temporal dimension T.
         model_inputs = {

@@ -111,46 +111,65 @@ _RESPONSE_FNS: dict[LinkFunction, Callable] = {
 
 
 def _make_variance_poisson() -> Callable:
-    """Poisson: Var(Y) = lambda = mean."""
+    """Poisson: Var(Y) = lambda = mean.
+
+    Clamps mean away from zero to prevent singular EKF pseudo-covariance.
+    """
 
     def variance_fn(mean: jnp.ndarray) -> jnp.ndarray:
-        return jnp.diag(mean)
+        return jnp.diag(jnp.maximum(mean, 1e-8))
 
     return variance_fn
 
 
 def _make_variance_negative_binomial(r: float) -> Callable:
-    """NegBin: Var(Y) = mu + mu^2/r."""
+    """NegBin: Var(Y) = mu + mu^2/r.
+
+    Clamps mean away from zero to prevent singular EKF pseudo-covariance.
+    """
 
     def variance_fn(mean: jnp.ndarray) -> jnp.ndarray:
-        return jnp.diag(mean + mean**2 / (r + 1e-8))
+        mu = jnp.maximum(mean, 1e-8)
+        return jnp.diag(mu + mu**2 / (r + 1e-8))
 
     return variance_fn
 
 
 def _make_variance_gamma(shape: float) -> Callable:
-    """Gamma: Var(Y) = mean^2 / shape."""
+    """Gamma: Var(Y) = mean^2 / shape.
+
+    Clamps mean away from zero to prevent singular EKF pseudo-covariance.
+    """
 
     def variance_fn(mean: jnp.ndarray) -> jnp.ndarray:
-        return jnp.diag(mean**2 / (shape + 1e-8))
+        mu = jnp.maximum(mean, 1e-8)
+        return jnp.diag(mu**2 / (shape + 1e-8))
 
     return variance_fn
 
 
 def _make_variance_bernoulli() -> Callable:
-    """Bernoulli: Var(Y) = p(1-p)."""
+    """Bernoulli: Var(Y) = p(1-p).
+
+    Clamps p away from 0/1 boundaries to prevent singular EKF pseudo-covariance.
+    """
 
     def variance_fn(mean: jnp.ndarray) -> jnp.ndarray:
-        return jnp.diag(mean * (1.0 - mean))
+        p = jnp.clip(mean, 1e-7, 1.0 - 1e-7)
+        return jnp.diag(p * (1.0 - p))
 
     return variance_fn
 
 
 def _make_variance_beta(concentration: float) -> Callable:
-    """Beta: Var(Y) = p(1-p) / (phi + 1)."""
+    """Beta: Var(Y) = p(1-p) / (phi + 1).
+
+    Clamps p away from 0/1 boundaries to prevent singular EKF pseudo-covariance.
+    """
 
     def variance_fn(mean: jnp.ndarray) -> jnp.ndarray:
-        return jnp.diag(mean * (1.0 - mean) / (concentration + 1.0))
+        p = jnp.clip(mean, 1e-7, 1.0 - 1e-7)
+        return jnp.diag(p * (1.0 - p) / (concentration + 1.0))
 
     return variance_fn
 
@@ -263,7 +282,7 @@ def _make_student_t_noise(df: float) -> Callable:
         df_safe = jnp.maximum(df, 2.1)
         key_z, key_chi2 = random.split(key)
         z = random.normal(key_z, (n,))
-        chi2 = random.gamma(key_chi2, df_safe / 2.0) * 2.0
+        chi2 = jnp.maximum(random.gamma(key_chi2, df_safe / 2.0) * 2.0, 1e-8)
         scale = jnp.sqrt((df_safe - 2.0) / chi2)
         return chol_Q @ (z * scale)
 
