@@ -108,7 +108,7 @@ def valid_stage_payloads() -> dict[str, dict]:
                     "chunk_size": 20,
                 }
             ],
-            "combined_extractions_sample": [
+            "combined_extractions": [
                 {"indicator": "stress_score", "value": 1.2, "timestamp": "2024-01-01T00:00:00Z"},
                 {"indicator": "late_night", "value": True, "timestamp": "2024-01-02T00:00:00Z"},
             ],

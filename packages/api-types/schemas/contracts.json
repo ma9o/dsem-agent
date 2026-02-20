@@ -2019,11 +2019,11 @@
           "title": "Workers",
           "type": "array"
         },
-        "combined_extractions_sample": {
+        "combined_extractions": {
           "items": {
             "$ref": "#/$defs/ExtractionContract"
           },
-          "title": "Combined Extractions Sample",
+          "title": "Combined Extractions",
           "type": "array"
         },
         "per_indicator_counts": {
@@ -2047,7 +2047,7 @@
         }
       },
       "required": [
-        "combined_extractions_sample",
+        "combined_extractions",
         "per_indicator_counts",
         "workers"
       ],

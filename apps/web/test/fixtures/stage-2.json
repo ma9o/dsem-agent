@@ -61,7 +61,7 @@
       "chunk_size": 100
     }
   ],
-  "combined_extractions_sample": [
+  "combined_extractions": [
     {
       "indicator": "youtube_watch_time",
       "value": 45.5,

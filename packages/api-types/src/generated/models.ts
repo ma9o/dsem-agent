@@ -307,7 +307,7 @@ export interface GateOverrideContract {
 }
 export interface Stage2Contract {
   workers: WorkerStatusContract[];
-  combined_extractions_sample: ExtractionContract[];
+  combined_extractions: ExtractionContract[];
   per_indicator_counts: {
     [k: string]: number | undefined;
   };

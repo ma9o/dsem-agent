@@ -110,7 +110,7 @@ class Stage2Contract(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     workers: list[WorkerStatusContract]
-    combined_extractions_sample: list[ExtractionContract]
+    combined_extractions: list[ExtractionContract]
     per_indicator_counts: dict[str, int]
     context: str | None = None
 

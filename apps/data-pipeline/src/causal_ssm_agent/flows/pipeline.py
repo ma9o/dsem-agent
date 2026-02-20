@@ -272,7 +272,7 @@ async def causal_inference_pipeline(
         print("  No aggregation applied (using raw data)")
 
     # Persist stage-2 web data
-    sample_rows = raw_data_result.head(20).to_dicts() if n_observations > 0 else []
+    all_rows = raw_data_result.to_dicts() if n_observations > 0 else []
     per_ind_counts = (
         dict(raw_data_result.group_by("indicator").len().iter_rows()) if n_observations > 0 else {}
     )
@@ -297,9 +297,9 @@ async def causal_inference_pipeline(
             }
         )
 
-    combined_extractions_sample = []
-    for row in sample_rows:
-        combined_extractions_sample.append(
+    combined_extractions = []
+    for row in all_rows:
+        combined_extractions.append(
             {
                 "indicator": str(row.get("indicator", "")),
                 "value": _coerce_sample_value(row.get("value")),
@@ -311,7 +311,7 @@ async def causal_inference_pipeline(
         "stage-2",
         {
             "workers": worker_statuses,
-            "combined_extractions_sample": combined_extractions_sample,
+            "combined_extractions": combined_extractions,
             "per_indicator_counts": per_ind_counts,
             "context": (
                 "Stage 2 dispatches worker LLMs to extract indicator observations from raw "

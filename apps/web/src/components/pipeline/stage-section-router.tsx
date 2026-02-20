@@ -229,7 +229,7 @@ function Stage4Wrapper({ runId }: { runId: string }) {
   const { data } = useStageData<Stage4Data>(runId, "stage-4", true);
   const { data: stage2 } = useStageData<Stage2Data>(runId, "stage-2", true);
   if (!data) return null;
-  return <Stage4Content data={data} extractions={stage2?.combined_extractions_sample} />;
+  return <Stage4Content data={data} extractions={stage2?.combined_extractions} />;
 }
 
 function Stage4bWrapper({ runId }: { runId: string }) {

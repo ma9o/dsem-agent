@@ -44,7 +44,7 @@ export default function Stage2Content({ data }: { data: Stage2Data }) {
         </div>
       )}
 
-      <DataTable rows={data.combined_extractions_sample} />
+      <DataTable rows={data.combined_extractions} />
     </div>
   );
 }
