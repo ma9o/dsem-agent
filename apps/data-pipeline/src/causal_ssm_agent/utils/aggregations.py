@@ -267,7 +267,8 @@ def aggregate_worker_measurements(
         pl.col("value").cast(pl.Float64, strict=False).alias("value"),
         pl.col("timestamp")
         .cast(pl.Utf8, strict=False)
-        .str.to_datetime(strict=False)
+        .str.to_datetime(strict=False, time_zone="UTC")
+        .dt.replace_time_zone(None)
         .alias("datetime"),
     )
 

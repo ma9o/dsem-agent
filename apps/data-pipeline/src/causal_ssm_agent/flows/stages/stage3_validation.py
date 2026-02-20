@@ -63,7 +63,7 @@ def _check_timestamps(ind_data: pl.DataFrame, ind_name: str) -> tuple[list[dict]
         return issues, pl.Series("timestamp", [], dtype=pl.Datetime("us"))
 
     try:
-        parsed = timestamps.str.to_datetime(strict=False)
+        parsed = timestamps.str.to_datetime(strict=False, time_zone="UTC").dt.replace_time_zone(None)
     except pl.exceptions.ComputeError:
         # Polars can't infer any format — treat all as unparseable
         parsed = pl.Series("timestamp", [None] * n_total, dtype=pl.Datetime("us"))
@@ -341,7 +341,7 @@ def _check_construct_correlations(
                 data_a = (
                     combined.filter(pl.col("indicator") == name_a)
                     .select(
-                        pl.col("timestamp").str.to_datetime(strict=False).alias("ts"),
+                        pl.col("timestamp").str.to_datetime(strict=False, time_zone="UTC").dt.replace_time_zone(None).alias("ts"),
                         pl.col("value").cast(pl.Float64, strict=False).alias("value_a"),
                     )
                     .drop_nulls()
@@ -350,7 +350,7 @@ def _check_construct_correlations(
                 data_b = (
                     combined.filter(pl.col("indicator") == name_b)
                     .select(
-                        pl.col("timestamp").str.to_datetime(strict=False).alias("ts"),
+                        pl.col("timestamp").str.to_datetime(strict=False, time_zone="UTC").dt.replace_time_zone(None).alias("ts"),
                         pl.col("value").cast(pl.Float64, strict=False).alias("value_b"),
                     )
                     .drop_nulls()
