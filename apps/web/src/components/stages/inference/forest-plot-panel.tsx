@@ -35,15 +35,14 @@ interface ChartRow {
   ci_lower: number;
   ci_upper: number;
   prob_positive?: number;
-  crossesZero: boolean;
 }
 
-function DiamondDot({ cx, cy, fill }: { cx?: number; cy?: number; fill: string }) {
+function DiamondDot({ cx, cy }: { cx?: number; cy?: number }) {
   if (cx == null || cy == null) return null;
   return (
     <polygon
       points={`${cx},${cy - DIAMOND_H} ${cx + DIAMOND_W},${cy} ${cx},${cy + DIAMOND_H} ${cx - DIAMOND_W},${cy}`}
-      fill={fill}
+      fill="var(--primary)"
     />
   );
 }
@@ -104,31 +103,24 @@ export function ForestPlotPanel({ results }: ForestPlotPanelProps) {
     [domainMin, domainMax],
   );
 
-  const { significant, notSignificant } = useMemo(() => {
-    const sig: ChartRow[] = [];
-    const notSig: ChartRow[] = [];
-    sorted.forEach((r, i) => {
-      const effect = r.effect_size as number;
-      const ci = r.credible_interval as [number, number];
-      const row: ChartRow = {
-        x: effect,
-        y: i,
-        errorX: [effect - ci[0], ci[1] - effect],
-        treatment: r.treatment,
-        effect_size: effect,
-        ci_lower: ci[0],
-        ci_upper: ci[1],
-        prob_positive: r.prob_positive ?? undefined,
-        crossesZero: ci[0] <= 0 && ci[1] >= 0,
-      };
-      if (row.crossesZero) {
-        notSig.push(row);
-      } else {
-        sig.push(row);
-      }
-    });
-    return { significant: sig, notSignificant: notSig };
-  }, [sorted]);
+  const rows: ChartRow[] = useMemo(
+    () =>
+      sorted.map((r, i) => {
+        const effect = r.effect_size as number;
+        const ci = r.credible_interval as [number, number];
+        return {
+          x: effect,
+          y: i,
+          errorX: [effect - ci[0], ci[1] - effect],
+          treatment: r.treatment,
+          effect_size: effect,
+          ci_lower: ci[0],
+          ci_upper: ci[1],
+          prob_positive: r.prob_positive ?? undefined,
+        };
+      }),
+    [sorted],
+  );
 
   const svgHeight = PADDING_TOP + sorted.length * ROW_HEIGHT + 20;
 
@@ -189,36 +181,19 @@ export function ForestPlotPanel({ results }: ForestPlotPanelProps) {
                   content={<CustomTooltip />}
                   cursor={false}
                 />
-                {significant.length > 0 && (
-                  <Scatter
-                    data={significant}
-                    shape={<DiamondDot fill="var(--primary)" />}
-                    isAnimationActive={false}
-                  >
-                    <ErrorBar
-                      dataKey="errorX"
-                      direction="x"
-                      width={10}
-                      stroke="var(--primary)"
-                      strokeWidth={1.5}
-                    />
-                  </Scatter>
-                )}
-                {notSignificant.length > 0 && (
-                  <Scatter
-                    data={notSignificant}
-                    shape={<DiamondDot fill="var(--muted-foreground)" />}
-                    isAnimationActive={false}
-                  >
-                    <ErrorBar
-                      dataKey="errorX"
-                      direction="x"
-                      width={10}
-                      stroke="var(--muted-foreground)"
-                      strokeWidth={1.5}
-                    />
-                  </Scatter>
-                )}
+                <Scatter
+                  data={rows}
+                  shape={<DiamondDot />}
+                  isAnimationActive={false}
+                >
+                  <ErrorBar
+                    dataKey="errorX"
+                    direction="x"
+                    width={10}
+                    stroke="var(--primary)"
+                    strokeWidth={1.5}
+                  />
+                </Scatter>
               </ScatterChart>
             </ResponsiveContainer>
           </div>
@@ -228,11 +203,10 @@ export function ForestPlotPanel({ results }: ForestPlotPanelProps) {
             {sorted.map((r) => {
               const ci = r.credible_interval as [number, number];
               const effect = r.effect_size as number;
-              const crossesZero = ci[0] <= 0 && ci[1] >= 0;
               return (
                 <div
                   key={r.treatment}
-                  className={`flex items-center font-mono text-xs ${crossesZero ? "text-muted-foreground" : "text-foreground"}`}
+                  className="flex items-center font-mono text-xs text-foreground"
                   style={{ height: ROW_HEIGHT }}
                 >
                   <span className="tabular-nums whitespace-nowrap">
