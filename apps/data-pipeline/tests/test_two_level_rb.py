@@ -156,7 +156,7 @@ def _run_composed(spec, ct, meas, init, obs, dt, n_particles=200, extra_params=N
         obs,
         dt,
         extra_params=extra_params,
-    )
+    )[-1]
 
 
 # =============================================================================
@@ -432,7 +432,7 @@ class TestDegenerateEquivalence:
 
         # Direct Kalman
         kalman = KalmanLikelihood(n_latent=2, n_manifest=2)
-        ll_kalman = kalman.compute_log_likelihood(ct, meas, init, obs, dt)
+        ll_kalman = kalman.compute_log_likelihood(ct, meas, init, obs, dt)[-1]
 
         # Via make_likelihood_backend with all-Gaussian spec
         spec = SSMSpec(
@@ -476,7 +476,7 @@ class TestDegenerateEquivalence:
             obs,
             dt,
             extra_params={"proc_df": 100.0},
-        )
+        )[-1]
 
         # Via make_likelihood_backend with all-Student-t spec
         spec = SSMSpec(
@@ -583,7 +583,7 @@ class TestAdditiveLLDecomposition:
         )
         init_g = InitialStateParams(mean=init.mean[:2], cov=init.cov[:2, :2])
         kalman = KalmanLikelihood(n_latent=2, n_manifest=2)
-        ll_kalman = kalman.compute_log_likelihood(ct_g, meas_g, init_g, obs[:, :2], dt)
+        ll_kalman = kalman.compute_log_likelihood(ct_g, meas_g, init_g, obs[:, :2], dt)[-1]
 
         # PF on S-block
         ct_s = CTParams(
@@ -611,7 +611,7 @@ class TestAdditiveLLDecomposition:
             obs[:, 2:],
             dt,
             extra_params={"proc_df": 100.0},
-        )
+        )[-1]
 
         ll_sum = float(ll_kalman) + float(ll_pf)
         assert jnp.isfinite(ll_composed)
@@ -650,7 +650,7 @@ class TestAdditiveLLDecomposition:
         )
         init_g = InitialStateParams(mean=init.mean[:1], cov=init.cov[:1, :1])
         kalman = KalmanLikelihood(n_latent=1, n_manifest=1)
-        ll_kalman = kalman.compute_log_likelihood(ct_g, meas_g, init_g, obs[:, :1], dt)
+        ll_kalman = kalman.compute_log_likelihood(ct_g, meas_g, init_g, obs[:, :1], dt)[-1]
 
         # PF on S-block (2 vars, 2 obs)
         ct_s = CTParams(
@@ -678,7 +678,7 @@ class TestAdditiveLLDecomposition:
             obs[:, 1:],
             dt,
             extra_params={"proc_df": 100.0},
-        )
+        )[-1]
 
         ll_sum = float(ll_kalman) + float(ll_pf)
         assert jnp.isfinite(ll_composed)
@@ -833,7 +833,7 @@ class TestVarianceReduction:
                 obs,
                 dt,
                 extra_params={"proc_df": 100.0},
-            )
+            )[-1]
             composed_lls.append(float(ll))
 
         # Pure bootstrap PF (no RB at all)
@@ -856,7 +856,7 @@ class TestVarianceReduction:
                 obs,
                 dt,
                 extra_params={"proc_df": 100.0},
-            )
+            )[-1]
             boot_lls.append(float(ll))
 
         var_composed = np.var(composed_lls)
@@ -979,7 +979,7 @@ class TestParameterRecovery:
                 observations,
                 time_intervals,
                 extra_params={"proc_df": 100.0},
-            )
+            )[-1]
             numpyro.factor("ll", ll)
 
         guide = AutoNormal(model)

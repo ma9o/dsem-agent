@@ -49,11 +49,13 @@ class ComposedLikelihood:
         time_intervals: jnp.ndarray,
         obs_mask: jnp.ndarray | None = None,
         extra_params: dict | None = None,
-    ) -> float:
+    ) -> jnp.ndarray:
         """Compute log-likelihood as sum of Kalman and particle sub-log-likelihoods.
 
         Extracts sub-model parameters using the partition indices, runs each
-        backend independently, and returns their sum.
+        backend independently, and returns their element-wise sum.
+        The two sub-blocks are independent given latent states, so per-timestep
+        log-likelihoods sum correctly.
         """
         p = self.partition
         ki = jnp.array(p.kalman_idx)

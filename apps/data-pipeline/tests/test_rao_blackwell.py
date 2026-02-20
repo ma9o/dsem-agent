@@ -130,7 +130,7 @@ def _run_rbpf(
         observations,
         time_intervals,
         extra_params=extra_params,
-    )
+    )[-1]
 
 
 def _run_bootstrap_pf(
@@ -172,7 +172,7 @@ def _run_bootstrap_pf(
         observations,
         time_intervals,
         extra_params=ep,
-    )
+    )[-1]
 
 
 # =============================================================================
@@ -543,7 +543,7 @@ class TestRBPFSmoke:
         dt = jnp.ones(T)
 
         kalman = KalmanLikelihood(n_latent=2, n_manifest=2)
-        ll_kalman = kalman.compute_log_likelihood(ct, meas, init, obs, dt)
+        ll_kalman = kalman.compute_log_likelihood(ct, meas, init, obs, dt)[-1]
 
         ll_rbpf = _run_rbpf(ct, meas, init, obs, dt, manifest_dist="gaussian", n_particles=500)
 
@@ -924,7 +924,7 @@ class TestRBPFKalmanConsistency:
         from causal_ssm_agent.models.likelihoods.kalman import KalmanLikelihood
 
         kf = KalmanLikelihood(n_latent=init.mean.shape[0], n_manifest=meas.lambda_mat.shape[0])
-        return float(kf.compute_log_likelihood(ct, meas, init, obs, dt))
+        return float(kf.compute_log_likelihood(ct, meas, init, obs, dt)[-1])
 
     def _rbpf_ll(self, ct, meas, init, obs, dt, n_particles=500, seed=42):
         return float(

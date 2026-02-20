@@ -208,7 +208,7 @@ def _run_block_rbpf(
         observations,
         time_intervals,
         extra_params=extra_params,
-    )
+    )[-1]
 
 
 def _run_full_rbpf(
@@ -245,7 +245,7 @@ def _run_full_rbpf(
         init,
         observations,
         time_intervals,
-    )
+    )[-1]
 
 
 def _run_bootstrap_pf(
@@ -289,7 +289,7 @@ def _run_bootstrap_pf(
         observations,
         time_intervals,
         extra_params=ep,
-    )
+    )[-1]
 
 
 # =============================================================================
@@ -818,7 +818,7 @@ class TestParameterRecovery:
                 observations,
                 time_intervals,
                 extra_params={"proc_df": 100.0},
-            )
+            )[-1]
             numpyro.factor("ll", ll)
 
         guide = AutoNormal(model)
@@ -888,7 +888,7 @@ class TestParameterRecovery:
                 observations,
                 time_intervals,
                 extra_params={"proc_df": 100.0},
-            )
+            )[-1]
             numpyro.factor("ll", ll)
 
         guide = AutoNormal(model)
@@ -959,7 +959,7 @@ class TestParameterRecovery:
                 observations,
                 time_intervals,
                 extra_params={"proc_df": 100.0},
-            )
+            )[-1]
             numpyro.factor("ll", ll)
 
         guide = AutoNormal(model)
@@ -1030,7 +1030,7 @@ class TestParameterRecovery:
                 observations,
                 time_intervals,
                 extra_params={"proc_df": 100.0},
-            )
+            )[-1]
             numpyro.factor("ll", ll)
 
         guide = AutoNormal(model)

@@ -233,7 +233,7 @@ class ParticleLikelihood:
         time_intervals: jnp.ndarray,
         obs_mask: jnp.ndarray | None = None,
         extra_params: dict | None = None,
-    ) -> float:
+    ) -> jnp.ndarray:
         """Compute log-likelihood via bootstrap particle filter.
 
         Args:
@@ -246,7 +246,7 @@ class ParticleLikelihood:
             extra_params: Noise family hyperparameters (obs_df, obs_shape, proc_df)
 
         Returns:
-            Log-likelihood p(y|theta) as a scalar
+            (T,) cumulative log-normalizing constants from the particle filter.
         """
         from cuthbert.filtering import filter as cuthbert_filter
         from cuthbert.smc.particle_filter import build_filter
@@ -375,4 +375,4 @@ class ParticleLikelihood:
 
         states = cuthbert_filter(filter_obj, model_inputs, key=self.rng_key)
 
-        return states.log_normalizing_constant[-1]
+        return states.log_normalizing_constant

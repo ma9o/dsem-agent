@@ -232,11 +232,13 @@ class TestParticleLikelihoodBackend:
             n_manifest=n_manifest,
             n_particles=200,
         )
-        ll = backend.compute_log_likelihood(
+        lnc = backend.compute_log_likelihood(
             ct_params, meas_params, init, observations, time_intervals
         )
 
-        assert jnp.isfinite(ll)
+        # Returns (T,) cumulative log-normalizing constants
+        assert lnc.shape == (T,)
+        assert jnp.all(jnp.isfinite(lnc))
 
 
 class TestSSMModel:

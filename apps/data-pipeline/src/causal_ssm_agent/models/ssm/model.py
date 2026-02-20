@@ -625,7 +625,7 @@ class SSMModel:
         time_intervals = time_intervals.at[0].set(MIN_DT)
 
         init = InitialStateParams(mean=t0_means, cov=t0_cov)
-        ll = likelihood_backend.compute_log_likelihood(
+        lnc = likelihood_backend.compute_log_likelihood(
             ct_params,
             meas_params,
             init,
@@ -634,4 +634,14 @@ class SSMModel:
             extra_params=extra_params if extra_params else None,
         )
 
-        numpyro.factor("log_likelihood", ll)
+        # lnc is (T,) cumulative log-normalizing constants from the filter.
+        # lnc[-1] = total log p(y|θ).
+        # diff(lnc) = per-timestep one-step-ahead predictive log p(y_t|y_{1:t-1},θ),
+        # needed for proper LOO-CV on time series (innovation decomposition).
+        if lnc.ndim == 0:
+            # Scalar return from backends without per-timestep support
+            numpyro.factor("log_likelihood", lnc)
+        else:
+            numpyro.factor("log_likelihood", lnc[-1])
+            ll_per_timestep = jnp.diff(lnc, prepend=0.0)
+            numpyro.deterministic("ll_per_timestep", ll_per_timestep)

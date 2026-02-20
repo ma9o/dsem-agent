@@ -1,7 +1,11 @@
 """Base protocol and parameter types for likelihood computation.
 
 Defines the interface that likelihood backends must implement:
-compute_log_likelihood(params, observations, times) -> float
+compute_log_likelihood(params, observations, times) -> jnp.ndarray
+
+Returns the (T,) cumulative log-normalizing-constant array from the filter.
+The total log-likelihood is lnc[-1]; per-timestep one-step-ahead predictive
+log-likelihoods are jnp.diff(lnc, prepend=0.0).
 
 Used by ParticleLikelihood to integrate out latent states via bootstrap PF
 and inject the result into NumPyro models via numpyro.factor().
@@ -81,10 +85,12 @@ class LikelihoodBackend(Protocol):
     """Protocol for state-space likelihood computation backends.
 
     Each backend must implement compute_log_likelihood() which integrates
-    out latent states and returns log p(y|θ) as a scalar.
+    out latent states and returns cumulative log-normalizing constants.
 
-    The returned value is used in NumPyro via:
-        numpyro.factor("ssm", backend.compute_log_likelihood(...))
+    The returned (T,) array lnc satisfies:
+    - lnc[-1] = total log p(y|θ), used in numpyro.factor()
+    - diff(lnc) = per-timestep one-step-ahead predictive log p(y_t|y_{1:t-1},θ),
+      used for LOO-CV via the innovation decomposition
 
     Implementation:
     - ParticleLikelihood: Universal backend via differentiable bootstrap PF (cuthbert SMC)
@@ -98,7 +104,7 @@ class LikelihoodBackend(Protocol):
         observations: jnp.ndarray,
         time_intervals: jnp.ndarray,
         obs_mask: jnp.ndarray | None = None,
-    ) -> float:
+    ) -> jnp.ndarray:
         """Compute log-likelihood by marginalizing out latent states.
 
         Args:
@@ -110,7 +116,8 @@ class LikelihoodBackend(Protocol):
             obs_mask: (T, n_manifest) boolean mask for observed values
 
         Returns:
-            Log-likelihood p(y|θ) as a scalar, suitable for numpyro.factor()
+            (T,) cumulative log-normalizing constants from the filter.
+            lnc[-1] is the total log-likelihood p(y|θ).
         """
         ...
 

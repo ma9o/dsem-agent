@@ -53,7 +53,7 @@ class KalmanLikelihood:
         time_intervals: jnp.ndarray,
         obs_mask: jnp.ndarray | None = None,
         extra_params: dict | None = None,  # noqa: ARG002
-    ) -> float:
+    ) -> jnp.ndarray:
         """Compute exact log-likelihood via Kalman filter.
 
         Args:
@@ -66,7 +66,7 @@ class KalmanLikelihood:
             extra_params: Ignored (no noise family hyperparameters for Kalman)
 
         Returns:
-            Log-likelihood p(y|theta) as a scalar
+            (T,) cumulative log-normalizing constants from the Kalman filter.
         """
         from cuthbert.filtering import filter as cuthbert_filter
         from cuthbert.gaussian.moments import build_filter
@@ -155,4 +155,4 @@ class KalmanLikelihood:
         )
 
         states = cuthbert_filter(filter_obj, model_inputs)
-        return states.log_normalizing_constant[-1]
+        return states.log_normalizing_constant

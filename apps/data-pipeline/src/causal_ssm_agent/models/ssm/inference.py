@@ -176,14 +176,16 @@ class InferenceResult:
         observations: jnp.ndarray | None = None,
         times: jnp.ndarray | None = None,
     ) -> dict[str, Any] | None:
-        """Extract LOO-CV diagnostics via ArviZ.
+        """Extract LOO-CV diagnostics via ArviZ using one-step-ahead predictive LL.
 
-        Computes leave-one-out cross-validation using PSIS (Pareto-smoothed
-        importance sampling). Returns ELPD, p_loo, per-observation Pareto k
-        values, and LOO-PIT for calibration.
+        Uses the innovation decomposition from the Kalman/particle filter:
+        each "observation" for LOO is one complete timestep (all manifest
+        variables at time t). The per-timestep log-likelihoods
+        log p(y_t | y_{1:t-1}, θ) are conditionally independent given θ,
+        making PSIS-LOO valid for time series via this decomposition.
 
         Args:
-            model_fn: The NumPyro model function (needed for log_likelihood)
+            model_fn: The NumPyro model function (needed to replay for ll_per_timestep)
             observations: (T, n_manifest) observed data
             times: (T,) time points
 
@@ -196,33 +198,40 @@ class InferenceResult:
 
         try:
             import arviz as az
-            from numpyro.infer import log_likelihood as numpyro_log_likelihood
 
             flat_samples = mcmc.get_samples()
-
-            # Compute pointwise log-likelihood
-            ll = numpyro_log_likelihood(model_fn, flat_samples, observations, times)
-            if not ll:
-                return None
-
-            # Use the first (and typically only) observed site
-            ll_key = next(iter(ll))
-            ll_vals = ll[ll_key]  # (n_draws, n_obs) or (n_draws, T, m)
-
-            # Flatten spatial dims if needed: (n_draws, T*m)
-            n_draws = ll_vals.shape[0]
-            ll_flat = ll_vals.reshape(n_draws, -1)
-            n_obs = ll_flat.shape[1]
-
-            # Reshape to (n_chains, n_draws_per_chain, n_obs) for ArviZ
+            n_draws = next(iter(flat_samples.values())).shape[0]
             n_chains = int(mcmc.num_chains) if hasattr(mcmc, "num_chains") else 1
             n_per_chain = n_draws // n_chains
-            ll_chained = ll_flat[: n_chains * n_per_chain].reshape(n_chains, n_per_chain, n_obs)
 
-            idata = az.from_numpyro(
-                mcmc,
-                log_likelihood={ll_key: ll_chained},
-            )
+            # Try SSM-specific path first: replay model to extract
+            # ll_per_timestep deterministic (innovation decomposition).
+            # Falls back to standard ArviZ extraction for models with
+            # observed sample sites (e.g. numpyro.sample(..., obs=y)).
+            ll_per_timestep_found = False
+            try:
+                pred = Predictive(model_fn, posterior_samples=flat_samples)
+                rng_key = random.PRNGKey(0)
+                pred_result = pred(rng_key, observations, times)
+                if "ll_per_timestep" in pred_result:
+                    ll_per_t = pred_result["ll_per_timestep"]  # (n_draws, T)
+                    n_timesteps = ll_per_t.shape[1]
+                    ll_chained = ll_per_t[: n_chains * n_per_chain].reshape(
+                        n_chains, n_per_chain, n_timesteps
+                    )
+                    idata = az.from_numpyro(
+                        mcmc,
+                        log_likelihood={"ll_per_timestep": ll_chained},
+                    )
+                    ll_per_timestep_found = True
+            except Exception:
+                pass
+
+            if not ll_per_timestep_found:
+                # Standard path: ArviZ extracts LL from observed sample sites
+                idata = az.from_numpyro(mcmc)
+                if not hasattr(idata, "log_likelihood"):
+                    return None
 
             loo_result = az.loo(idata)
 
@@ -231,24 +240,26 @@ class InferenceResult:
                 "p_loo": float(loo_result.p_loo),
                 "se": float(loo_result.se),
                 "n_data_points": int(loo_result.n_data_points),
+                "observation_unit": "timestep" if ll_per_timestep_found else "observation",
             }
 
-            # Per-observation Pareto k values
+            # Per-data-point Pareto k values
             if hasattr(loo_result, "pareto_k"):
                 pk = loo_result.pareto_k
                 pk_vals = pk.values if hasattr(pk, "values") else jnp.array(pk)
                 result["pareto_k"] = [float(v) for v in pk_vals]
                 result["n_bad_k"] = int((pk_vals > 0.7).sum())
 
-            # LOO-PIT for calibration
-            try:
-                pit_vals = az.loo_pit(idata, y=ll_key)
-                if hasattr(pit_vals, "values"):
-                    result["loo_pit"] = [float(v) for v in pit_vals.values.flat]
-                else:
-                    result["loo_pit"] = [float(v) for v in jnp.array(pit_vals).flat]
-            except Exception:
-                pass
+            # LOO-PIT for calibration (SSM path only)
+            if ll_per_timestep_found:
+                try:
+                    pit_vals = az.loo_pit(idata, y="ll_per_timestep")
+                    if hasattr(pit_vals, "values"):
+                        result["loo_pit"] = [float(v) for v in pit_vals.values.flat]
+                    else:
+                        result["loo_pit"] = [float(v) for v in jnp.array(pit_vals).flat]
+                except Exception:
+                    pass
 
             return result
 

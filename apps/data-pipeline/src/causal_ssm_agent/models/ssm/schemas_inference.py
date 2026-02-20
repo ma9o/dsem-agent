@@ -105,12 +105,18 @@ class SVIDiagnostics(BaseModel):
 
 
 class LOODiagnostics(BaseModel):
-    """Leave-one-out cross-validation diagnostics (ArviZ)."""
+    """Leave-one-out cross-validation diagnostics (ArviZ).
+
+    Uses one-step-ahead predictive log-likelihoods from the filter's
+    innovation decomposition. Each LOO "observation" is one complete
+    timestep (all manifest variables at time t), not individual cells.
+    """
 
     elpd_loo: float
     p_loo: float
     se: float
     n_data_points: int
+    observation_unit: str = "timestep"
     pareto_k: list[float] | None = None
     n_bad_k: int | None = None
     loo_pit: list[float] | None = None

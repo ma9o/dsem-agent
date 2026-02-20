@@ -82,7 +82,7 @@ class TestParticleLikelihoodCore:
             time_intervals,
         )
 
-        assert jnp.isfinite(ll), f"PF produced non-finite: {ll}"
+        assert jnp.all(jnp.isfinite(ll)), f"PF produced non-finite: {ll}"
 
     def test_pf_varies_with_params(self, simple_observations):
         """PF likelihood should vary with different parameters."""
@@ -121,7 +121,7 @@ class TestParticleLikelihoodCore:
                 observations,
                 time_intervals,
             )
-            likelihoods.append(float(ll))
+            likelihoods.append(float(ll[-1]))
 
         assert all(np.isfinite(ll) for ll in likelihoods)
         assert len({round(ll, 2) for ll in likelihoods}) > 1
@@ -179,7 +179,7 @@ class TestDeterministicKey:
             time_intervals,
         )
 
-        assert float(ll1) == float(ll2), f"Not deterministic: {ll1} vs {ll2}"
+        assert float(ll1[-1]) == float(ll2[-1]), f"Not deterministic: {ll1} vs {ll2}"
 
 
 class TestParticleLikelihoodGradient:
@@ -219,7 +219,7 @@ class TestParticleLikelihoodGradient:
                 init,
                 observations,
                 time_intervals,
-            )
+            )[-1]
 
         drift_diag = jnp.array([-0.5, -0.5])
         grad = jax.grad(ll_fn)(drift_diag)
@@ -632,7 +632,7 @@ class TestHighDimNonlinear:
             extra_params={"proc_df": proc_df},
         )
 
-        assert jnp.isfinite(ll), f"Non-finite LL on high-dim model: {ll}"
+        assert jnp.all(jnp.isfinite(ll)), f"Non-finite LL on high-dim model: {ll}"
 
 
 # =============================================================================
@@ -664,7 +664,7 @@ class TestEdgeCases:
         ll = backend.compute_log_likelihood(
             ct_params, meas_params, init, observations, time_intervals
         )
-        assert jnp.isfinite(ll)
+        assert jnp.all(jnp.isfinite(ll))
 
     def test_irregular_time_intervals(self):
         """Handle irregular time intervals."""
@@ -695,7 +695,7 @@ class TestEdgeCases:
         ll = backend.compute_log_likelihood(
             ct_params, meas_params, init, observations, time_intervals
         )
-        assert jnp.isfinite(ll)
+        assert jnp.all(jnp.isfinite(ll))
 
     def test_higher_dimensional_system(self):
         """Test 4-dimensional latent system."""
@@ -727,7 +727,7 @@ class TestEdgeCases:
         ll = backend.compute_log_likelihood(
             ct_params, meas_params, init, observations, time_intervals
         )
-        assert jnp.isfinite(ll)
+        assert jnp.all(jnp.isfinite(ll))
 
     def test_non_identity_lambda(self):
         """Test with non-identity factor loading matrix."""
@@ -767,7 +767,7 @@ class TestEdgeCases:
         ll = backend.compute_log_likelihood(
             ct_params, meas_params, init, observations, time_intervals
         )
-        assert jnp.isfinite(ll)
+        assert jnp.all(jnp.isfinite(ll))
 
 
 # =============================================================================
