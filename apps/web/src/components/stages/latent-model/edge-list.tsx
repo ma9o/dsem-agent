@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { InfoTable } from "@/components/ui/info-table";
-import { createColumnHelper } from "@tanstack/react-table";
+import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import type { CausalEdge } from "@causal-ssm/api-types";
 
 const col = createColumnHelper<CausalEdge>();
@@ -31,5 +31,5 @@ const columns = [
 ];
 
 export function EdgeList({ edges }: { edges: CausalEdge[] }) {
-  return <InfoTable columns={columns} data={edges} />;
+  return <InfoTable columns={columns as ColumnDef<CausalEdge, unknown>[]} data={edges} />;
 }

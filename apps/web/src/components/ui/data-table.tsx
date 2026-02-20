@@ -5,19 +5,22 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { cn } from "@/lib/utils/cn";
 import { useTableKeyboardNav } from "./use-table-keyboard-nav";
 
-interface DataTableProps {
-  rows: Record<string, string | null>[];
+interface DataTableProps<T extends object> {
+  rows: T[];
   maxHeight?: string;
 }
 
 const ROW_HEIGHT = 28;
 
-export function DataTable({ rows, maxHeight = "max-h-64" }: DataTableProps) {
+export function DataTable<T extends object>({ rows, maxHeight = "max-h-64" }: DataTableProps<T>) {
   if (rows.length === 0) return null;
 
   const columns = useMemo(() => {
-    const allKeys = Object.keys(rows[0]);
-    return allKeys.filter((key) => rows.some((row) => row[key] != null));
+    const firstRow = rows[0] as Record<string, unknown>;
+    const allKeys = Object.keys(firstRow);
+    return allKeys.filter((key) =>
+      rows.some((row) => (row as Record<string, unknown>)[key] != null),
+    );
   }, [rows]);
 
   const parentRef = useRef<HTMLDivElement>(null);
@@ -59,7 +62,7 @@ export function DataTable({ rows, maxHeight = "max-h-64" }: DataTableProps) {
         role="rowgroup"
       >
         {virtualizer.getVirtualItems().map((vi) => {
-          const row = rows[vi.index];
+          const row = rows[vi.index] as Record<string, unknown>;
           return (
             <div
               key={vi.index}
@@ -79,7 +82,13 @@ export function DataTable({ rows, maxHeight = "max-h-64" }: DataTableProps) {
                   className="flex-1 min-w-0 py-1 px-3 text-xs text-muted-foreground truncate leading-5"
                   role="gridcell"
                 >
-                  {row[col] ?? ""}
+                  {row[col] == null
+                    ? ""
+                    : typeof row[col] === "boolean"
+                      ? row[col]
+                        ? "true"
+                        : "false"
+                      : String(row[col])}
                 </div>
               ))}
             </div>

@@ -11,14 +11,14 @@
       }
     },
     "per_param_classification": [
-      { "name": "beta_stress_procrastination", "classification": "structurally_identified", "contraction_ratio": 0.85 },
-      { "name": "beta_distraction_procrastination", "classification": "structurally_identified", "contraction_ratio": 0.78 },
-      { "name": "beta_sleep_stress", "classification": "structurally_identified", "contraction_ratio": 0.82 },
-      { "name": "beta_workload_stress", "classification": "structurally_identified", "contraction_ratio": 0.91 },
-      { "name": "rho_procrastination", "classification": "structurally_identified", "contraction_ratio": 0.88 },
-      { "name": "rho_stress", "classification": "structurally_identified", "contraction_ratio": 0.84 },
-      { "name": "sigma_procrastination", "classification": "structurally_identified", "contraction_ratio": 0.76 },
-      { "name": "sigma_stress", "classification": "boundary", "contraction_ratio": 0.45 }
+      { "name": "beta_stress_procrastination", "classification": "identified", "contraction_ratio": 0.85 },
+      { "name": "beta_distraction_procrastination", "classification": "identified", "contraction_ratio": 0.78 },
+      { "name": "beta_sleep_stress", "classification": "identified", "contraction_ratio": 0.82 },
+      { "name": "beta_workload_stress", "classification": "identified", "contraction_ratio": 0.91 },
+      { "name": "rho_procrastination", "classification": "identified", "contraction_ratio": 0.88 },
+      { "name": "rho_stress", "classification": "identified", "contraction_ratio": 0.84 },
+      { "name": "sigma_procrastination", "classification": "identified", "contraction_ratio": 0.76 },
+      { "name": "sigma_stress", "classification": "practically_unidentifiable", "contraction_ratio": 0.45 }
     ],
     "weak_params": []
   },

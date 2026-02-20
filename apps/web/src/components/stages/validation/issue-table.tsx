@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { IssueBadge } from "@/components/ui/custom/issue-badge";
 import { InfoTable } from "@/components/ui/info-table";
-import { createColumnHelper } from "@tanstack/react-table";
+import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import type { ValidationIssue } from "@causal-ssm/api-types";
 
 const col = createColumnHelper<ValidationIssue>();
@@ -39,5 +39,5 @@ export function IssueTable({ issues }: { issues: ValidationIssue[] }) {
     return <p className="text-sm text-muted-foreground">No issues found.</p>;
   }
 
-  return <InfoTable columns={columns} data={sorted} />;
+  return <InfoTable columns={columns as ColumnDef<ValidationIssue, unknown>[]} data={sorted} />;
 }

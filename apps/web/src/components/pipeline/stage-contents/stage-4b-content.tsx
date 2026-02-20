@@ -8,15 +8,15 @@ export default function Stage4bContent({ data }: { data: Stage4bData }) {
 
   return (
     <div className="space-y-4">
-      {!pid.t_rule.satisfies && (
+      {pid.t_rule && !pid.t_rule.satisfies && (
         <HardGateAlert
           title="T-Rule Violated — Pipeline Halted"
           explanation={`The model has ${pid.t_rule.n_free_params} free parameters but only ${pid.t_rule.n_moments} moment conditions. The model has more unknowns than equations.`}
           suggestion="Reduce model complexity by removing parameters or collect more time points to increase moment conditions."
         />
       )}
-      <TRuleCard tRule={pid.t_rule} />
-      {pid.per_param_classification.length > 0 && (
+      {pid.t_rule && <TRuleCard tRule={pid.t_rule} />}
+      {pid.per_param_classification && pid.per_param_classification.length > 0 && (
         <WeakParamsList params={pid.per_param_classification} />
       )}
     </div>

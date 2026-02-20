@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { HeaderWithTooltip, InfoTable } from "@/components/ui/info-table";
-import { createColumnHelper } from "@tanstack/react-table";
+import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { formatNumber } from "@/lib/utils/format";
 import type { ParameterClassification, ParameterIdentification } from "@causal-ssm/api-types";
 
@@ -8,15 +8,15 @@ const classificationVariant: Record<
   ParameterClassification,
   "success" | "warning" | "destructive"
 > = {
-  structurally_identified: "success",
-  boundary: "warning",
-  weak: "destructive",
+  identified: "success",
+  practically_unidentifiable: "warning",
+  structurally_unidentifiable: "destructive",
 };
 
 const classificationLabel: Record<ParameterClassification, string> = {
-  structurally_identified: "Identified",
-  boundary: "Boundary",
-  weak: "Weak",
+  identified: "Identified",
+  practically_unidentifiable: "Practically Unidentifiable",
+  structurally_unidentifiable: "Structurally Unidentifiable",
 };
 
 const col = createColumnHelper<ParameterIdentification>();
@@ -52,7 +52,7 @@ const columns = [
       const v = info.getValue();
       return (
         <span className="text-muted-foreground">
-          {v !== null ? formatNumber(v) : "--"}
+          {v != null ? formatNumber(v) : "--"}
         </span>
       );
     },
@@ -60,5 +60,5 @@ const columns = [
 ];
 
 export function WeakParamsList({ params }: { params: ParameterIdentification[] }) {
-  return <InfoTable columns={columns} data={params} />;
+  return <InfoTable columns={columns as ColumnDef<ParameterIdentification, unknown>[]} data={params} />;
 }

@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { HeaderWithTooltip, InfoTable } from "@/components/ui/info-table";
 import { formatNumber } from "@/lib/utils/format";
 import type { CellStatus, IndicatorHealth } from "@causal-ssm/api-types";
-import { createColumnHelper } from "@tanstack/react-table";
+import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 
 const col = createColumnHelper<IndicatorHealth>();
 
@@ -123,5 +123,5 @@ const columns = [
 ];
 
 export function IndicatorHealthTable({ rows }: { rows: IndicatorHealth[] }) {
-  return <InfoTable columns={columns} data={rows} />;
+  return <InfoTable columns={columns as ColumnDef<IndicatorHealth, unknown>[]} data={rows} />;
 }

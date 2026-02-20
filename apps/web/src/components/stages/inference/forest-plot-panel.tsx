@@ -31,10 +31,10 @@ interface ChartRow {
   y: number;
   errorX: [number, number];
   treatment: string;
-  beta_hat: number;
+  effect_size: number;
   ci_lower: number;
   ci_upper: number;
-  se: number;
+  prob_positive?: number;
   crossesZero: boolean;
 }
 
@@ -55,9 +55,11 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<
     <div className="rounded-md border bg-popover px-3 py-2 text-sm shadow-md">
       <div className="mb-1 font-medium">{d.treatment}</div>
       <div className="space-y-0.5 font-mono text-xs text-muted-foreground">
-        <div>{"\u03B2\u0302"} = {formatNumber(d.beta_hat, 3)}</div>
+        <div>{"\u03B2\u0302"} = {formatNumber(d.effect_size, 3)}</div>
         <div>95% CI [{formatNumber(d.ci_lower, 3)}, {formatNumber(d.ci_upper, 3)}]</div>
-        <div>SE = {formatNumber(d.se, 3)}</div>
+        {d.prob_positive !== undefined && (
+          <div>P(β&gt;0) = {formatNumber(d.prob_positive, 3)}</div>
+        )}
       </div>
     </div>
   );
@@ -65,14 +67,32 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<
 
 export function ForestPlotPanel({ results }: ForestPlotPanelProps) {
   if (results.length === 0) return null;
+  const plottable = results.filter(
+    (r) => r.effect_size !== null && r.credible_interval !== null,
+  );
+  if (plottable.length === 0) {
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Forest Plot</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
+          No numeric treatment effects available to plot.
+        </CardContent>
+      </Card>
+    );
+  }
 
   const sorted = useMemo(
-    () => [...results].sort((a, b) => b.beta_hat - a.beta_hat),
-    [results],
+    () => [...plottable].sort((a, b) => (b.effect_size as number) - (a.effect_size as number)),
+    [plottable],
   );
 
   const { domainMin, domainMax } = useMemo(() => {
-    const allVals = sorted.flatMap((r) => [r.ci_lower, r.ci_upper, 0]);
+    const allVals = sorted.flatMap((r) => {
+      const ci = r.credible_interval as [number, number];
+      return [ci[0], ci[1], 0];
+    });
     const lo = d3Min(allVals) ?? 0;
     const hi = d3Max(allVals) ?? 0;
     const pad = (hi - lo) * 0.15;
@@ -88,16 +108,18 @@ export function ForestPlotPanel({ results }: ForestPlotPanelProps) {
     const sig: ChartRow[] = [];
     const notSig: ChartRow[] = [];
     sorted.forEach((r, i) => {
+      const effect = r.effect_size as number;
+      const ci = r.credible_interval as [number, number];
       const row: ChartRow = {
-        x: r.beta_hat,
+        x: effect,
         y: i,
-        errorX: [r.beta_hat - r.ci_lower, r.ci_upper - r.beta_hat],
+        errorX: [effect - ci[0], ci[1] - effect],
         treatment: r.treatment,
-        beta_hat: r.beta_hat,
-        ci_lower: r.ci_lower,
-        ci_upper: r.ci_upper,
-        se: r.se,
-        crossesZero: r.ci_lower <= 0 && r.ci_upper >= 0,
+        effect_size: effect,
+        ci_lower: ci[0],
+        ci_upper: ci[1],
+        prob_positive: r.prob_positive ?? undefined,
+        crossesZero: ci[0] <= 0 && ci[1] >= 0,
       };
       if (row.crossesZero) {
         notSig.push(row);
@@ -204,7 +226,9 @@ export function ForestPlotPanel({ results }: ForestPlotPanelProps) {
           {/* Numeric summary column */}
           <div className="shrink-0 pl-3" style={{ paddingTop: PADDING_TOP }}>
             {sorted.map((r) => {
-              const crossesZero = r.ci_lower <= 0 && r.ci_upper >= 0;
+              const ci = r.credible_interval as [number, number];
+              const effect = r.effect_size as number;
+              const crossesZero = ci[0] <= 0 && ci[1] >= 0;
               return (
                 <div
                   key={r.treatment}
@@ -212,10 +236,10 @@ export function ForestPlotPanel({ results }: ForestPlotPanelProps) {
                   style={{ height: ROW_HEIGHT }}
                 >
                   <span className="tabular-nums whitespace-nowrap">
-                    {formatNumber(r.beta_hat, 2)}{" "}
+                    {formatNumber(effect, 2)}{" "}
                     <span className="text-muted-foreground">
-                      [{formatNumber(r.ci_lower, 2)},{" "}
-                      {formatNumber(r.ci_upper, 2)}]
+                      [{formatNumber(ci[0], 2)},{" "}
+                      {formatNumber(ci[1], 2)}]
                     </span>
                   </span>
                 </div>

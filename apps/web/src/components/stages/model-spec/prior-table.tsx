@@ -19,7 +19,7 @@ const col = createColumnHelper<PriorRow>();
 
 /** Compact inline density chart with axes. */
 function DensitySparkline({ prior }: { prior: PriorRow }) {
-  const data = prior.density_points ?? evaluatePdf(prior.distribution, prior.params, 60);
+  const data = prior.density_points ?? evaluatePdf(prior.distribution, prior.params as Record<string, number>, 60);
   return (
     <div className="h-16 w-36">
       <ResponsiveContainer width="100%" height="100%">
@@ -35,8 +35,14 @@ function DensitySparkline({ prior }: { prior: PriorRow }) {
           />
           <YAxis hide />
           <RechartsTooltip
-            formatter={(v: number) => [formatNumber(v, 4), "density"]}
-            labelFormatter={(l: number) => `x = ${formatNumber(l, 3)}`}
+            formatter={(v: number | string | undefined) => {
+              const numeric = typeof v === "number" ? v : Number(v);
+              return [Number.isFinite(numeric) ? formatNumber(numeric, 4) : "--", "density"] as const;
+            }}
+            labelFormatter={(l: unknown) => {
+              const numeric = typeof l === "number" ? l : Number(l);
+              return Number.isFinite(numeric) ? `x = ${formatNumber(numeric, 3)}` : "x = --";
+            }}
             contentStyle={{ fontSize: 10, padding: "2px 6px" }}
           />
           <Area
@@ -61,7 +67,7 @@ function formatParams(params: Record<string, number>): string {
     .join(", ");
 }
 
-const baseColumns: ColumnDef<PriorRow, unknown>[] = [
+const baseColumns = [
   col.accessor("parameter", {
     header: "Parameter",
     cell: (info) => (
@@ -77,7 +83,7 @@ const baseColumns: ColumnDef<PriorRow, unknown>[] = [
     header: "Params",
     cell: ({ row }) => (
       <span className="font-mono text-xs text-muted-foreground">
-        {formatParams(row.original.params)}
+        {formatParams(row.original.params as Record<string, number>)}
       </span>
     ),
   }),
@@ -151,7 +157,7 @@ const baseColumns: ColumnDef<PriorRow, unknown>[] = [
     },
     meta: { align: "center" },
   }),
-];
+ ] as ColumnDef<PriorRow, unknown>[];
 
 const searchContextColumn = col.accessor("search_context", {
   header: () => (
@@ -165,7 +171,7 @@ const searchContextColumn = col.accessor("search_context", {
       {info.getValue() || "--"}
     </span>
   ),
-});
+}) as ColumnDef<PriorRow, unknown>;
 
 export function PriorTable({ priors, parameters }: { priors: PriorProposal[]; parameters?: ParameterSpec[] }) {
   const paramMap = useMemo(() => {

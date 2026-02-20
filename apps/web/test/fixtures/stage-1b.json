@@ -2,12 +2,12 @@
   "causal_spec": {
     "latent": {
       "constructs": [
-        { "name": "procrastination", "description": "Task avoidance behavior", "role": "endogenous", "is_outcome": true, "temporal_status": "time_varying", "causal_granularity": "daily" },
-        { "name": "stress", "description": "Perceived stress", "role": "endogenous", "is_outcome": false, "temporal_status": "time_varying", "causal_granularity": "daily" },
-        { "name": "sleep_quality", "description": "Sleep quality", "role": "endogenous", "is_outcome": false, "temporal_status": "time_varying", "causal_granularity": "daily" },
-        { "name": "digital_distraction", "description": "Non-productive media time", "role": "endogenous", "is_outcome": false, "temporal_status": "time_varying", "causal_granularity": "daily" },
-        { "name": "self_efficacy", "description": "Self-belief in task ability", "role": "endogenous", "is_outcome": false, "temporal_status": "time_varying", "causal_granularity": "weekly" },
-        { "name": "workload", "description": "External task demands", "role": "exogenous", "is_outcome": false, "temporal_status": "time_varying", "causal_granularity": "daily" }
+        { "name": "procrastination", "description": "Task avoidance behavior", "role": "endogenous", "is_outcome": true, "temporal_status": "time_varying", "temporal_scale": "daily" },
+        { "name": "stress", "description": "Perceived stress", "role": "endogenous", "is_outcome": false, "temporal_status": "time_varying", "temporal_scale": "daily" },
+        { "name": "sleep_quality", "description": "Sleep quality", "role": "endogenous", "is_outcome": false, "temporal_status": "time_varying", "temporal_scale": "daily" },
+        { "name": "digital_distraction", "description": "Non-productive media time", "role": "endogenous", "is_outcome": false, "temporal_status": "time_varying", "temporal_scale": "daily" },
+        { "name": "self_efficacy", "description": "Self-belief in task ability", "role": "endogenous", "is_outcome": false, "temporal_status": "time_varying", "temporal_scale": "weekly" },
+        { "name": "workload", "description": "External task demands", "role": "exogenous", "is_outcome": false, "temporal_status": "time_varying", "temporal_scale": "daily" }
       ],
       "edges": [
         { "cause": "stress", "effect": "procrastination", "description": "Stress triggers avoidance", "lagged": false },

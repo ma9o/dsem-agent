@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { InfoTable } from "@/components/ui/info-table";
-import { createColumnHelper } from "@tanstack/react-table";
+import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { formatNumber } from "@/lib/utils/format";
 import type { PPCWarning } from "@causal-ssm/api-types";
 import { Check, X } from "lucide-react";
@@ -42,5 +42,5 @@ const columns = [
 ];
 
 export function PPCWarningsTable({ warnings }: { warnings: PPCWarning[] }) {
-  return <InfoTable columns={columns} data={warnings} />;
+  return <InfoTable columns={columns as ColumnDef<PPCWarning, unknown>[]} data={warnings} />;
 }
