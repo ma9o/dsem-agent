@@ -94,10 +94,25 @@ export function useRunEvents(runId: string | null) {
     });
     wsRef.current = ws;
 
+    ws.onopen = () => {
+      // Prefect's /api/events/out requires a filter message before it streams events.
+      // Without this, the server waits indefinitely and sends nothing.
+      ws.send(
+        JSON.stringify({
+          type: "filter",
+          filter: {
+            event: { prefix: ["prefect.task-run."] },
+            related: {
+              resources_in_roles: [[`prefect.flow-run.${runId}`, "flow-run"]],
+            },
+          },
+        }),
+      );
+    };
+
     ws.onmessage = (event: MessageEvent) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.resource?.["prefect.flow-run.id"] !== runId) return;
 
         const taskName = data.resource?.["prefect.task-run.name"];
         if (!taskName) return;
