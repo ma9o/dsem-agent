@@ -2,6 +2,8 @@
 
 import dataclasses
 import json
+import logging
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -14,8 +16,11 @@ from inspect_ai.model import (
     GenerateConfig,
     Model,
     ModelOutput,
+    execute_tools,
 )
 from inspect_ai.tool import Tool, tool
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from inspect_ai.model import ChatMessage
@@ -541,6 +546,98 @@ def parse_date():
 
 
 # ---------------------------------------------------------------------------
+# Per-turn logging helpers
+# ---------------------------------------------------------------------------
+
+MAX_TOOL_LOOP_TURNS = 25
+WARN_TOOL_LOOP_TURNS = 10
+
+
+def _summarize_output(output: ModelOutput, elapsed: float) -> str:
+    """One-line summary of a ModelOutput for logging."""
+    parts = []
+    if output.usage:
+        parts.append(f"tokens(in={output.usage.input_tokens},out={output.usage.output_tokens})")
+    parts.append(f"time={elapsed:.1f}s")
+    if output.message.tool_calls:
+        names = [tc.function for tc in output.message.tool_calls]
+        parts.append(f"tool_calls={names}")
+    else:
+        parts.append(f"stop={output.stop_reason or 'end_turn'}")
+    text = output.completion or ""
+    preview = text[:120].replace("\n", " ")
+    if preview:
+        parts.append(f'preview="{preview}..."' if len(text) > 120 else f'preview="{preview}"')
+    return " | ".join(parts)
+
+
+async def _run_tool_loop(
+    messages: list["ChatMessage"],
+    model: Model,
+    tools: list[Tool],
+    config: GenerateConfig | None,
+    label: str = "tool",
+    max_turns: int = MAX_TOOL_LOOP_TURNS,
+    warn_turns: int = WARN_TOOL_LOOP_TURNS,
+) -> tuple[list["ChatMessage"], ModelOutput]:
+    """Run a tool loop with per-turn logging and an infinite-loop guard.
+
+    Replaces model.generate_loop() with identical semantics but adds:
+    - INFO log per turn (tokens, timing, tool calls, content preview)
+    - WARNING when turn count hits warn_turns
+    - RuntimeError when turn count exceeds max_turns
+    """
+    t0 = time.monotonic()
+    turn = 0
+
+    while True:
+        turn += 1
+        if turn > max_turns:
+            elapsed = time.monotonic() - t0
+            logger.error(
+                "[%s] exceeded %d turns (elapsed=%.1fs). Terminating.",
+                label,
+                max_turns,
+                elapsed,
+            )
+            raise RuntimeError(f"LLM {label} loop exceeded {max_turns} turns without converging.")
+        if turn == warn_turns:
+            elapsed = time.monotonic() - t0
+            logger.warning(
+                "[%s] reached %d turns (elapsed=%.1fs). Possible infinite loop.",
+                label,
+                warn_turns,
+                elapsed,
+            )
+
+        t_turn = time.monotonic()
+        output = await model.generate(input=messages, tools=tools, config=config)
+        messages.append(output.message)
+        elapsed_turn = time.monotonic() - t_turn
+
+        logger.info(
+            "[%s] turn=%d | %s",
+            label,
+            turn,
+            _summarize_output(output, elapsed_turn),
+        )
+
+        if output.message.tool_calls:
+            tool_messages, tool_output = await execute_tools(
+                messages,
+                tools,
+                config.max_tool_output if config else None,
+            )
+            messages.extend(tool_messages)
+            if tool_output is not None:
+                output = tool_output
+        else:
+            elapsed_total = time.monotonic() - t0
+            logger.info("[%s] completed: %d turns in %.1fs", label, turn, elapsed_total)
+            return messages, output
+
+
+# ---------------------------------------------------------------------------
 # Multi-turn generation
 # ---------------------------------------------------------------------------
 
@@ -557,11 +654,14 @@ async def multi_turn_generate(
     """
     Run a multi-turn conversation with optional tool use.
 
+    Uses a manual tool loop (via _run_tool_loop) instead of model.generate_loop()
+    to provide per-turn logging, timing, and an infinite-loop safety guard.
+
     Args:
         messages: Initial messages (typically system + user prompt)
         model: The model to use for generation
         follow_ups: List of follow-up user prompts to send after each response (default: none)
-        tools: Optional list of tools the model can use on the first turn (enables generate_loop)
+        tools: Optional list of tools the model can use on the first turn
         follow_up_tools: Optional list of tools for follow-up (self-review) turns.
             Defaults to None, meaning follow-up turns use no tools (plain generation).
             This prevents the LLM from re-invoking validation tools during self-review
@@ -573,56 +673,92 @@ async def multi_turn_generate(
     Returns:
         The final completion string
     """
+    t0 = time.monotonic()
     messages = list(messages)  # Don't mutate original
     follow_ups = follow_ups or []
 
+    logger.info(
+        "multi_turn_generate starting (tools=%d, follow_ups=%d)",
+        len(tools or []),
+        len(follow_ups),
+    )
+
     if tools:
-        # Use generate_loop for tool-enabled generation
-        final_messages, output = await model.generate_loop(
+        # Tool-enabled generation with per-turn logging
+        messages, output = await _run_tool_loop(
             messages,
-            tools=tools,
-            config=config,
+            model,
+            tools,
+            config,
+            label="initial",
         )
-        messages = list(final_messages)
         last_nonempty = output.completion
 
-        # Follow-up turns: use follow_up_tools if provided, otherwise no tools
-        for prompt in follow_ups:
+        # Follow-up turns
+        for i, prompt in enumerate(follow_ups):
+            logger.info("Follow-up %d/%d starting", i + 1, len(follow_ups))
             messages.append(ChatMessageUser(content=prompt))
+
             if follow_up_tools:
-                final_messages, output = await model.generate_loop(
+                messages, output = await _run_tool_loop(
                     messages,
-                    tools=follow_up_tools,
-                    config=config,
+                    model,
+                    follow_up_tools,
+                    config,
+                    label=f"follow-up-{i + 1}",
                 )
-                messages = list(final_messages)
             else:
+                t_fu = time.monotonic()
                 response = await model.generate(messages, config=config)
                 messages.append(ChatMessageAssistant(content=response.completion))
                 output = response
+                elapsed_fu = time.monotonic() - t_fu
+                logger.info(
+                    "Follow-up %d/%d | %s",
+                    i + 1,
+                    len(follow_ups),
+                    _summarize_output(output, elapsed_fu),
+                )
+
             if output.completion and output.completion.strip():
                 last_nonempty = output.completion
 
         if trace_capture is not None:
             trace_capture["trace"] = _build_trace(messages, output)
 
+        elapsed_total = time.monotonic() - t0
+        logger.info("multi_turn_generate completed in %.1fs", elapsed_total)
         return last_nonempty
     else:
         # Simple generation without tools
+        t_gen = time.monotonic()
         response = await model.generate(messages, config=config)
         messages.append(ChatMessageAssistant(content=response.completion))
+        elapsed_gen = time.monotonic() - t_gen
+        logger.info("single-turn | %s", _summarize_output(response, elapsed_gen))
         last_nonempty = response.completion
 
-        for prompt in follow_ups:
+        for i, prompt in enumerate(follow_ups):
+            logger.info("Follow-up %d/%d starting", i + 1, len(follow_ups))
             messages.append(ChatMessageUser(content=prompt))
+            t_fu = time.monotonic()
             response = await model.generate(messages, config=config)
             messages.append(ChatMessageAssistant(content=response.completion))
+            elapsed_fu = time.monotonic() - t_fu
+            logger.info(
+                "Follow-up %d/%d | %s",
+                i + 1,
+                len(follow_ups),
+                _summarize_output(response, elapsed_fu),
+            )
             if response.completion and response.completion.strip():
                 last_nonempty = response.completion
 
         if trace_capture is not None:
             trace_capture["trace"] = _build_trace(messages, response)
 
+        elapsed_total = time.monotonic() - t0
+        logger.info("multi_turn_generate completed in %.1fs", elapsed_total)
         return last_nonempty
 
 
