@@ -140,11 +140,10 @@ def get_emission_fn(manifest_dist, extra_params=None, *, link=None):
     """Return the appropriate emission log-prob function.
 
     Args:
-        manifest_dist: Distribution family string (e.g. "gaussian", "poisson").
+        manifest_dist: Distribution family (DistributionFamily enum or string).
         extra_params: Optional dict with distribution-specific hyperparameters.
-        link: Link function string (e.g. "identity", "log", "logit", "probit",
-            "inverse"). Required keyword argument — callers must be explicit.
-            When None, uses the default link for the distribution.
+        link: Link function (LinkFunction enum or string, e.g. "logit", "probit",
+            "inverse"). When None, uses the default link for the distribution.
 
     Returns:
         Callable(y_t, z_t, H, d, R, obs_mask_t) -> scalar log-prob.
