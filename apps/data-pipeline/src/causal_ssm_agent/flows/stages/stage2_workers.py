@@ -20,6 +20,8 @@ def load_worker_chunks(lines: list[str]) -> list[str]:
 
 
 @task(
+    cache_policy=INPUTS,
+    persist_result=True,
     retries=2,
     retry_delay_seconds=10,
 )
