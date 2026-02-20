@@ -617,8 +617,9 @@ def fit_pgas(
     adapter = SSMAdapter(
         n_l,
         n_m,
-        manifest_dist=model.spec.manifest_dist.value,
-        diffusion_dist=model.spec.diffusion_dist.value,
+        manifest_dist=model.spec.manifest_dist,
+        diffusion_dist=model.spec.diffusion_dist,
+        manifest_link=model.spec.manifest_link,
     )
 
     # 3. Build block structure for parameter sampling

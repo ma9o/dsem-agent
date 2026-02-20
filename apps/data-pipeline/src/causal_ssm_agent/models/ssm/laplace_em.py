@@ -24,7 +24,7 @@ import jax
 import jax.numpy as jnp
 import jax.scipy.linalg as jla
 
-from causal_ssm_agent.models.likelihoods.emissions import get_emission_fn
+from causal_ssm_agent.models.likelihoods.kernels import build_observation_kernel
 from causal_ssm_agent.models.ssm.discretization import discretize_system_batched
 from causal_ssm_agent.models.ssm.tempered_core import run_tempered_smc
 
@@ -35,6 +35,7 @@ if TYPE_CHECKING:
         MeasurementParams,
     )
     from causal_ssm_agent.models.ssm.inference import InferenceResult
+    from causal_ssm_agent.orchestrator.schemas_model import DistributionFamily, LinkFunction
 
 
 # ---------------------------------------------------------------------------
@@ -335,12 +336,14 @@ class LaplaceLikelihood:
         self,
         n_latent: int,
         n_manifest: int,
-        manifest_dist: str = "gaussian",
+        manifest_dist: DistributionFamily | str = "gaussian",
+        manifest_link: LinkFunction | str = "identity",
         n_ieks_iters: int = 5,
     ):
         self.n_latent = n_latent
         self.n_manifest = n_manifest
         self.manifest_dist = manifest_dist
+        self.manifest_link = manifest_link
         self.n_ieks_iters = n_ieks_iters
 
     def compute_log_likelihood(
@@ -367,7 +370,13 @@ class LaplaceLikelihood:
         if cd is None:
             cd = jnp.zeros((len(time_intervals), n))
 
-        emission_fn = get_emission_fn(self.manifest_dist, extra_params)
+        from causal_ssm_agent.orchestrator.schemas_model import DistributionFamily, LinkFunction
+
+        obs_kernel = build_observation_kernel(
+            DistributionFamily(self.manifest_dist),
+            LinkFunction(self.manifest_link),
+            extra_params,
+        )
 
         _, _, log_lik = _ieks_smooth(
             clean_obs,
@@ -380,7 +389,7 @@ class LaplaceLikelihood:
             measurement_params.manifest_cov,
             initial_state.mean,
             initial_state.cov,
-            emission_fn,
+            obs_kernel.emission_fn,
             n_ieks_iters=self.n_ieks_iters,
         )
 
@@ -415,15 +424,11 @@ def fit_laplace_em(
     Uses the Laplace-approximated marginal likelihood (via IEKS) as the
     log-density for a tempered SMC sampler over the parameter space.
     """
-    manifest_dist = (
-        model.spec.manifest_dist.value
-        if hasattr(model.spec.manifest_dist, "value")
-        else str(model.spec.manifest_dist)
-    )
     backend = LaplaceLikelihood(
         n_latent=model.spec.n_latent,
         n_manifest=model.spec.n_manifest,
-        manifest_dist=manifest_dist,
+        manifest_dist=model.spec.manifest_dist,
+        manifest_link=model.spec.manifest_link,
         n_ieks_iters=n_ieks_iters,
     )
     return run_tempered_smc(
