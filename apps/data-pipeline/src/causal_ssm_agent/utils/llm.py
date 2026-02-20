@@ -1,9 +1,7 @@
 """Shared LLM utilities for multi-turn generation."""
 
-import dataclasses
 import json
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from inspect_ai.model import (
@@ -16,6 +14,7 @@ from inspect_ai.model import (
     ModelOutput,
 )
 from inspect_ai.tool import Tool, tool
+from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
     from inspect_ai.model import ChatMessage
@@ -24,12 +23,11 @@ if TYPE_CHECKING:
 
 
 # ---------------------------------------------------------------------------
-# Trace dataclasses
+# Trace models
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class TraceMessage:
+class TraceMessage(BaseModel):
     """A single message in an LLM trace."""
 
     role: str
@@ -41,8 +39,7 @@ class TraceMessage:
     tool_is_error: bool = False
 
 
-@dataclass
-class TraceUsage:
+class TraceUsage(BaseModel):
     """Token usage for an LLM trace."""
 
     input_tokens: int = 0
@@ -51,17 +48,13 @@ class TraceUsage:
     reasoning_tokens: int | None = None
 
 
-@dataclass
-class LLMTrace:
+class LLMTrace(BaseModel):
     """Full trace of an LLM multi-turn conversation."""
 
-    messages: list[TraceMessage] = field(default_factory=list)
+    messages: list[TraceMessage] = Field(default_factory=list)
     model: str = ""
     total_time_seconds: float = 0.0
-    usage: TraceUsage = field(default_factory=TraceUsage)
-
-    def to_dict(self) -> dict:
-        return dataclasses.asdict(self)
+    usage: TraceUsage = Field(default_factory=TraceUsage)
 
 
 def _chat_message_to_trace(msg: "ChatMessage") -> TraceMessage:
@@ -637,8 +630,8 @@ def attach_trace(output: dict, trace_capture: dict) -> None:
     Replaces the repeated boilerplate:
         trace = trace_capture.get("trace")
         if trace is not None:
-            out["llm_trace"] = trace.to_dict()
+            out["llm_trace"] = trace.model_dump(mode="json")
     """
     trace = trace_capture.get("trace")
     if trace is not None:
-        output["llm_trace"] = trace.to_dict()
+        output["llm_trace"] = trace.model_dump(mode="json")

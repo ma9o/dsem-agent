@@ -350,7 +350,8 @@ def compute_interventions(
     )
 
     # Attach PPC warnings to each treatment entry
-    if ppc_result and ppc_result.get("checked", False) and ppc_result.get("warnings"):
+    ppc_warnings = ppc_result.get("per_variable_warnings", []) if ppc_result else []
+    if ppc_result and ppc_result.get("checked", False) and ppc_warnings:
         from causal_ssm_agent.models.posterior_predictive import get_relevant_manifest_variables
 
         lambda_mat = samples.get("lambda")
@@ -365,16 +366,14 @@ def compute_interventions(
                 relevant_vars = get_relevant_manifest_variables(
                     lambda_mat, ti, outcome_idx, m_names
                 )
-                entry_ppc = [
-                    w for w in ppc_result["warnings"] if w.get("variable") in relevant_vars
-                ]
+                entry_ppc = [w for w in ppc_warnings if w.get("variable") in relevant_vars]
                 if entry_ppc:
                     entry["ppc_warnings"] = entry_ppc
         else:
             # Lambda is fixed (identity) — not in posterior samples.
             # Attach all PPC warnings to every treatment.
             for entry in results:
-                entry["ppc_warnings"] = ppc_result["warnings"]
+                entry["ppc_warnings"] = ppc_warnings
 
     # Attach power-scaling sensitivity warnings to intervention entries.
     # Flag treatments whose drift parameters are prior-dominated.

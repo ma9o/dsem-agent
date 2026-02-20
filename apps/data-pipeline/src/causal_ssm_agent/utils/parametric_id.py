@@ -23,6 +23,7 @@ import jax.numpy as jnp
 import jax.random as random
 from jax import lax
 from jax.flatten_util import ravel_pytree
+from pydantic import BaseModel
 
 from causal_ssm_agent.models.ssm.discretization import discretize_system_batched
 from causal_ssm_agent.models.ssm.utils import (
@@ -44,8 +45,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class TRuleResult:
+class TRuleResult(BaseModel):
     """Result of the t-rule (counting condition) check.
 
     The t-rule is a necessary condition for identification: if the number

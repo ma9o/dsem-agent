@@ -47,6 +47,14 @@ class PriorProposal(BaseModel):
             "Used for DT→CT conversion: drift = beta / reference_interval_days."
         ),
     )
+    density_points: list[dict[str, float]] | None = Field(
+        default=None,
+        description=(
+            "Pre-computed density curve points [{x, y}, ...] for frontend visualization. "
+            "Computed by the pipeline before persistence so the frontend doesn't need "
+            "to approximate the PDF client-side."
+        ),
+    )
 
 
 class PriorValidationResult(BaseModel):

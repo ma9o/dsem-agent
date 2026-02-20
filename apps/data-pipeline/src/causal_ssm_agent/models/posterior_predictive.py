@@ -7,11 +7,12 @@ calibration, autocorrelation, and variance issues.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from typing import Literal
 
 import jax
 import jax.numpy as jnp
 from jax import lax, vmap
+from pydantic import BaseModel, Field, computed_field
 
 from causal_ssm_agent.models.ssm.constants import MIN_DT
 from causal_ssm_agent.models.ssm.discretization import discretize_system_batched
@@ -29,32 +30,21 @@ _DIST_IDX: dict[str, int] = {
 }
 
 # ---------------------------------------------------------------------------
-# Dataclasses
+# PPC models
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class PPCWarning:
+class PPCWarning(BaseModel):
     """A single diagnostic warning for one manifest variable."""
 
-    variable: str  # manifest variable name
-    check: str  # "calibration" | "autocorrelation" | "variance"
-    message: str  # human-readable
-    value: float  # diagnostic statistic
-    passed: bool = True  # whether the check passed
-
-    def to_dict(self) -> dict:
-        return {
-            "variable": self.variable,
-            "check_type": self.check,
-            "message": self.message,
-            "value": self.value,
-            "passed": self.passed,
-        }
+    variable: str
+    check_type: Literal["calibration", "autocorrelation", "variance"]
+    message: str
+    value: float
+    passed: bool = True
 
 
-@dataclass
-class PPCOverlay:
+class PPCOverlay(BaseModel):
     """Per-variable quantile bands for PPC ribbon/density overlay plots.
 
     Provides the data for Gabry's ppc_dens_overlay / ppc_ribbon plots:
@@ -63,33 +53,16 @@ class PPCOverlay:
     """
 
     variable: str
-    # All arrays are length T (one value per timestep)
-    observed: list[float | None]  # observed data (None for missing)
-    q025: list[float]  # 2.5th percentile of y_rep
-    q25: list[float]  # 25th percentile
-    median: list[float]  # 50th percentile
-    q75: list[float]  # 75th percentile
-    q975: list[float]  # 97.5th percentile
-    # Spaghetti draws: list of individual y_rep trajectories (each length T)
-    spaghetti_draws: list[list[float]] = field(default_factory=list)
-
-    def to_dict(self) -> dict:
-        d: dict = {
-            "variable": self.variable,
-            "observed": self.observed,
-            "q025": self.q025,
-            "q25": self.q25,
-            "median": self.median,
-            "q75": self.q75,
-            "q975": self.q975,
-        }
-        if self.spaghetti_draws:
-            d["spaghetti_draws"] = self.spaghetti_draws
-        return d
+    observed: list[float | None]
+    q025: list[float]
+    q25: list[float]
+    median: list[float]
+    q75: list[float]
+    q975: list[float]
+    spaghetti_draws: list[list[float]] = Field(default_factory=list)
 
 
-@dataclass
-class PPCTestStat:
+class PPCTestStat(BaseModel):
     """Distribution of a test statistic across y_rep draws vs observed.
 
     Provides the data for Gabry's ppc_stat plots: histogram of T(y_rep)
@@ -97,45 +70,25 @@ class PPCTestStat:
     """
 
     variable: str
-    stat_name: str  # "mean" | "sd" | "min" | "max"
-    observed_value: float  # T(y_observed)
-    # Histogram of T(y_rep) across posterior draws
-    rep_values: list[float]  # one per y_rep draw
-    p_value: float  # fraction of rep_values >= observed_value
-
-    def to_dict(self) -> dict:
-        return {
-            "variable": self.variable,
-            "stat_name": self.stat_name,
-            "observed_value": self.observed_value,
-            "rep_values": self.rep_values,
-            "p_value": self.p_value,
-        }
+    stat_name: Literal["mean", "sd", "min", "max"]
+    observed_value: float
+    rep_values: list[float]
+    p_value: float
 
 
-@dataclass
-class PPCResult:
+class PPCResult(BaseModel):
     """Aggregate PPC result."""
 
-    warnings: list[PPCWarning] = field(default_factory=list)
+    per_variable_warnings: list[PPCWarning] = Field(default_factory=list)
     checked: bool = False
     n_subsample: int = 0
-    overlays: list[PPCOverlay] = field(default_factory=list)
-    test_stats: list[PPCTestStat] = field(default_factory=list)
+    overlays: list[PPCOverlay] = Field(default_factory=list)
+    test_stats: list[PPCTestStat] = Field(default_factory=list)
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def overall_passed(self) -> bool:
-        return all(w.passed for w in self.warnings) if self.warnings else True
-
-    def to_dict(self) -> dict:
-        return {
-            "per_variable_warnings": [w.to_dict() for w in self.warnings],
-            "overall_passed": self.overall_passed,
-            "checked": self.checked,
-            "n_subsample": self.n_subsample,
-            "overlays": [o.to_dict() for o in self.overlays],
-            "test_stats": [t.to_dict() for t in self.test_stats],
-        }
+        return all(w.passed for w in self.per_variable_warnings) if self.per_variable_warnings else True
 
 
 # ---------------------------------------------------------------------------
@@ -646,7 +599,7 @@ def _check_calibration(
             warnings.append(
                 PPCWarning(
                     variable=name,
-                    check="calibration",
+                    check_type="calibration",
                     message=f"Undercoverage: {coverage:.0%} of observations fall in 95% PPC interval (expected ~95%)",
                     value=coverage,
                     passed=False,
@@ -656,7 +609,7 @@ def _check_calibration(
             warnings.append(
                 PPCWarning(
                     variable=name,
-                    check="calibration",
+                    check_type="calibration",
                     message=f"Overcoverage: {coverage:.0%} of observations fall in 95% PPC interval (model may be too diffuse)",
                     value=coverage,
                     passed=False,
@@ -666,7 +619,7 @@ def _check_calibration(
             warnings.append(
                 PPCWarning(
                     variable=name,
-                    check="calibration",
+                    check_type="calibration",
                     message=f"95% CI coverage: {coverage:.1%} (expected ~95%)",
                     value=coverage,
                     passed=True,
@@ -724,7 +677,7 @@ def _check_residual_autocorrelation(
         warnings.append(
             PPCWarning(
                 variable=name,
-                check="autocorrelation",
+                check_type="autocorrelation",
                 message=f"Residual autocorrelation at lag 1: {rho:.2f}"
                 + ("" if passed else f" (|rho| > {threshold})"),
                 value=rho,
@@ -776,7 +729,7 @@ def _check_variance_ratio(
             warnings.append(
                 PPCWarning(
                     variable=name,
-                    check="variance",
+                    check_type="variance",
                     message=f"PPC variance too high: simulated std / observed std = {ratio:.1f}",
                     value=ratio,
                     passed=False,
@@ -786,7 +739,7 @@ def _check_variance_ratio(
             warnings.append(
                 PPCWarning(
                     variable=name,
-                    check="variance",
+                    check_type="variance",
                     message=f"PPC variance too low: simulated std / observed std = {ratio:.1f}",
                     value=ratio,
                     passed=False,
@@ -796,7 +749,7 @@ def _check_variance_ratio(
             warnings.append(
                 PPCWarning(
                     variable=name,
-                    check="variance",
+                    check_type="variance",
                     message=f"Predicted variance {float(pp_std[j]):.3f} vs observed {obs_std:.3f} (ratio {ratio:.2f})",
                     value=ratio,
                     passed=True,
@@ -1013,7 +966,7 @@ def run_posterior_predictive_checks(
     test_stats = _compute_test_stats(y_sim, observations, manifest_names)
 
     return PPCResult(
-        warnings=warnings,
+        per_variable_warnings=warnings,
         checked=True,
         n_subsample=int(y_sim.shape[0]),
         overlays=overlays,
