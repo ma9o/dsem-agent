@@ -157,6 +157,7 @@ def make_block_rb_callbacks(
     s_idx: jnp.ndarray,
     quadrature: str = "unscented",
     n_quadrature: int = 5,
+    manifest_link: str = "identity",
 ):
     """Build Feynman-Kac callbacks for block Rao-Blackwell particle filter.
 
@@ -287,7 +288,15 @@ def make_block_rb_callbacks(
             )
         else:
             m_upd_g, P_upd_g = _linearized_update(
-                m_pred_g, P_pred_g, y_t, H_g, d_eff, mask_t, manifest_dist, obs_params
+                m_pred_g,
+                P_pred_g,
+                y_t,
+                H_g,
+                d_eff,
+                mask_t,
+                manifest_dist,
+                obs_params,
+                link=manifest_link,
             )
 
         return BlockRBState(
@@ -348,7 +357,7 @@ def make_block_rb_callbacks(
                 sigma_wts = gh_wts
 
             # For each sigma point, reconstruct full latent state and evaluate obs LL.
-            emission_fn = get_emission_fn(manifest_dist, obs_params)
+            emission_fn = get_emission_fn(manifest_dist, obs_params, link=manifest_link)
 
             def eval_one(x_g):
                 # Reconstruct full state: place G and S at their indices.

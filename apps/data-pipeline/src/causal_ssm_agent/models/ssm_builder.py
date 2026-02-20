@@ -22,6 +22,7 @@ from causal_ssm_agent.models.ssm import (
 from causal_ssm_agent.orchestrator.schemas import GRANULARITY_HOURS, compute_lag_hours
 from causal_ssm_agent.orchestrator.schemas_model import (
     DistributionFamily,
+    LinkFunction,
     ModelSpec,
     ParameterRole,
     validate_model_spec,
@@ -263,6 +264,16 @@ class SSMModelBuilder:
                 manifest_dist = nd
                 break
 
+        # Extract per-channel link functions from likelihoods
+        manifest_links: list[LinkFunction] = [lik.link for lik in model_spec.likelihoods]
+
+        # Scalar fallback: first non-identity link
+        manifest_link = LinkFunction.IDENTITY
+        for lk in manifest_links:
+            if lk != LinkFunction.IDENTITY:
+                manifest_link = lk
+                break
+
         # Derive latent names from AR parameter names (e.g. rho_X → X)
         latent_names = [p.name.removeprefix("rho_") for p in ar_params] if ar_params else None
 
@@ -310,6 +321,8 @@ class SSMModelBuilder:
             manifest_var="diag",
             manifest_dist=manifest_dist,
             manifest_dists=manifest_dists,
+            manifest_link=manifest_link,
+            manifest_links=manifest_links,
             t0_means="free",
             t0_var="diag",
             latent_names=latent_names,

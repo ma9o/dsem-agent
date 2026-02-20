@@ -236,11 +236,13 @@ def validate_priors_task(
                 )
                 manifest_names = [lik.variable for lik in spec.likelihoods]
                 manifest_dists = [lik.distribution.value for lik in spec.likelihoods]
+                manifest_links = [lik.link.value for lik in spec.likelihoods]
 
                 y_sim = simulate_posterior_predictive(
                     raw_samples,
                     times=jnp.arange(30, dtype=jnp.float32),
                     manifest_dists=manifest_dists,
+                    manifest_links=manifest_links,
                     n_subsample=100,
                 )
                 # y_sim: (n_subsample, T, n_manifest) → flatten to per-variable lists

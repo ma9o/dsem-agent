@@ -83,11 +83,13 @@ class SSMAdapter:
         n_manifest: int,
         manifest_dist: str = "gaussian",
         diffusion_dist: str = "gaussian",
+        manifest_link: str = "identity",
     ):
         self.n_latent = n_latent
         self.n_manifest = n_manifest
         self.manifest_dist = manifest_dist
         self.diffusion_dist = diffusion_dist
+        self.manifest_link = manifest_link
 
     def initial_sample(self, key: jax.Array, params: dict) -> jax.Array:
         """Sample eta_0 ~ N(t0_mean, t0_cov)."""
@@ -135,7 +137,7 @@ class SSMAdapter:
         R = params["manifest_cov"]
         mask_float = obs_mask.astype(jnp.float32)
         extra = {k: v for k, v in params.items() if k.startswith("obs_")}
-        emission_fn = get_emission_fn(self.manifest_dist, extra)
+        emission_fn = get_emission_fn(self.manifest_dist, extra, link=self.manifest_link)
         return emission_fn(y, x, H, d, R, mask_float)
 
 
@@ -171,12 +173,14 @@ class ParticleLikelihood:
         diffusion_dist: str | list[str] = "gaussian",
         ess_threshold: float = 0.5,
         block_rb: bool = True,
+        manifest_link: str = "identity",
     ):
         self.n_latent = n_latent
         self.n_manifest = n_manifest
         self.n_particles = n_particles
         self.rng_key = rng_key if rng_key is not None else random.PRNGKey(0)
         self.manifest_dist = manifest_dist
+        self.manifest_link = manifest_link
         self.ess_threshold = ess_threshold
 
         self._block_rb = block_rb
@@ -289,6 +293,7 @@ class ParticleLikelihood:
                 extra_params=extra_params or {},
                 m0=initial_state.mean,
                 P0=initial_state.cov,
+                manifest_link=self.manifest_link,
             )
         elif self.diffusion_dist == "mixed":
             from causal_ssm_agent.models.likelihoods.block_rb import make_block_rb_callbacks
@@ -306,6 +311,7 @@ class ParticleLikelihood:
                 P0=initial_state.cov,
                 g_idx=self._g_idx,
                 s_idx=self._s_idx,
+                manifest_link=self.manifest_link,
             )
         else:
             adapter = SSMAdapter(
@@ -313,6 +319,7 @@ class ParticleLikelihood:
                 self.n_manifest,
                 self.manifest_dist,
                 self.diffusion_dist,
+                manifest_link=self.manifest_link,
             )
 
             def init_sample(key, _model_inputs):

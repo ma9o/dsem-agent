@@ -59,6 +59,17 @@ def get_per_variable_diffusion(spec: SSMSpec) -> list[str]:
     return [spec.diffusion_dist.value] * spec.n_latent
 
 
+def get_per_channel_links(spec: SSMSpec) -> list[str]:
+    """Resolve per-channel link function strings.
+
+    If spec.manifest_links is set, return it as string list.
+    Otherwise broadcast spec.manifest_link to all manifest channels.
+    """
+    if spec.manifest_links is not None:
+        return [lk.value for lk in spec.manifest_links]
+    return [spec.manifest_link.value] * spec.n_manifest
+
+
 def get_per_channel_manifest(spec: SSMSpec) -> list[str]:
     """Resolve per-channel observation noise families.
 

@@ -207,6 +207,7 @@ def _linearized_obs_params(
     y: jnp.ndarray,
     mask_float: jnp.ndarray,
     params: dict,
+    link: str = "identity",
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Compute pseudo-observation noise and residual for linearized EKF update."""
     n_manifest = eta_pred.shape[0]
@@ -220,15 +221,24 @@ def _linearized_obs_params(
         var = mu + mu**2 / (r + 1e-8)
         return jnp.diag(var + 1e-8), (y - mu) * mask_float
     elif manifest_dist == "gamma":
-        mean_pred = jnp.exp(eta_pred)
+        if link == "inverse":
+            mean_pred = 1.0 / jnp.clip(eta_pred, 1e-6, None)
+        else:
+            mean_pred = jnp.exp(eta_pred)
         shape = params.get("obs_shape", 1.0)
         return jnp.diag(mean_pred**2 / (shape + 1e-8) + 1e-8), (y - mean_pred) * mask_float
     elif manifest_dist == "bernoulli":
-        p = jax.nn.sigmoid(eta_pred)
+        if link == "probit":
+            p = jax.scipy.stats.norm.cdf(eta_pred)
+        else:
+            p = jax.nn.sigmoid(eta_pred)
         var = p * (1.0 - p)
         return jnp.diag(var + 1e-8), (y - p) * mask_float
     elif manifest_dist == "beta":
-        p = jax.nn.sigmoid(eta_pred)
+        if link == "probit":
+            p = jax.scipy.stats.norm.cdf(eta_pred)
+        else:
+            p = jax.nn.sigmoid(eta_pred)
         phi = params.get("obs_concentration", 10.0)
         # Var of Beta(mean*phi, (1-mean)*phi) = mean*(1-mean)/(phi+1)
         var = p * (1.0 - p) / (phi + 1.0)
@@ -248,6 +258,7 @@ def _linearized_update(
     obs_mask: jnp.ndarray,
     manifest_dist: str,
     params: dict,
+    link: str = "identity",
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """EKF-style linearized update for non-Gaussian observations.
 
@@ -260,7 +271,7 @@ def _linearized_update(
     mask_float = obs_mask.astype(jnp.float32)
 
     eta_pred = H @ m + d
-    R_pseudo, v = _linearized_obs_params(manifest_dist, eta_pred, y, mask_float, params)
+    R_pseudo, v = _linearized_obs_params(manifest_dist, eta_pred, y, mask_float, params, link=link)
 
     # Inflate for missing
     large_var = 1e10
@@ -330,6 +341,7 @@ def _obs_weight_quadrature(
     params: dict,
     quadrature: str = "unscented",
     n_quadrature: int = 5,
+    link: str = "identity",
 ) -> float:
     """Compute log int p(y|x) N(x|pred_mean, pred_cov) dx via sigma-point quadrature.
 
@@ -353,7 +365,7 @@ def _obs_weight_quadrature(
 
     # Evaluate observation log-likelihood at each sigma point
     R = params.get("manifest_cov", jnp.eye(y.shape[0]) * 0.1)
-    emission_fn = get_emission_fn(manifest_dist, params)
+    emission_fn = get_emission_fn(manifest_dist, params, link=link)
     log_obs_vals = jax.vmap(lambda x: emission_fn(y, x, H, d, R, mask_float))(sigma_pts)
 
     # Log-sum-exp with weights: log(sum_i w_i * exp(log_obs_i))
@@ -379,6 +391,7 @@ def make_rb_callbacks(
     P0: jnp.ndarray,
     quadrature: str = "unscented",
     n_quadrature: int = 5,
+    manifest_link: str = "identity",
 ):
     """Build Feynman-Kac callbacks for Rao-Blackwell particle filter.
 
@@ -437,7 +450,15 @@ def make_rb_callbacks(
             m_upd, P_upd, _ = _kalman_update_gaussian(m_pred, P_pred, H, R, d, y_t, mask_t)
         else:
             m_upd, P_upd = _linearized_update(
-                m_pred, P_pred, y_t, H, d, mask_t, manifest_dist, obs_params
+                m_pred,
+                P_pred,
+                y_t,
+                H,
+                d,
+                mask_t,
+                manifest_dist,
+                obs_params,
+                link=manifest_link,
             )
 
         return RBState(
@@ -470,6 +491,7 @@ def make_rb_callbacks(
                 obs_params,
                 quadrature=quadrature,
                 n_quadrature=n_quadrature,
+                link=manifest_link,
             )
 
     return init_sample, propagate_sample, log_potential
