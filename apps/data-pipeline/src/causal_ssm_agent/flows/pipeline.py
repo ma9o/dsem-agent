@@ -7,6 +7,7 @@ Two-stage specification following Anderson & Gerbing (1988):
 - Stage 1b: Measurement model (data-driven operationalization)
 """
 
+import math
 from pathlib import Path
 
 from prefect import flow
@@ -45,6 +46,29 @@ from .stages import (
 )
 
 RESULT_STORAGE = Path("results")
+
+
+def _coerce_sample_value(value: object) -> str | int | float | bool | None:
+    """Coerce stringified extraction values back to JSON-friendly scalars."""
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+
+    if isinstance(value, str):
+        stripped = value.strip()
+        lower = stripped.lower()
+        if lower == "true":
+            return True
+        if lower == "false":
+            return False
+        if stripped and (stripped.isdigit() or (stripped[0] == "-" and stripped[1:].isdigit())):
+            return int(stripped)
+        try:
+            parsed = float(stripped)
+            return parsed if math.isfinite(parsed) else stripped
+        except ValueError:
+            return stripped
+
+    return str(value)
 
 
 @flow(
@@ -192,7 +216,11 @@ async def causal_inference_pipeline(
     )
 
     # Persist web data BEFORE potential halt so frontend can display gate failure
-    stage1b_web_data = dict(stage1b_result)
+    stage1b_web_data: dict = {
+        "causal_spec": causal_spec,
+        "llm_trace": stage1b_result.get("llm_trace"),
+        "context": stage1b_result.get("context"),
+    }
     if gate_1b_failed:
         stage1b_web_data["gate_failed"] = True
     if gate_1b_overridden:
@@ -219,16 +247,19 @@ async def causal_inference_pipeline(
         question=unmapped(question),
         causal_spec=unmapped(causal_spec),
     )
+    resolved_worker_results = [
+        wr.result() if hasattr(wr, "result") else wr for wr in worker_results
+    ]
 
     # Combine raw worker results
-    raw_data = combine_worker_results(worker_results)
+    raw_data = combine_worker_results(resolved_worker_results)
     raw_data_result = raw_data.result() if hasattr(raw_data, "result") else raw_data
     n_observations = len(raw_data_result)
     n_unique_indicators = raw_data_result["indicator"].n_unique() if n_observations > 0 else 0
     print(f"  Combined {n_observations} observations across {n_unique_indicators} indicators")
 
     # Aggregate to pipeline-level aggregation window
-    aggregated = aggregate_measurements(causal_spec, worker_results)
+    aggregated = aggregate_measurements(causal_spec, resolved_worker_results)
     aggregated_result = aggregated.result() if hasattr(aggregated, "result") else aggregated
     if aggregated_result:
         data_for_model = flatten_aggregated_data(aggregated_result)
@@ -245,19 +276,48 @@ async def causal_inference_pipeline(
     per_ind_counts = (
         dict(raw_data_result.group_by("indicator").len().iter_rows()) if n_observations > 0 else {}
     )
+    worker_statuses = []
+    for i, chunk in enumerate(worker_chunks):
+        wr = resolved_worker_results[i] if i < len(resolved_worker_results) else None
+        output = getattr(wr, "output", None)
+        dataframe = getattr(wr, "dataframe", None)
+        n_extractions = (
+            len(output.extractions)
+            if output is not None and hasattr(output, "extractions")
+            else len(dataframe)
+            if dataframe is not None
+            else 0
+        )
+        worker_statuses.append(
+            {
+                "worker_id": i,
+                "status": "completed",
+                "n_extractions": n_extractions,
+                "chunk_size": chunk.count("\n") + 1 if chunk else 0,
+            }
+        )
+
+    combined_extractions_sample = []
+    for row in sample_rows:
+        combined_extractions_sample.append(
+            {
+                "indicator": str(row.get("indicator", "")),
+                "value": _coerce_sample_value(row.get("value")),
+                "timestamp": str(row.get("timestamp")) if row.get("timestamp") is not None else None,
+            }
+        )
+
     persist_web_result(
         "stage-2",
         {
-            "workers": [
-                {"worker_id": i, "status": "completed", "n_extractions": 0, "chunk_size": 0}
-                for i in range(len(worker_chunks))
-            ],
-            "combined_extractions_sample": [
-                {k: str(v) if v is not None else None for k, v in row.items()}
-                for row in sample_rows
-            ],
+            "workers": worker_statuses,
+            "combined_extractions_sample": combined_extractions_sample,
             "total_extractions": n_observations,
             "per_indicator_counts": per_ind_counts,
+            "context": (
+                "Stage 2 dispatches worker LLMs to extract indicator observations from raw "
+                "activity data. Each worker processes one chunk independently."
+            ),
         },
     )
 
@@ -265,7 +325,7 @@ async def causal_inference_pipeline(
     # Stage 3: Validate Extraction
     # ══════════════════════════════════════════════════════════════════════════
     print("\n=== Stage 3: Extraction Validation ===")
-    validation_task = validate_extraction(causal_spec, worker_results)
+    validation_task = validate_extraction(causal_spec, resolved_worker_results)
     validation_report = (
         validation_task.result() if hasattr(validation_task, "result") else validation_task
     )
@@ -312,7 +372,12 @@ async def causal_inference_pipeline(
                 gate_3_overridden = True
 
     # Persist web data BEFORE potential halt so frontend can display gate failure
-    stage3_web_data: dict = {"validation_report": validation_report or {}}
+    validation_report_web = validation_report or {
+        "is_valid": False,
+        "issues": [],
+        "per_indicator_health": [],
+    }
+    stage3_web_data: dict = {"validation_report": validation_report_web}
     if gate_3_failed:
         stage3_web_data["gate_failed"] = True
     if gate_3_overridden:
@@ -518,7 +583,7 @@ async def causal_inference_pipeline(
     # Print PPC results
     print("\n--- Posterior Predictive Checks ---")
     if ppc_result.get("checked", False):
-        ppc_warnings = ppc_result.get("warnings", [])
+        ppc_warnings = ppc_result.get("per_variable_warnings", [])
         if ppc_warnings:
             print(f"  {len(ppc_warnings)} warning(s):")
             for w in ppc_warnings:
