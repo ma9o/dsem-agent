@@ -77,6 +77,9 @@ export type {
 // LLM trace types
 export type { LLMTrace, TraceMessage, TraceUsage } from "./generated/models";
 
+// Live trace (partial stage result written mid-run)
+export type { PartialStageResult, LiveMetadata } from "./generated/models";
+
 // Inference diagnostic types
 export type { TreatmentEffectContract as TreatmentEffect } from "./generated/models";
 export type { PowerScalingResultContract as PowerScalingResult } from "./generated/models";

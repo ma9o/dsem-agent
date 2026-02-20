@@ -65,6 +65,7 @@ export interface CausalSSMContracts {
   "stage-4": Stage4Contract;
   "stage-4b": Stage4BContract;
   "stage-5": Stage5Contract;
+  _partial: PartialStageResult;
 }
 export interface Stage0Contract {
   source_type: string;
@@ -755,4 +756,25 @@ export interface PosteriorPair {
   x_values: number[];
   y_values: number[];
   divergent?: boolean[] | null;
+}
+/**
+ * Partial stage result written to disk during LLM generation.
+ *
+ * A subset of the full stage contract: only the ``llm_trace`` field (the part
+ * available mid-run) plus ``_live`` metadata so the frontend can distinguish
+ * in-progress from completed results.  Overwritten by ``persist_web_result``
+ * when the stage completes.
+ */
+export interface PartialStageResult {
+  llm_trace: LLMTrace;
+  _live: LiveMetadata;
+}
+/**
+ * Metadata attached to partial stage results while an LLM stage is running.
+ */
+export interface LiveMetadata {
+  status: "running";
+  label: string;
+  turn: number;
+  elapsed_seconds: number;
 }

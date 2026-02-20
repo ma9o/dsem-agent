@@ -27,6 +27,9 @@
     },
     "stage-5": {
       "$ref": "#/$defs/Stage5Contract"
+    },
+    "_partial": {
+      "$ref": "#/$defs/PartialStageResult"
     }
   },
   "$defs": {
@@ -724,6 +727,37 @@
       "title": "LinkFunction",
       "type": "string"
     },
+    "LiveMetadata": {
+      "additionalProperties": false,
+      "description": "Metadata attached to partial stage results while an LLM stage is running.",
+      "properties": {
+        "status": {
+          "const": "running",
+          "title": "Status",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "turn": {
+          "title": "Turn",
+          "type": "integer"
+        },
+        "elapsed_seconds": {
+          "title": "Elapsed Seconds",
+          "type": "number"
+        }
+      },
+      "required": [
+        "elapsed_seconds",
+        "label",
+        "status",
+        "turn"
+      ],
+      "title": "LiveMetadata",
+      "type": "object"
+    },
     "MCMCDiagnostics": {
       "description": "Top-level MCMC diagnostics container.",
       "properties": {
@@ -1416,6 +1450,24 @@
         "structural_issues",
         "weak_params"
       ]
+    },
+    "PartialStageResult": {
+      "additionalProperties": false,
+      "description": "Partial stage result written to disk during LLM generation.\n\nA subset of the full stage contract: only the ``llm_trace`` field (the part\navailable mid-run) plus ``_live`` metadata so the frontend can distinguish\nin-progress from completed results.  Overwritten by ``persist_web_result``\nwhen the stage completes.",
+      "properties": {
+        "llm_trace": {
+          "$ref": "#/$defs/LLMTrace"
+        },
+        "_live": {
+          "$ref": "#/$defs/LiveMetadata"
+        }
+      },
+      "required": [
+        "_live",
+        "llm_trace"
+      ],
+      "title": "PartialStageResult",
+      "type": "object"
     },
     "PosteriorMarginal": {
       "description": "Marginal posterior density for a single scalar parameter.",
@@ -2804,6 +2856,7 @@
     }
   },
   "required": [
+    "_partial",
     "stage-0",
     "stage-1a",
     "stage-1b",

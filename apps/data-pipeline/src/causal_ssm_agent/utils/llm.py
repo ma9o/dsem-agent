@@ -4,7 +4,6 @@ import json
 import logging
 import time
 from collections.abc import Awaitable, Callable
-import dataclasses
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -178,34 +177,29 @@ def _persist_partial_trace(
 ) -> None:
     """Write accumulated messages to disk as a partial stage result.
 
-    Uses the same schema the frontend expects (``llm_trace`` matching the
-    ``LLMTrace`` TypeScript interface) so the frontend can render intermediate
-    conversation state. Adds ``_live.status`` and ``_live.turn`` metadata.
+    Builds a ``PartialStageResult`` (a subset of the full stage contract with
+    only ``llm_trace`` + ``_live`` metadata) and serialises it to disk so the
+    frontend can render intermediate conversation state.
 
     Overwrites the file each turn. Failures are logged but never bubble up.
     """
+    from causal_ssm_agent.flows.stages.contracts import LiveMetadata, PartialStageResult
+
     try:
         trace_path.parent.mkdir(parents=True, exist_ok=True)
-        trace_messages = [dataclasses.asdict(_chat_message_to_trace(m)) for m in messages]
-        partial = {
-            "llm_trace": {
-                "messages": trace_messages,
-                "model": "",
-                "total_time_seconds": round(elapsed, 1),
-                "usage": {
-                    "input_tokens": 0,
-                    "output_tokens": 0,
-                    "total_tokens": 0,
-                },
-            },
-            "_live": {
-                "status": "running",
-                "label": label,
-                "turn": turn,
-                "elapsed_seconds": round(elapsed, 1),
-            },
-        }
-        trace_path.write_text(json.dumps(partial, indent=2, default=str))
+        partial = PartialStageResult(
+            llm_trace=LLMTrace(
+                messages=[_chat_message_to_trace(m) for m in messages],
+                total_time_seconds=round(elapsed, 1),
+            ),
+            live=LiveMetadata(
+                status="running",
+                label=label,
+                turn=turn,
+                elapsed_seconds=round(elapsed, 1),
+            ),
+        )
+        trace_path.write_text(partial.model_dump_json(indent=2, by_alias=True))
     except Exception:
         logger.debug("Failed to write partial trace to %s", trace_path, exc_info=True)
 
