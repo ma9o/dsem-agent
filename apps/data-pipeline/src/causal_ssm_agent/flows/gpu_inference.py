@@ -167,7 +167,7 @@ def _stage5_on_gpu(
             manifest_dist=manifest_dist_val,
             manifest_dists=manifest_dists_list,
         )
-        ppc_result = ppc.to_dict()
+        ppc_result = ppc.model_dump(mode="json")
     except Exception:
         logger.exception("PPC check failed")
         ppc_result = {"checked": False, "error": "see logs for traceback"}

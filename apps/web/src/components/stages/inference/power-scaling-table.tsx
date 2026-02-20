@@ -77,7 +77,7 @@ export function PowerScalingTable({ results }: { results: PowerScalingResult[] }
   const hasPsis = results.some((p) => p.psis_k_hat != null);
 
   const columns = useMemo<ColumnDef<PowerScalingResult, unknown>[]>(
-    () => (hasPsis ? [...baseColumns, psisColumn] : baseColumns),
+    () => (hasPsis ? [...baseColumns, psisColumn] : baseColumns) as ColumnDef<PowerScalingResult, unknown>[],
     [hasPsis],
   );
 

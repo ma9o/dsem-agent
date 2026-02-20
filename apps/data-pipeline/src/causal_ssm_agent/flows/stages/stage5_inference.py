@@ -175,7 +175,7 @@ def run_ppc(fitted_result: dict, raw_data: pl.DataFrame) -> dict:
         raw_data: Raw timestamped data (indicator, value, timestamp)
 
     Returns:
-        Dict with PPC diagnostics (PPCResult.to_dict())
+        Dict with PPC diagnostics (PPCResult.model_dump())
     """
     import jax.numpy as jnp
 
@@ -216,7 +216,7 @@ def run_ppc(fitted_result: dict, raw_data: pl.DataFrame) -> dict:
             manifest_dists=manifest_dists_list,
         )
 
-        return ppc_result.to_dict()
+        return ppc_result.model_dump(mode="json")
 
     except Exception as e:
         logger.exception("PPC check failed")

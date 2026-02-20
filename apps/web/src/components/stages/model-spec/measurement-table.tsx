@@ -135,11 +135,17 @@ function MeasurementSparkline({ row }: { row: MeasurementRow }) {
           />
           <YAxis hide />
           <RechartsTooltip
-            formatter={(v: number, name: string) => [
-              formatNumber(v, 1),
-              name === "prior" ? "prior pred." : "count",
-            ]}
-            labelFormatter={(l: number) => `x = ${formatNumber(l, 2)}`}
+            formatter={(v: number | string | undefined, name: string | undefined) => {
+              const numeric = typeof v === "number" ? v : Number(v);
+              return [
+                Number.isFinite(numeric) ? formatNumber(numeric, 1) : "--",
+                name === "prior" ? "prior pred." : "count",
+              ] as const;
+            }}
+            labelFormatter={(l: unknown) => {
+              const numeric = typeof l === "number" ? l : Number(l);
+              return Number.isFinite(numeric) ? `x = ${formatNumber(numeric, 2)}` : "x = --";
+            }}
             contentStyle={{ fontSize: 10, padding: "2px 6px" }}
           />
           <Bar

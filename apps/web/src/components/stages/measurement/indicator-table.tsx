@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { InfoTable } from "@/components/ui/info-table";
-import { createColumnHelper } from "@tanstack/react-table";
+import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import type { Indicator } from "@causal-ssm/api-types";
 
 const col = createColumnHelper<Indicator>();
@@ -29,7 +29,7 @@ const columns = [
 export function IndicatorTable({ indicators }: { indicators: Indicator[] }) {
   return (
     <InfoTable
-      columns={columns}
+      columns={columns as ColumnDef<Indicator, unknown>[]}
       data={indicators}
       groupBy={(row) => row.construct_name}
       renderGroupHeader={(construct, rows) => (

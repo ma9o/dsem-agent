@@ -25,12 +25,12 @@ export default function Stage1bContent({ data }: { data: Stage1bData }) {
               <div key={name} className="flex flex-wrap items-center gap-1.5 text-sm">
                 <span className="font-medium">{name}</span>
                 <span className="text-destructive/70">&larr;</span>
-                {status.confounders.map((c) => (
+                {status?.confounders.map((c) => (
                   <Badge key={c} variant="destructive" className="text-xs">
                     {c}
                   </Badge>
                 ))}
-                {status.notes && (
+                {status?.notes && (
                   <span className="text-muted-foreground text-xs">({status.notes})</span>
                 )}
               </div>

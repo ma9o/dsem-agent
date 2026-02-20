@@ -44,7 +44,7 @@ export function MCMCDiagnosticsPanel({ diagnostics }: MCMCDiagnosticsPanelProps)
   const hasMcse = diagnostics.per_parameter.some((p) => p.mcse_mean != null);
 
   const columns = useMemo<ColumnDef<MCMCParamDiagnostic, unknown>[]>(() => {
-    const cols: ColumnDef<MCMCParamDiagnostic, unknown>[] = [
+    const cols = [
       col.accessor("parameter", {
         header: "Parameter",
         cell: (info) => (
@@ -68,10 +68,10 @@ export function MCMCDiagnosticsPanel({ diagnostics }: MCMCDiagnosticsPanelProps)
             tooltip="Effective sample size for bulk of the distribution. Higher is better. Worry if < 100 per chain."
           />
         ),
-        cell: (info) => essCell(info.getValue(), diagnostics.num_samples),
+        cell: (info) => essCell(info.getValue(), diagnostics.num_samples ?? null),
         meta: { align: "right" },
       }),
-    ];
+    ] as ColumnDef<MCMCParamDiagnostic, unknown>[];
 
     if (hasEssTail) {
       cols.push(
@@ -82,9 +82,9 @@ export function MCMCDiagnosticsPanel({ diagnostics }: MCMCDiagnosticsPanelProps)
               tooltip="Effective sample size for the tails (5th/95th percentiles). Important for credible interval reliability."
             />
           ),
-          cell: (info) => essCell(info.getValue(), diagnostics.num_samples),
+          cell: (info) => essCell(info.getValue() ?? undefined, diagnostics.num_samples ?? null),
           meta: { align: "right" },
-        }),
+        }) as ColumnDef<MCMCParamDiagnostic, unknown>,
       );
     }
 
@@ -97,9 +97,9 @@ export function MCMCDiagnosticsPanel({ diagnostics }: MCMCDiagnosticsPanelProps)
               tooltip="Monte Carlo standard error of the mean. Should be small relative to the posterior standard deviation."
             />
           ),
-          cell: (info) => mcseCell(info.getValue()),
+          cell: (info) => mcseCell(info.getValue() ?? undefined),
           meta: { align: "right" },
-        }),
+        }) as ColumnDef<MCMCParamDiagnostic, unknown>,
       );
     }
 

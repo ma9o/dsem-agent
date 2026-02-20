@@ -6,13 +6,15 @@ can fetch them via /api/results/[runId]/[stage].
 
 from prefect import task
 
+from .contracts import validate_stage_payload
+
 
 @task(
     result_serializer="json",
     result_storage_key="{flow_run.id}/{parameters[stage_id]}.json",
     task_run_name="persist-{stage_id}",
 )
-def persist_web_result(stage_id: str, data: dict) -> dict:  # noqa: ARG001
+def persist_web_result(stage_id: str, data: dict) -> dict:
     """Persist stage result for web frontend consumption.
 
     Uses Prefect's result persistence to write the data as JSON
@@ -23,6 +25,6 @@ def persist_web_result(stage_id: str, data: dict) -> dict:  # noqa: ARG001
         data: Web-shaped dict matching the frontend's StageXData contract.
 
     Returns:
-        The same *data* dict (Prefect serialises the return value).
+        Validated stage payload dict (Prefect serialises the return value).
     """
-    return data
+    return validate_stage_payload(stage_id, data)

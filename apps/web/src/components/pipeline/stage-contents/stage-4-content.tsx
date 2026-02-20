@@ -64,7 +64,7 @@ export default function Stage4Content({
           <MeasurementTable
             likelihoods={data.model_spec.likelihoods}
             extractions={extractions}
-            priorPredictiveSamples={data.prior_predictive_samples}
+            priorPredictiveSamples={(data.prior_predictive_samples ?? undefined) as Record<string, number[]> | undefined}
           />
         </div>
       )}

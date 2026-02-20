@@ -7,7 +7,7 @@
         "role": "endogenous",
         "is_outcome": true,
         "temporal_status": "time_varying",
-        "causal_granularity": "daily"
+        "temporal_scale": "daily"
       },
       {
         "name": "stress",
@@ -15,7 +15,7 @@
         "role": "endogenous",
         "is_outcome": false,
         "temporal_status": "time_varying",
-        "causal_granularity": "daily"
+        "temporal_scale": "daily"
       },
       {
         "name": "sleep_quality",
@@ -23,7 +23,7 @@
         "role": "endogenous",
         "is_outcome": false,
         "temporal_status": "time_varying",
-        "causal_granularity": "daily"
+        "temporal_scale": "daily"
       },
       {
         "name": "digital_distraction",
@@ -31,7 +31,7 @@
         "role": "endogenous",
         "is_outcome": false,
         "temporal_status": "time_varying",
-        "causal_granularity": "daily"
+        "temporal_scale": "daily"
       },
       {
         "name": "self_efficacy",
@@ -39,7 +39,7 @@
         "role": "endogenous",
         "is_outcome": false,
         "temporal_status": "time_varying",
-        "causal_granularity": "weekly"
+        "temporal_scale": "weekly"
       },
       {
         "name": "workload",
@@ -47,7 +47,7 @@
         "role": "exogenous",
         "is_outcome": false,
         "temporal_status": "time_varying",
-        "causal_granularity": "daily"
+        "temporal_scale": "daily"
       }
     ],
     "edges": [

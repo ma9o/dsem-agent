@@ -36,10 +36,12 @@ export function CompletionSummary({ runId }: { runId: string }) {
   if (!data) return null;
 
   const results = data.intervention_results;
-  const sorted = [...results].sort((a, b) => Math.abs(b.beta_hat) - Math.abs(a.beta_hat));
+  const sorted = [...results]
+    .filter((r) => r.effect_size !== null && r.credible_interval !== null)
+    .sort((a, b) => Math.abs((b.effect_size as number)) - Math.abs((a.effect_size as number)));
   const top = sorted[0];
   const identifiableCount = results.filter((r) => r.identifiable).length;
-  const sensitiveCount = results.filter((r) => r.sensitivity_flag).length;
+  const sensitiveCount = results.filter((r) => !!r.prior_sensitivity_warning).length;
 
   return (
     <motion.div
@@ -68,10 +70,11 @@ export function CompletionSummary({ runId }: { runId: string }) {
               <span className="font-medium">Strongest effect:</span>{" "}
               <span className="font-mono">{top.treatment}</span> with{" "}
               <span className="font-mono">
-                {"\u03B2\u0302"} = {formatNumber(top.beta_hat)}
+                {"\u03B2\u0302"} = {formatNumber(top.effect_size as number)}
               </span>{" "}
               <span className="text-muted-foreground">
-                [{formatNumber(top.ci_lower)}, {formatNumber(top.ci_upper)}]
+                [{formatNumber((top.credible_interval as [number, number])[0])},{" "}
+                {formatNumber((top.credible_interval as [number, number])[1])}]
               </span>
             </p>
           </div>

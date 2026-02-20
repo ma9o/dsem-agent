@@ -6,12 +6,17 @@ import { getStageResult } from "../api/endpoints";
 import { isMockMode } from "../api/mock-provider";
 
 async function fetchStageData<T>(runId: string, stage: StageId): Promise<T> {
+  let payload: unknown;
+
   if (isMockMode()) {
     const res = await fetch(`/api/results/${runId}/${stage}`);
     if (!res.ok) throw new Error(`Mock data not found for ${stage}`);
-    return res.json();
+    payload = await res.json();
+  } else {
+    payload = await getStageResult<unknown>(runId, stage);
   }
-  return getStageResult<T>(runId, stage);
+
+  return payload as T;
 }
 
 export function useStageData<T>(runId: string | null, stage: StageId, enabled: boolean) {

@@ -24,8 +24,8 @@ export function ConstructDetailPanel({ construct }: ConstructDetailPanelProps) {
             {construct.role}
           </Badge>
           <Badge variant="outline">{construct.temporal_status.replace("_", " ")}</Badge>
-          {construct.causal_granularity && (
-            <Badge variant="outline">{construct.causal_granularity}</Badge>
+          {construct.temporal_scale && (
+            <Badge variant="outline">{construct.temporal_scale}</Badge>
           )}
           {construct.is_outcome && <Badge variant="warning">outcome</Badge>}
         </div>

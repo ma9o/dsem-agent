@@ -157,3 +157,39 @@ def test_manifest_effects_through_lambda():
     assert "obs_a1" in me
     assert "obs_a2" in me
     assert abs(me["obs_a2"] / me["obs_a1"] - 0.8) < 0.05
+
+
+def test_compute_interventions_attaches_ppc_warnings():
+    """PPC warnings from stage output are propagated onto treatment entries."""
+    n_draws = 8
+    drift = jnp.array([[-1.0, 0.5], [0.0, -1.0]])
+    cint = jnp.array([1.0, 1.0])
+    samples = {
+        "drift": jnp.tile(drift, (n_draws, 1, 1)),
+        "cint": jnp.tile(cint, (n_draws, 1)),
+    }
+    ppc_result = {
+        "checked": True,
+        "per_variable_warnings": [
+            {
+                "variable": "obs_a",
+                "check_type": "calibration",
+                "message": "Synthetic warning",
+                "value": 0.0,
+                "passed": False,
+            }
+        ],
+    }
+
+    results = compute_interventions(
+        samples=samples,
+        treatments=["B"],
+        outcome="A",
+        latent_names=["A", "B"],
+        ppc_result=ppc_result,
+    )
+
+    assert len(results) == 1
+    assert "ppc_warnings" in results[0]
+    assert len(results[0]["ppc_warnings"]) == 1
+    assert results[0]["ppc_warnings"][0]["variable"] == "obs_a"

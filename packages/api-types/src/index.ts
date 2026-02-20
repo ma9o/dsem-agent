@@ -1,42 +1,59 @@
-// Run & stage metadata
+// ---------------------------------------------------------------------------
+// Hand-written (frontend-only) — not generated from Python
+// ---------------------------------------------------------------------------
+
 export type { PipelineRun, RunStatus, StageState, StageStatus } from "./run";
 export type { StageId, StageMeta } from "./stages";
 export { STAGES, STAGE_IDS } from "./stages";
 
-// Domain models
+// ---------------------------------------------------------------------------
+// Generated from Python contracts
+// Re-exported with aliases where the generated name differs from frontend usage
+// ---------------------------------------------------------------------------
+
+// Stage contracts as Stage*Data aliases (frontend convention)
+export type { Stage0Contract as Stage0Data } from "./generated/models";
+export type { Stage1AContract as Stage1aData } from "./generated/models";
+export type { Stage1BContract as Stage1bData } from "./generated/models";
+export type { Stage2Contract as Stage2Data } from "./generated/models";
+export type { Stage3Contract as Stage3Data } from "./generated/models";
+export type { Stage4Contract as Stage4Data } from "./generated/models";
+export type { Stage4BContract as Stage4bData } from "./generated/models";
+export type { Stage5Contract as Stage5Data } from "./generated/models";
+
+// Latent model types
 export type {
   Construct,
   CausalEdge,
   LatentModel,
   Role,
   TemporalStatus,
-  CausalGranularity,
-} from "./models/construct";
+} from "./generated/models";
 
+// Measurement model types
 export type {
   Indicator,
   MeasurementModel,
-  MeasurementDtype,
-  AggregationFunction,
-} from "./models/indicator";
+} from "./generated/models";
 
+// Causal spec types
 export type {
   CausalSpec,
   IdentifiabilityStatus,
   IdentifiedTreatmentStatus,
   NonIdentifiableTreatmentStatus,
-} from "./models/causal-spec";
+} from "./generated/models";
 
-export type { Extraction, WorkerOutput, WorkerStatus } from "./models/worker";
+// Worker / extraction types
+export type { ExtractionContract as Extraction } from "./generated/models";
+export type { WorkerStatusContract as WorkerStatus } from "./generated/models";
 
-export type {
-  ValidationReport,
-  ValidationIssue,
-  ValidationSeverity,
-  IndicatorHealth,
-  CellStatus,
-} from "./models/validation";
+// Validation types
+export type { ValidationReportContract as ValidationReport } from "./generated/models";
+export type { ValidationIssueContract as ValidationIssue } from "./generated/models";
+export type { IndicatorHealthContract as IndicatorHealth } from "./generated/models";
 
+// Model spec types
 export type {
   ModelSpec,
   LikelihoodSpec,
@@ -45,128 +62,61 @@ export type {
   LinkFunction,
   ParameterRole,
   ParameterConstraint,
-} from "./models/model-spec";
+} from "./generated/models";
 
-export type {
-  PriorProposal,
-  PriorSource,
-  PriorValidationResult,
-  RawPriorSample,
-  AggregatedPrior,
-  PriorResearchResult,
-} from "./models/prior";
+// Prior types
+export type { PriorProposal, PriorSource } from "./generated/models";
 
+// Parametric ID types
 export type {
   ParametricIdResult,
   TRuleResult,
-  ParameterClassification,
   ParameterIdentification,
-} from "./models/parametric-id";
+} from "./generated/models";
 
-export type { TraceMessage, TraceUsage, LLMTrace } from "./models/llm-trace";
+// LLM trace types
+export type { LLMTrace, TraceMessage, TraceUsage } from "./generated/models";
 
+// Inference diagnostic types
+export type { TreatmentEffectContract as TreatmentEffect } from "./generated/models";
+export type { PowerScalingResultContract as PowerScalingResult } from "./generated/models";
+export type { PPCWarning, PPCOverlay, PPCTestStat } from "./generated/models";
+export type { PPCResultContract as PPCResult } from "./generated/models";
+export type { InferenceMetadataContract as InferenceMetadata } from "./generated/models";
 export type {
-  TreatmentEffect,
-  PowerScalingResult,
-  PowerScalingDiagnosis,
-  PPCWarning,
-  PPCOverlay,
-  PPCTestStat,
-  PPCResult,
-  InferenceMetadata,
   MCMCParamDiagnostic,
   MCMCDiagnostics,
   SVIDiagnostics,
-  TraceData,
-  TraceChain,
-  RankHistogram,
-  RankHistogramChain,
-  EnergyHistogram,
-  EnergyDiagnostics,
   LOODiagnostics,
-  PosteriorMarginal,
-  PosteriorPair,
-} from "./models/inference";
+} from "./generated/models";
+export type { TraceData, TraceChain } from "./generated/models";
+export type { RankHistogram, RankHistogramChain } from "./generated/models";
+export type { EnergyHistogram, EnergyDiagnostics } from "./generated/models";
+export type { PosteriorMarginal, PosteriorPair } from "./generated/models";
 
-// Gate override metadata (attached to stages whose hard gate was overridden)
+// ---------------------------------------------------------------------------
+// Hand-written types — not in Python contracts but used by frontend
+// ---------------------------------------------------------------------------
+
 export interface GateOverride {
   reason: string;
 }
 
-// Stage data envelope types
 export interface StageData<T = unknown> {
   stage: string;
   data: T;
   context: string;
 }
 
-export interface Stage0Data {
-  source_type: string;
-  source_label: string;
-  n_records: number;
-  date_range: { start: string; end: string };
-  sample: Array<Record<string, string | null>>;
-}
-
-export interface Stage1aData {
-  latent_model: import("./models/construct").LatentModel;
-  outcome_name: string;
-  treatments: string[];
-  graph_properties: {
-    is_acyclic: boolean;
-    n_constructs: number;
-    n_edges: number;
-    has_single_outcome: boolean;
-  };
-  llm_trace?: import("./models/llm-trace").LLMTrace;
-}
-
-export interface Stage1bData {
-  causal_spec: import("./models/causal-spec").CausalSpec;
-  llm_trace?: import("./models/llm-trace").LLMTrace;
-  gate_failed?: boolean;
-  gate_overridden?: GateOverride;
-}
-
-export interface Stage2Data {
-  workers: import("./models/worker").WorkerStatus[];
-  combined_extractions_sample: Array<Record<string, string | null>>;
-  total_extractions: number;
-  per_indicator_counts: Record<string, number>;
-}
-
-export interface Stage3Data {
-  validation_report: import("./models/validation").ValidationReport;
-  gate_failed?: boolean;
-  gate_overridden?: GateOverride;
-}
-
-export interface Stage4Data {
-  model_spec: import("./models/model-spec").ModelSpec;
-  priors: import("./models/prior").PriorProposal[];
-  validation_retries?: Array<{
-    attempt: number;
-    failed_params: string[];
-    feedback: string;
-  }>;
-  llm_trace?: import("./models/llm-trace").LLMTrace;
-  prior_predictive_samples?: Record<string, number[]>;
-}
-
-export interface Stage4bData {
-  parametric_id: import("./models/parametric-id").ParametricIdResult;
-  gate_failed?: boolean;
-  gate_overridden?: GateOverride;
-}
-
-export interface Stage5Data {
-  intervention_results: import("./models/inference").TreatmentEffect[];
-  power_scaling: import("./models/inference").PowerScalingResult[];
-  ppc: import("./models/inference").PPCResult;
-  inference_metadata: import("./models/inference").InferenceMetadata;
-  mcmc_diagnostics?: import("./models/inference").MCMCDiagnostics | null;
-  svi_diagnostics?: import("./models/inference").SVIDiagnostics | null;
-  loo_diagnostics?: import("./models/inference").LOODiagnostics | null;
-  posterior_marginals?: import("./models/inference").PosteriorMarginal[] | null;
-  posterior_pairs?: import("./models/inference").PosteriorPair[] | null;
-}
+// Named type aliases inlined in generated types but needed as standalone exports
+export type ParameterClassification = "identified" | "practically_unidentifiable" | "structurally_unidentifiable";
+export type ValidationSeverity = "error" | "warning" | "info";
+export type CellStatus = "ok" | "warning" | "error";
+export type PowerScalingDiagnosis = "prior_dominated" | "well_identified" | "prior_data_conflict";
+export type CausalGranularity = "hourly" | "daily" | "weekly" | "monthly" | "yearly";
+export type MeasurementDtype = "continuous" | "binary" | "count" | "ordinal" | "categorical";
+export type AggregationFunction =
+  | "mean" | "sum" | "min" | "max" | "std" | "var" | "last" | "first"
+  | "count" | "median" | "p10" | "p25" | "p75" | "p90" | "p99"
+  | "skew" | "kurtosis" | "iqr" | "range" | "cv" | "entropy"
+  | "instability" | "trend" | "n_unique";

@@ -8,10 +8,13 @@
   "scripts": {
     "type-check": "tsc --noEmit",
     "lint": "biome check .",
-    "format": "biome format --write ."
+    "format": "biome format --write .",
+    "codegen": "cd ../../apps/data-pipeline && uv run python scripts/export_schemas.py && cd ../../packages/api-types && bun run scripts/generate.ts",
+    "codegen:check": "bun run codegen && git diff --exit-code src/generated/"
   },
   "devDependencies": {
     "@causal-ssm/typescript-config": "workspace:*",
+    "json-schema-to-typescript": "^15.0.4",
     "typescript": "^5"
   }
 }
