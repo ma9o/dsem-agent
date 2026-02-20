@@ -24,6 +24,7 @@ import numpy as np
 
 if TYPE_CHECKING:
     from causal_ssm_agent.models.ssm.model import SSMSpec
+    from causal_ssm_agent.orchestrator.schemas_model import DistributionFamily, LinkFunction
 
 
 @dataclass
@@ -48,37 +49,37 @@ class RBPartition:
         return len(self.particle_idx) > 0
 
 
-def get_per_variable_diffusion(spec: SSMSpec) -> list[str]:
+def get_per_variable_diffusion(spec: SSMSpec) -> list[DistributionFamily]:
     """Resolve per-variable diffusion noise families.
 
-    If spec.diffusion_dists is set, return it as string list.
+    If spec.diffusion_dists is set, return it directly.
     Otherwise broadcast spec.diffusion_dist to all latent variables.
     """
     if spec.diffusion_dists is not None:
-        return [d.value for d in spec.diffusion_dists]
-    return [spec.diffusion_dist.value] * spec.n_latent
+        return list(spec.diffusion_dists)
+    return [spec.diffusion_dist] * spec.n_latent
 
 
-def get_per_channel_links(spec: SSMSpec) -> list[str]:
-    """Resolve per-channel link function strings.
+def get_per_channel_links(spec: SSMSpec) -> list[LinkFunction]:
+    """Resolve per-channel link functions.
 
-    If spec.manifest_links is set, return it as string list.
+    If spec.manifest_links is set, return it directly.
     Otherwise broadcast spec.manifest_link to all manifest channels.
     """
     if spec.manifest_links is not None:
-        return [lk.value for lk in spec.manifest_links]
-    return [spec.manifest_link.value] * spec.n_manifest
+        return list(spec.manifest_links)
+    return [spec.manifest_link] * spec.n_manifest
 
 
-def get_per_channel_manifest(spec: SSMSpec) -> list[str]:
+def get_per_channel_manifest(spec: SSMSpec) -> list[DistributionFamily]:
     """Resolve per-channel observation noise families.
 
-    If spec.manifest_dists is set, return it as string list.
+    If spec.manifest_dists is set, return it directly.
     Otherwise broadcast spec.manifest_dist to all manifest channels.
     """
     if spec.manifest_dists is not None:
-        return [d.value for d in spec.manifest_dists]
-    return [spec.manifest_dist.value] * spec.n_manifest
+        return list(spec.manifest_dists)
+    return [spec.manifest_dist] * spec.n_manifest
 
 
 def compute_drift_sparsity(spec: SSMSpec) -> np.ndarray:

@@ -516,17 +516,17 @@ class SSMModel:
 
                 # Determine manifest_dist for PF channels from per-channel info
                 pf_obs_dists = [per_obs[int(k)] for k in partition.obs_particle_idx]
-                pf_manifest_dist = spec.manifest_dist.value
+                pf_manifest_dist = spec.manifest_dist
                 for d in pf_obs_dists:
-                    if d != "gaussian":
+                    if d != DistributionFamily.GAUSSIAN:
                         pf_manifest_dist = d
                         break
 
                 # Determine manifest_link for PF channels
                 pf_obs_links = [per_links[int(k)] for k in partition.obs_particle_idx]
-                pf_manifest_link = spec.manifest_link.value
+                pf_manifest_link = spec.manifest_link
                 for lk in pf_obs_links:
-                    if lk != "identity":
+                    if lk != LinkFunction.IDENTITY:
                         pf_manifest_link = lk
                         break
 
@@ -557,10 +557,10 @@ class SSMModel:
             n_manifest=spec.n_manifest,
             n_particles=self.n_particles,
             rng_key=self.pf_key,
-            manifest_dist=spec.manifest_dist.value,
+            manifest_dist=spec.manifest_dist,
             diffusion_dist=per_var,
             block_rb=spec.second_pass_rb,
-            manifest_link=spec.manifest_link.value,
+            manifest_link=spec.manifest_link,
         )
 
     def model(
