@@ -7,11 +7,13 @@ export async function GET(
   { params }: { params: Promise<{ runId: string; stage: string }> },
 ) {
   const { runId, stage } = await params;
+  const isMock = process.env.NEXT_PUBLIC_MOCK_DATA === "true";
 
-  // Try real pipeline results first, fall back to fixtures (for mock/dev mode)
   const paths = [
     join(process.cwd(), "..", "data-pipeline", "results", runId, `${stage}.json`),
-    join(process.cwd(), "test", "fixtures", `${stage}.json`),
+    ...(isMock
+      ? [join(process.cwd(), "test", "fixtures", `${stage}.json`)]
+      : []),
   ];
 
   for (const filePath of paths) {
