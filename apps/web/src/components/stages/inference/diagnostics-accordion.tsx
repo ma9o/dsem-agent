@@ -23,8 +23,6 @@ import { EnergyChart } from "@/components/charts/energy-chart";
 import { LOOPITChart } from "@/components/charts/loo-pit-chart";
 import { MCMCDiagnosticsPanel } from "@/components/charts/mcmc-diagnostics-panel";
 import { ParetoKChart } from "@/components/charts/pareto-k-chart";
-import { PPCRibbonChart } from "@/components/charts/ppc-ribbon-chart";
-import { PPCTestStatChart } from "@/components/charts/ppc-test-stat-chart";
 import { PosteriorDensityChart } from "@/components/charts/posterior-density-chart";
 import { PosteriorPairsChart } from "@/components/charts/posterior-pairs-chart";
 import { PowerScalingScatter } from "@/components/charts/power-scaling-scatter";
@@ -57,14 +55,6 @@ export function DiagnosticsAccordion({
   const hasEnergy = mcmcDiagnostics?.energy != null;
   const hasMarginals = posteriorMarginals && posteriorMarginals.length > 0;
   const hasPairs = posteriorPairs && posteriorPairs.length > 0;
-
-  const overlayVars = ppc.overlays ?? [];
-  const testStatsByVar = new Map<string, typeof ppc.test_stats>();
-  for (const ts of ppc.test_stats ?? []) {
-    const existing = testStatsByVar.get(ts.variable) ?? [];
-    existing.push(ts);
-    testStatsByVar.set(ts.variable, existing);
-  }
 
   // Build paired trace + rank histogram data per parameter
   const mcmcParamPairs = (() => {
@@ -147,7 +137,7 @@ export function DiagnosticsAccordion({
           <AccordionTrigger className="text-sm">
             <span className="inline-flex items-center gap-1.5 flex-wrap">
               LOO Cross-Validation
-              <StatTooltip explanation="Leave-one-out cross-validation via Pareto-smoothed importance sampling. Assesses predictive accuracy and identifies influential observations." />
+              <StatTooltip explanation="LOO-CV via PSIS using one-step-ahead predictive log-likelihoods from the filter (innovation decomposition). Each 'observation' is one complete timestep, not individual cells. Valid for SSMs because the innovation sequence is conditionally independent given parameters." />
               <Badge
                 variant={
                   looDiagnostics.n_bad_k != null && looDiagnostics.n_bad_k === 0
@@ -253,51 +243,18 @@ export function DiagnosticsAccordion({
         <AccordionTrigger className="text-sm">
           <span className="inline-flex items-center gap-1.5 flex-wrap">
             Posterior Predictive Checks
-            <StatTooltip explanation="Simulates data from the fitted model and compares to observed data. Includes per-variable warnings, overlay plots, and test statistics." />
+            <StatTooltip explanation="Checks whether the fitted model can reproduce aspects of the observed data (distributional shape, variance, autocorrelation). Passing does not validate causal structure — only that the statistical model is not grossly misspecified." />
             <Badge variant={ppc.per_variable_warnings.every((w) => w.passed) ? "success" : "destructive"}>
-              {ppc.per_variable_warnings.every((w) => w.passed) ? "Passed" : "Failed"}
+              {ppc.per_variable_warnings.every((w) => w.passed) ? "Consistent" : "Misfit detected"}
             </Badge>
           </span>
         </AccordionTrigger>
         <AccordionContent>
           <div className="space-y-6">
-            <PPCWarningsTable warnings={ppc.per_variable_warnings} />
-
-            {overlayVars.length > 0 && (
-              <div>
-                <h4 className="mb-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Overlay plots
-                </h4>
-                <div className="space-y-6">
-                  {overlayVars.map((ov) => (
-                    <div key={ov.variable}>
-                      <h5 className="mb-2 text-sm font-medium">{ov.variable}</h5>
-                      <PPCRibbonChart overlay={ov} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {testStatsByVar.size > 0 && (
-              <div>
-                <h4 className="mb-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Test statistics
-                </h4>
-                <div className="space-y-6">
-                  {Array.from(testStatsByVar.entries()).map(([variable, stats]) => (
-                    <div key={variable}>
-                      <h5 className="mb-3 text-sm font-medium">{variable}</h5>
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        {stats.map((s) => (
-                          <PPCTestStatChart key={`${s.variable}-${s.stat_name}`} stat={s} />
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <p className="text-xs text-muted-foreground">
+              PPCs check distributional adequacy, not causal validity. A model can pass all checks and still encode wrong causal assumptions.
+            </p>
+            <PPCWarningsTable warnings={ppc.per_variable_warnings} testStats={ppc.test_stats ?? []} overlays={ppc.overlays ?? []} />
           </div>
         </AccordionContent>
       </AccordionItem>

@@ -92,9 +92,9 @@ export function CompletionSummary({ runId }: { runId: string }) {
             </Badge>
           )}
           {data.ppc.per_variable_warnings.every((w) => w.passed) ? (
-            <Badge variant="success">PPC passed</Badge>
+            <Badge variant="success">PPC consistent</Badge>
           ) : (
-            <Badge variant="destructive">PPC failed</Badge>
+            <Badge variant="destructive">PPC misfit</Badge>
           )}
         </div>
         {data.inference_metadata && (
