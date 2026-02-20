@@ -1,7 +1,7 @@
 "use client";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import type { StageRunStatus } from "@/lib/hooks/use-run-events";
+import type { StageRunStatus, WorkerProgress } from "@/lib/hooks/use-run-events";
 import type { GateOverride } from "@causal-ssm/api-types";
 import { AlertCircle, ChevronDown } from "lucide-react";
 import { motion } from "motion/react";
@@ -22,6 +22,7 @@ export function StageSection({
   gateOverridden,
   gateFailed = false,
   loadingHint,
+  workerProgress,
 }: {
   id?: string;
   number: string;
@@ -35,6 +36,7 @@ export function StageSection({
   gateOverridden?: GateOverride;
   gateFailed?: boolean;
   loadingHint?: string;
+  workerProgress?: WorkerProgress | null;
 }) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
@@ -88,9 +90,15 @@ export function StageSection({
           {loadingHint && (
             <p className="text-sm text-muted-foreground">{loadingHint}</p>
           )}
-          <Skeleton className="h-4 w-3/4" />
-          <Skeleton className="h-4 w-1/2" />
-          <Skeleton className="h-32 w-full" />
+          {workerProgress && workerProgress.total > 0 ? (
+            <WorkerProgressBar progress={workerProgress} />
+          ) : (
+            <>
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-4 w-1/2" />
+              <Skeleton className="h-32 w-full" />
+            </>
+          )}
         </motion.div>
       )}
       {status === "completed" && !collapsed && (
@@ -120,5 +128,35 @@ export function StageSection({
         </motion.div>
       )}
     </motion.section>
+  );
+}
+
+function WorkerProgressBar({ progress }: { progress: WorkerProgress }) {
+  const { completed, failed, total } = progress;
+  const done = completed + failed;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>
+          {done} / {total} workers completed
+        </span>
+        <span className="font-mono">{pct}%</span>
+      </div>
+      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+        <motion.div
+          className={`h-full rounded-full ${failed > 0 ? "bg-amber-500" : "bg-primary"}`}
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+        />
+      </div>
+      {failed > 0 && (
+        <p className="text-xs text-amber-600">
+          {failed} worker{failed > 1 ? "s" : ""} failed (will retry)
+        </p>
+      )}
+    </div>
   );
 }

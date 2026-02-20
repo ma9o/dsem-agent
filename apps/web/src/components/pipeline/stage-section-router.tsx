@@ -3,7 +3,7 @@
 import { LLMTracePanel } from "@/components/ui/custom/llm-trace-panel";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { cn } from "@/lib/utils/cn";
-import type { PipelineProgress, StageRunStatus, StageTiming } from "@/lib/hooks/use-run-events";
+import type { PipelineProgress, StageRunStatus, StageTiming, WorkerProgress } from "@/lib/hooks/use-run-events";
 import { useStageData } from "@/lib/hooks/use-stage-data";
 import type {
   GateOverride,
@@ -103,11 +103,13 @@ export function StageSectionRouter({
   runId,
   status,
   timing,
+  workerProgress,
 }: {
   stage: StageMeta;
   runId: string;
   status: StageRunStatus;
   timing?: StageTiming;
+  workerProgress?: WorkerProgress | null;
 }) {
   const queryClient = useQueryClient();
   const isCompleted = status === "completed";
@@ -150,6 +152,7 @@ export function StageSectionRouter({
       gateOverridden={stageData?.gate_overridden}
       gateFailed={gateFailed}
       loadingHint={stage.loadingHint}
+      workerProgress={workerProgress}
     >
       {isCompleted && (
         <ErrorBoundary>

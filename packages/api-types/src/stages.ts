@@ -19,6 +19,8 @@ export interface StageMeta {
   prefectTaskName: string;
   /** Human-readable hint shown while this stage is running. */
   loadingHint: string;
+  /** True for stages that fan out into many parallel tasks (e.g. stage-2 workers). */
+  isFanOut?: boolean;
 }
 
 export const STAGES: StageMeta[] = [
@@ -53,6 +55,7 @@ export const STAGES: StageMeta[] = [
     hasGate: false,
     prefectTaskName: "populate_indicators",
     loadingHint: "Extracting indicator values from your data...",
+    isFanOut: true,
   },
   {
     id: "stage-3",

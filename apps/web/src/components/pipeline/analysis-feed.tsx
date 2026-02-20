@@ -64,6 +64,7 @@ export function AnalysisFeed({
             runId={runId}
             status={progress.stages[stage.id]}
             timing={progress.timings[stage.id]}
+            workerProgress={stage.isFanOut ? progress.workerProgress : undefined}
           />
         ))}
         {!progress.isComplete && <div className="max-w-6xl mx-auto"><ActiveStageIndicator stageId={progress.currentStage} /></div>}

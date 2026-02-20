@@ -14,11 +14,19 @@ export interface StageTiming {
   completedAt?: number;
 }
 
+export interface WorkerProgress {
+  completed: number;
+  running: number;
+  failed: number;
+  total: number;
+}
+
 export interface PipelineProgress {
   stages: Record<StageId, StageRunStatus>;
   timings: Partial<Record<StageId, StageTiming>>;
   gateFailures: Partial<Record<StageId, boolean>>;
   gateOverrides: Partial<Record<StageId, boolean>>;
+  workerProgress: WorkerProgress | null;
   currentStage: StageId | null;
   isComplete: boolean;
   isFailed: boolean;
@@ -27,15 +35,27 @@ export interface PipelineProgress {
 function initialProgress(): PipelineProgress {
   const stages = {} as Record<StageId, StageRunStatus>;
   for (const s of STAGES) stages[s.id] = "pending";
-  return { stages, timings: {}, gateFailures: {}, gateOverrides: {}, currentStage: null, isComplete: false, isFailed: false };
+  return { stages, timings: {}, gateFailures: {}, gateOverrides: {}, workerProgress: null, currentStage: null, isComplete: false, isFailed: false };
 }
 
 const MAX_RECONNECT_ATTEMPTS = 10;
 const BASE_DELAY_MS = 1000;
 
+function computeWorkerProgress(workers: Map<string, StageRunStatus>): WorkerProgress {
+  let completed = 0, running = 0, failed = 0;
+  for (const state of workers.values()) {
+    if (state === "completed") completed++;
+    else if (state === "running") running++;
+    else if (state === "failed") failed++;
+  }
+  return { completed, running, failed, total: workers.size };
+}
+
 export function useRunEvents(runId: string | null) {
   const queryClient = useQueryClient();
   const wsRef = useRef<ReconnectingWebSocket | null>(null);
+  // Track individual worker task-run states for fan-out stages
+  const fanOutWorkers = useRef(new Map<string, StageRunStatus>());
 
   const updateStage = useCallback(
     (stageId: StageId, status: StageRunStatus, eventTime?: number) => {
@@ -59,6 +79,7 @@ export function useRunEvents(runId: string | null) {
           timings,
           gateFailures: prev.gateFailures,
           gateOverrides: prev.gateOverrides,
+          workerProgress: prev.workerProgress,
           currentStage: status === "running" ? stageId : prev.currentStage,
           isComplete: completedAll,
           isFailed: anyFailed,
@@ -75,6 +96,7 @@ export function useRunEvents(runId: string | null) {
     if (!runId) return;
 
     queryClient.setQueryData(["pipeline", runId, "status"], initialProgress());
+    fanOutWorkers.current.clear();
 
     if (isMockMode()) {
       const cleanup = simulatePipelineEvents({
@@ -95,7 +117,7 @@ export function useRunEvents(runId: string | null) {
     //    The WebSocket only delivers future events — this fills in history.
     fetch(`/api/stages/${runId}`, { signal: ac.signal })
       .then((res) => (res.ok ? res.json() : null))
-      .then((snapshot: Record<string, { status: string; startedAt?: string; completedAt?: string }> | null) => {
+      .then((snapshot: Record<string, { status: string; startedAt?: string; completedAt?: string; workerProgress?: WorkerProgress }> | null) => {
         if (!snapshot) return;
         for (const [stageId, info] of Object.entries(snapshot)) {
           const status = info.status as StageRunStatus;
@@ -107,6 +129,13 @@ export function useRunEvents(runId: string | null) {
           updateStage(stageId as StageId, status, eventTime);
           if (status === "completed") {
             queryClient.invalidateQueries({ queryKey: ["pipeline", runId, "stage", stageId] });
+          }
+          // Hydrate worker progress from snapshot for fan-out stages
+          if (info.workerProgress) {
+            queryClient.setQueryData<PipelineProgress>(["pipeline", runId, "status"], (old) => {
+              if (!old) return old;
+              return { ...old, workerProgress: info.workerProgress! };
+            });
           }
         }
       })
@@ -157,18 +186,51 @@ export function useRunEvents(runId: string | null) {
 
         // Prefer server-side event timestamp over client-side Date.now()
         const eventTime = data.occurred ? new Date(data.occurred).getTime() : undefined;
-
-        if (data.event === "prefect.task-run.Running") {
-          updateStage(stage.id, "running", eventTime);
-        } else if (
+        const isCompleted =
           data.event === "prefect.task-run.Completed" ||
-          // Prefect emits "Cached" (state-type COMPLETED) for cache-hit results
-          data.resource?.["prefect.state-type"] === "COMPLETED"
-        ) {
-          updateStage(stage.id, "completed", eventTime);
-          queryClient.invalidateQueries({ queryKey: ["pipeline", runId, "stage", stage.id] });
-        } else if (data.event === "prefect.task-run.Failed") {
-          updateStage(stage.id, "failed", eventTime);
+          data.resource?.["prefect.state-type"] === "COMPLETED";
+
+        // Fan-out stages: track individual worker task runs
+        if (stage.isFanOut) {
+          const taskRunId = data.resource?.["prefect.resource.id"];
+          if (!taskRunId) return;
+
+          const workers = fanOutWorkers.current;
+          if (data.event === "prefect.task-run.Running") {
+            workers.set(taskRunId, "running");
+            // Mark stage as running on first worker
+            updateStage(stage.id, "running", eventTime);
+          } else if (isCompleted) {
+            workers.set(taskRunId, "completed");
+          } else if (data.event === "prefect.task-run.Failed") {
+            workers.set(taskRunId, "failed");
+          } else {
+            // Pending or other — register the worker if not seen
+            if (!workers.has(taskRunId)) workers.set(taskRunId, "pending");
+          }
+
+          const wp = computeWorkerProgress(workers);
+          queryClient.setQueryData<PipelineProgress>(["pipeline", runId, "status"], (old) => {
+            if (!old) return old;
+            return { ...old, workerProgress: wp };
+          });
+
+          // Only mark stage completed when ALL workers are done
+          const allDone = wp.completed + wp.failed === wp.total && wp.total > 0;
+          if (allDone) {
+            updateStage(stage.id, wp.failed > 0 ? "failed" : "completed", eventTime);
+            queryClient.invalidateQueries({ queryKey: ["pipeline", runId, "stage", stage.id] });
+          }
+        } else {
+          // Non-fan-out stages: single task per stage
+          if (data.event === "prefect.task-run.Running") {
+            updateStage(stage.id, "running", eventTime);
+          } else if (isCompleted) {
+            updateStage(stage.id, "completed", eventTime);
+            queryClient.invalidateQueries({ queryKey: ["pipeline", runId, "stage", stage.id] });
+          } else if (data.event === "prefect.task-run.Failed") {
+            updateStage(stage.id, "failed", eventTime);
+          }
         }
 
         // Close permanently if pipeline is done — no need to reconnect
