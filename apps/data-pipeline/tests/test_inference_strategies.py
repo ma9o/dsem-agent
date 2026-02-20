@@ -621,6 +621,7 @@ class TestHighDimNonlinear:
             n_particles=300,
             manifest_dist="poisson",
             diffusion_dist="student_t",
+            manifest_link="log",
         )
         ll = backend.compute_log_likelihood(
             ct_params,

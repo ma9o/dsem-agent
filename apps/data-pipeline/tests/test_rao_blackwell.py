@@ -37,6 +37,21 @@ from causal_ssm_agent.orchestrator.schemas_model import DistributionFamily, Link
 # Helpers
 # =============================================================================
 
+# Canonical link for each distribution (used when tests don't specify one)
+_CANONICAL_LINK = {
+    "gaussian": "identity",
+    "student_t": "identity",
+    "poisson": "log",
+    "gamma": "log",
+    "negative_binomial": "log",
+    "bernoulli": "logit",
+    "beta": "logit",
+}
+
+
+def _canonical_link(manifest_dist: str) -> str:
+    return _CANONICAL_LINK.get(str(manifest_dist), "identity")
+
 
 def _make_standard_params(n_latent=2, n_manifest=2):
     """Standard test parameters for RBPF tests."""
@@ -89,12 +104,15 @@ def _run_rbpf(
     n_particles=200,
     rng_key=None,
     extra_params=None,
+    manifest_link=None,
 ):
     """Run RBPF and return log-likelihood."""
     from causal_ssm_agent.models.likelihoods.particle import ParticleLikelihood
 
     if rng_key is None:
         rng_key = random.PRNGKey(42)
+    if manifest_link is None:
+        manifest_link = _canonical_link(manifest_dist)
 
     backend = ParticleLikelihood(
         n_latent=init.mean.shape[0],
@@ -103,6 +121,7 @@ def _run_rbpf(
         rng_key=rng_key,
         manifest_dist=manifest_dist,
         diffusion_dist="gaussian",
+        manifest_link=manifest_link,
     )
     return backend.compute_log_likelihood(
         ct_params,
@@ -124,12 +143,15 @@ def _run_bootstrap_pf(
     n_particles=200,
     rng_key=None,
     extra_params=None,
+    manifest_link=None,
 ):
     """Run bootstrap PF (Student-t dynamics forces bootstrap) and return log-likelihood."""
     from causal_ssm_agent.models.likelihoods.particle import ParticleLikelihood
 
     if rng_key is None:
         rng_key = random.PRNGKey(42)
+    if manifest_link is None:
+        manifest_link = _canonical_link(manifest_dist)
 
     backend = ParticleLikelihood(
         n_latent=init.mean.shape[0],
@@ -138,6 +160,7 @@ def _run_bootstrap_pf(
         rng_key=rng_key,
         manifest_dist=manifest_dist,
         diffusion_dist="student_t",
+        manifest_link=manifest_link,
     )
     ep = {"proc_df": 100.0}
     if extra_params:
@@ -793,6 +816,7 @@ class TestParameterRecovery:
             n_manifest=1,
             lambda_mat=jnp.eye(1),
             manifest_dist=DistributionFamily.POISSON,
+            manifest_link=LinkFunction.LOG,
             diffusion_dist=DistributionFamily.GAUSSIAN,
         )
         model = SSMModel(spec, n_particles=200, pf_seed=42)
@@ -859,6 +883,7 @@ class TestParameterRecovery:
             n_manifest=1,
             lambda_mat=jnp.eye(1),
             manifest_dist=DistributionFamily.GAMMA,
+            manifest_link=LinkFunction.LOG,
             diffusion_dist=DistributionFamily.GAUSSIAN,
         )
         model = SSMModel(spec, n_particles=200, pf_seed=42)
