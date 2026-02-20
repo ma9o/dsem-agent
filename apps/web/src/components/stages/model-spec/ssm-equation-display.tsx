@@ -186,34 +186,61 @@ function extractConfounder(description: string): string | null {
   return m ? m[1] : null;
 }
 
-/** Build LaTeX lines for correlated errors from correlation parameters. */
-function correlatedErrorLines(
-  parameters: ParameterSpec[],
-): { latex: string; annotations: { s1: string; s2: string; confounder: string | null }[] } | null {
+interface ConfounderGroup {
+  confounder: string;
+  states: string[];
+  pairs: { s1: string; s2: string }[];
+}
+
+/** Group correlation parameters by their source confounder. */
+function confounderGroups(parameters: ParameterSpec[]): ConfounderGroup[] | null {
   const corParams = parameters.filter((p) => p.role === "correlation");
   if (corParams.length === 0) return null;
 
   const states = stateNames(parameters);
-  const lines: string[] = [];
-  const annotations: { s1: string; s2: string; confounder: string | null }[] = [];
+  const groups = new Map<string, { states: Set<string>; pairs: { s1: string; s2: string }[] }>();
 
   for (const p of corParams) {
     const parsed = parseCorrelation(p.name, states);
     if (!parsed) continue;
-    const { s1, s2 } = parsed;
-    const t1 = `\\text{${textify(s1)}}`;
-    const t2 = `\\text{${textify(s2)}}`;
-    lines.push(
-      `\\text{Corr}(\\varepsilon_{${t1}},\\, \\varepsilon_{${t2}}) &= \\psi_{${t1},\\,${t2}}`,
-    );
-    annotations.push({ s1, s2, confounder: extractConfounder(p.description ?? "") });
+    const confounder = extractConfounder(p.description ?? "") ?? "unknown";
+    let group = groups.get(confounder);
+    if (!group) {
+      group = { states: new Set(), pairs: [] };
+      groups.set(confounder, group);
+    }
+    group.states.add(parsed.s1);
+    group.states.add(parsed.s2);
+    group.pairs.push(parsed);
   }
 
-  if (lines.length === 0) return null;
-  return {
-    latex: tex(`\\begin{aligned}\n${lines.join(" \\\\\n")}\n\\end{aligned}`),
-    annotations,
-  };
+  if (groups.size === 0) return null;
+  return [...groups.entries()].map(([confounder, { states: s, pairs }]) => ({
+    confounder,
+    states: [...s],
+    pairs,
+  }));
+}
+
+/** Render LaTeX for a single confounder group. */
+function confounderGroupLatex(group: ConfounderGroup): string {
+  const confTex = `\\text{${textify(group.confounder)}}`;
+  const stateList = group.states.map((s) => `\\text{${textify(s)}}`).join(",\\, ");
+
+  const lines: string[] = [];
+  // Header: U_confounder → {children}
+  lines.push(`U_{${confTex}} &\\to \\{${stateList}\\}`);
+  // Joint noise statement
+  const epsilons = group.states.map((s) => `\\varepsilon_{\\text{${textify(s)}}}`).join(",\\, ");
+  lines.push(`(${epsilons}) &\\sim \\mathcal{N}(\\mathbf{0},\\, \\Psi_{${confTex}})`);
+  // Non-zero off-diagonals
+  for (const { s1, s2 } of group.pairs) {
+    const t1 = `\\text{${textify(s1)}}`;
+    const t2 = `\\text{${textify(s2)}}`;
+    lines.push(`\\psi_{${t1},\\,${t2}} &\\neq 0`);
+  }
+
+  return tex(`\\begin{aligned}\n${lines.join(" \\\\\n")}\n\\end{aligned}`);
 }
 
 /** Build concrete per-state transition LaTeX lines from actual parameters. */
@@ -281,7 +308,7 @@ export function SSMEquationDisplay({ likelihoods, parameters, priors }: SsmEquat
   );
 
   // --- Correlated errors (from marginalized confounders) ---
-  const corrInfo = correlatedErrorLines(parameters);
+  const corrGroups = confounderGroups(parameters);
 
   // --- Observation model ---
   const predictorDef =
@@ -332,26 +359,19 @@ export function SSMEquationDisplay({ likelihoods, parameters, priors }: SsmEquat
           </section>
         )}
 
-        {/* Correlated errors */}
-        {corrInfo && (
+        {/* Correlated errors (per marginalized confounder) */}
+        {corrGroups && (
           <section>
             <h4 className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Correlated Errors
-              <StatTooltip explanation="When an unobserved confounder is marginalized out (via front-door, IV, or other nonparametric identification), its effect is absorbed into residual noise. This induces correlation between the error terms of the confounder's observed children." />
+              Marginalized Confounders
+              <StatTooltip explanation="Each unobserved confounder is marginalized out via nonparametric identification (front-door, IV, etc.). Its causal effect is absorbed into correlated residual noise among its observed children. Each block below shows one confounder and the joint noise structure it induces." />
             </h4>
-            <div className="overflow-x-auto rounded-md border bg-muted/30 px-4 py-3">
-              <div dangerouslySetInnerHTML={{ __html: corrInfo.latex }} />
-              {corrInfo.annotations.some((a) => a.confounder) && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {corrInfo.annotations
-                    .filter((a) => a.confounder)
-                    .map(
-                      (a) =>
-                        `ψ(${textify(a.s1)}, ${textify(a.s2)}): marginalized ${textify(a.confounder!)}`,
-                    )
-                    .join("; ")}
-                </p>
-              )}
+            <div className="space-y-3">
+              {corrGroups.map((group) => (
+                <div key={group.confounder} className="overflow-x-auto rounded-md border bg-muted/30 px-4 py-3">
+                  <div dangerouslySetInnerHTML={{ __html: confounderGroupLatex(group) }} />
+                </div>
+              ))}
             </div>
           </section>
         )}
