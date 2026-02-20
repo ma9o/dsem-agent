@@ -12,28 +12,24 @@ interface MCMCDiagnosticsPanelProps {
   diagnostics: MCMCDiagnostics;
 }
 
-function rhatBadge(value: number | number[]) {
+function rhatSeverity(value: number | number[]): "fail" | "warn" | undefined {
   const v = Array.isArray(value) ? Math.max(...value) : value;
-  if (v < 1.01) return <Badge variant="success">{formatNumber(v, 3)}</Badge>;
-  if (v < 1.1) return <Badge variant="warning">{formatNumber(v, 3)}</Badge>;
-  return <Badge variant="destructive">{formatNumber(v, 3)}</Badge>;
+  if (v >= 1.1) return "fail";
+  if (v >= 1.01) return "warn";
+  return undefined;
 }
 
-function essCell(value: number | number[] | undefined, nSamples: number | null) {
-  if (value == null) return <span className="text-muted-foreground">—</span>;
+function essSeverity(
+  value: number | number[] | undefined,
+  nSamples: number | null,
+): "fail" | "warn" | undefined {
+  if (value == null) return undefined;
   const v = Array.isArray(value) ? Math.min(...value) : value;
   const total = nSamples ?? 1000;
   const ratio = v / total;
-  if (ratio > 0.5) return <span className="font-mono">{formatNumber(v, 0)}</span>;
-  if (ratio > 0.1)
-    return <span className="font-mono text-warning">{formatNumber(v, 0)}</span>;
-  return <span className="font-mono text-destructive">{formatNumber(v, 0)}</span>;
-}
-
-function mcseCell(value: number | number[] | undefined) {
-  if (value == null) return <span className="text-muted-foreground">—</span>;
-  const v = Array.isArray(value) ? Math.max(...value) : value;
-  return <span className="font-mono">{formatNumber(v, 4)}</span>;
+  if (ratio <= 0.1) return "fail";
+  if (ratio <= 0.5) return "warn";
+  return undefined;
 }
 
 const col = createColumnHelper<MCMCParamDiagnostic>();
@@ -48,8 +44,9 @@ export function MCMCDiagnosticsPanel({ diagnostics }: MCMCDiagnosticsPanelProps)
       col.accessor("parameter", {
         header: "Parameter",
         cell: (info) => (
-          <span className="font-medium font-mono">{info.getValue()}</span>
+          <span className="font-medium">{info.getValue()}</span>
         ),
+        meta: { mono: true },
       }),
       col.accessor("r_hat", {
         header: () => (
@@ -58,8 +55,16 @@ export function MCMCDiagnosticsPanel({ diagnostics }: MCMCDiagnosticsPanelProps)
             tooltip="Potential scale reduction factor. Values near 1.0 indicate convergence. Worry above 1.01."
           />
         ),
-        cell: (info) => rhatBadge(info.getValue()),
-        meta: { align: "right" },
+        cell: (info) => {
+          const v = info.getValue();
+          const val = Array.isArray(v) ? Math.max(...v) : v;
+          return formatNumber(val, 3);
+        },
+        meta: {
+          align: "right",
+          mono: true,
+          severity: (v: number | number[]) => rhatSeverity(v),
+        },
       }),
       col.accessor("ess_bulk", {
         header: () => (
@@ -68,8 +73,18 @@ export function MCMCDiagnosticsPanel({ diagnostics }: MCMCDiagnosticsPanelProps)
             tooltip="Effective sample size for bulk of the distribution. Higher is better. Worry if < 100 per chain."
           />
         ),
-        cell: (info) => essCell(info.getValue(), diagnostics.num_samples ?? null),
-        meta: { align: "right" },
+        cell: (info) => {
+          const v = info.getValue();
+          if (v == null) return <span className="text-muted-foreground">—</span>;
+          const val = Array.isArray(v) ? Math.min(...v) : v;
+          return formatNumber(val, 0);
+        },
+        meta: {
+          align: "right",
+          mono: true,
+          severity: (v: number | number[] | undefined) =>
+            essSeverity(v, diagnostics.num_samples ?? null),
+        },
       }),
     ] as ColumnDef<MCMCParamDiagnostic, unknown>[];
 
@@ -82,8 +97,18 @@ export function MCMCDiagnosticsPanel({ diagnostics }: MCMCDiagnosticsPanelProps)
               tooltip="Effective sample size for the tails (5th/95th percentiles). Important for credible interval reliability."
             />
           ),
-          cell: (info) => essCell(info.getValue() ?? undefined, diagnostics.num_samples ?? null),
-          meta: { align: "right" },
+          cell: (info) => {
+            const v = info.getValue();
+            if (v == null) return <span className="text-muted-foreground">—</span>;
+            const val = Array.isArray(v) ? Math.min(...v) : v;
+            return formatNumber(val, 0);
+          },
+          meta: {
+            align: "right",
+            mono: true,
+            severity: (v: number | number[] | null | undefined) =>
+              essSeverity(v ?? undefined, diagnostics.num_samples ?? null),
+          },
         }) as ColumnDef<MCMCParamDiagnostic, unknown>,
       );
     }
@@ -97,8 +122,13 @@ export function MCMCDiagnosticsPanel({ diagnostics }: MCMCDiagnosticsPanelProps)
               tooltip="Monte Carlo standard error of the mean. Should be small relative to the posterior standard deviation."
             />
           ),
-          cell: (info) => mcseCell(info.getValue() ?? undefined),
-          meta: { align: "right" },
+          cell: (info) => {
+            const v = info.getValue();
+            if (v == null) return <span className="text-muted-foreground">—</span>;
+            const val = Array.isArray(v) ? Math.max(...v) : v;
+            return formatNumber(val, 4);
+          },
+          meta: { align: "right", mono: true },
         }) as ColumnDef<MCMCParamDiagnostic, unknown>,
       );
     }

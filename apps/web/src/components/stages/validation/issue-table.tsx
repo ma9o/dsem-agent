@@ -1,8 +1,7 @@
 import { useMemo } from "react";
-import { IssueBadge } from "@/components/ui/custom/issue-badge";
 import { InfoTable } from "@/components/ui/info-table";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
-import type { ValidationIssue } from "@causal-ssm/api-types";
+import type { ValidationIssue, ValidationSeverity } from "@causal-ssm/api-types";
 
 const col = createColumnHelper<ValidationIssue>();
 
@@ -13,11 +12,19 @@ const columns = [
   }),
   col.accessor("issue_type", {
     header: "Issue Type",
-    cell: (info) => <span className="font-mono text-xs">{info.getValue()}</span>,
+    cell: (info) => info.getValue(),
+    meta: { mono: true },
   }),
   col.accessor("severity", {
     header: "Severity",
-    cell: (info) => <IssueBadge severity={info.getValue()} />,
+    cell: (info) => info.getValue(),
+    meta: {
+      severity: (v: ValidationSeverity) => {
+        if (v === "error") return "fail";
+        if (v === "warning") return "warn";
+        return undefined;
+      },
+    },
   }),
   col.accessor("message", {
     header: "Message",

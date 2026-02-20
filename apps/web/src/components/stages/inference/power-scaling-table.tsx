@@ -1,12 +1,8 @@
 import { useMemo } from "react";
-import { Badge } from "@/components/ui/badge";
 import { HeaderWithTooltip, InfoTable } from "@/components/ui/info-table";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
-import { diagnosisBadgeVariant, diagnosisLabel } from "@/lib/constants/charts";
 import { formatNumber } from "@/lib/utils/format";
 import type { PowerScalingResult } from "@causal-ssm/api-types";
-
-
 
 const col = createColumnHelper<PowerScalingResult>();
 
@@ -14,21 +10,9 @@ const baseColumns = [
   col.accessor("parameter", {
     header: "Parameter",
     cell: (info) => (
-      <span className="font-medium font-mono">{info.getValue()}</span>
+      <span className="font-medium">{info.getValue()}</span>
     ),
-  }),
-  col.accessor("diagnosis", {
-    header: () => (
-      <HeaderWithTooltip
-        label="Diagnosis"
-        tooltip="'Well Identified' = data-driven. 'Prior Dominated' = prior choice matters too much. 'Prior-Data Conflict' = prior and data disagree."
-      />
-    ),
-    cell: (info) => (
-      <Badge variant={diagnosisBadgeVariant[info.getValue()] ?? "secondary"}>
-        {diagnosisLabel[info.getValue()] ?? info.getValue()}
-      </Badge>
-    ),
+    meta: { mono: true },
   }),
   col.accessor("prior_sensitivity", {
     header: () => (
@@ -38,7 +22,15 @@ const baseColumns = [
       />
     ),
     cell: (info) => formatNumber(info.getValue()),
-    meta: { align: "right" as const, mono: true },
+    meta: {
+      align: "right" as const,
+      mono: true,
+      severity: (_v: number, row: PowerScalingResult) => {
+        if (row.diagnosis === "prior_data_conflict") return "fail";
+        if (row.diagnosis === "prior_dominated") return "warn";
+        return undefined;
+      },
+    },
   }),
   col.accessor("likelihood_sensitivity", {
     header: () => (
@@ -48,7 +40,14 @@ const baseColumns = [
       />
     ),
     cell: (info) => formatNumber(info.getValue()),
-    meta: { align: "right" as const, mono: true },
+    meta: {
+      align: "right" as const,
+      mono: true,
+      severity: (_v: number, row: PowerScalingResult) => {
+        if (row.diagnosis === "prior_data_conflict") return "fail";
+        return undefined;
+      },
+    },
   }),
 ];
 
@@ -61,16 +60,18 @@ const psisColumn = col.accessor("psis_k_hat", {
   ),
   cell: (info) => {
     const v = info.getValue();
-    if (v == null) return "—";
-    return (
-      <Badge
-        variant={v > 0.7 ? "destructive" : v > 0.5 ? "warning" : "success"}
-      >
-        {formatNumber(v, 2)}
-      </Badge>
-    );
+    return v == null ? "—" : formatNumber(v, 2);
   },
-  meta: { align: "right" as const, mono: true },
+  meta: {
+    align: "right" as const,
+    mono: true,
+    severity: (v: number | null | undefined) => {
+      if (v == null) return undefined;
+      if (v > 0.7) return "fail";
+      if (v > 0.5) return "warn";
+      return undefined;
+    },
+  },
 });
 
 export function PowerScalingTable({ results }: { results: PowerScalingResult[] }) {

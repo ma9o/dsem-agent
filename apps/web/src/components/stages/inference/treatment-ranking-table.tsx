@@ -1,12 +1,17 @@
 import { useMemo } from "react";
-import { Badge } from "@/components/ui/badge";
 import { HeaderWithTooltip, InfoTable } from "@/components/ui/info-table";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { formatNumber, formatPercent } from "@/lib/utils/format";
 import type { TreatmentEffect } from "@causal-ssm/api-types";
-import { AlertTriangle, Check, X } from "lucide-react";
 
 const col = createColumnHelper<TreatmentEffect>();
+
+/** Fail if not identifiable, warn if prior-sensitive. */
+function effectSeverity(row: TreatmentEffect): "fail" | "warn" | undefined {
+  if (!row.identifiable) return "fail";
+  if (row.prior_sensitivity_warning) return "warn";
+  return undefined;
+}
 
 const columns = [
   col.accessor("treatment", {
@@ -24,7 +29,11 @@ const columns = [
       const v = info.getValue();
       return v === null ? "—" : formatNumber(v);
     },
-    meta: { align: "right", mono: true },
+    meta: {
+      align: "right",
+      mono: true,
+      severity: (_v: number | null, row: TreatmentEffect) => effectSeverity(row),
+    },
   }),
   col.display({
     id: "ci",
@@ -38,7 +47,11 @@ const columns = [
       const ci = row.original.credible_interval;
       return ci ? <span>[{formatNumber(ci[0])}, {formatNumber(ci[1])}]</span> : "—";
     },
-    meta: { align: "right", mono: true },
+    meta: {
+      align: "right",
+      mono: true,
+      severity: (_v: unknown, row: TreatmentEffect) => effectSeverity(row),
+    },
   }),
   col.accessor("prob_positive", {
     header: () => (
@@ -51,39 +64,11 @@ const columns = [
       const p = info.getValue();
       return p == null ? "—" : formatPercent(p);
     },
-    meta: { align: "right", mono: true },
-  }),
-  col.accessor("identifiable", {
-    header: () => (
-      <HeaderWithTooltip
-        label="Identifiable"
-        tooltip="Whether the causal effect can be uniquely determined from the observational data given the DAG structure."
-      />
-    ),
-    cell: (info) =>
-      info.getValue() ? (
-        <Check className="h-4 w-4 text-success" />
-      ) : (
-        <X className="h-4 w-4 text-destructive" />
-      ),
-  }),
-  col.display({
-    id: "sensitivity",
-    header: () => (
-      <HeaderWithTooltip
-        label="Sensitivity"
-        tooltip="Flags effects marked as prior-sensitive by power-scaling diagnostics."
-      />
-    ),
-    cell: ({ row }) =>
-      row.original.prior_sensitivity_warning ? (
-        <Badge variant="warning">
-          <AlertTriangle className="mr-1 h-3 w-3" />
-          Sensitive
-        </Badge>
-      ) : (
-        <Badge variant="success">Robust</Badge>
-      ),
+    meta: {
+      align: "right",
+      mono: true,
+      severity: (_v: number | null, row: TreatmentEffect) => effectSeverity(row),
+    },
   }),
 ];
 

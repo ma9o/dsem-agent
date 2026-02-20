@@ -1,10 +1,9 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
 import { HeaderWithTooltip, InfoTable } from "@/components/ui/info-table";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { formatNumber } from "@/lib/utils/format";
-import type { ParameterClassification, ParameterIdentification } from "@causal-ssm/api-types";
+import type { ParameterIdentification } from "@causal-ssm/api-types";
 import {
   CartesianGrid,
   Line,
@@ -15,21 +14,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-
-const classificationVariant: Record<
-  ParameterClassification,
-  "success" | "warning" | "destructive"
-> = {
-  identified: "success",
-  practically_unidentifiable: "warning",
-  structurally_unidentifiable: "destructive",
-};
-
-const classificationLabel: Record<ParameterClassification, string> = {
-  identified: "Identified",
-  practically_unidentifiable: "Practically Unidentifiable",
-  structurally_unidentifiable: "Structurally Unidentifiable",
-};
 
 function ProfileSparkline({
   param,
@@ -105,8 +89,9 @@ function buildColumns(threshold: number) {
     col.accessor("name", {
       header: "Parameter",
       cell: (info) => (
-        <span className="font-medium font-mono">{info.getValue()}</span>
+        <span className="font-medium">{info.getValue()}</span>
       ),
+      meta: { mono: true },
     }),
     col.display({
       id: "profile",
@@ -120,19 +105,6 @@ function buildColumns(threshold: number) {
         <ProfileSparkline param={info.row.original} threshold={threshold} />
       ),
     }),
-    col.accessor("classification", {
-      header: () => (
-        <HeaderWithTooltip
-          label="Classification"
-          tooltip="Structurally identified: uniquely determined by the model. Boundary: near the identification boundary. Weak: poorly identified — posterior dominated by the prior."
-        />
-      ),
-      cell: (info) => (
-        <Badge variant={classificationVariant[info.getValue()]}>
-          {classificationLabel[info.getValue()]}
-        </Badge>
-      ),
-    }),
     col.accessor("contraction_ratio", {
       header: () => (
         <HeaderWithTooltip
@@ -142,11 +114,16 @@ function buildColumns(threshold: number) {
       ),
       cell: (info) => {
         const v = info.getValue();
-        return (
-          <span className="text-muted-foreground">
-            {v != null ? formatNumber(v) : "--"}
-          </span>
-        );
+        return v != null ? formatNumber(v) : "--";
+      },
+      meta: {
+        align: "right",
+        mono: true,
+        severity: (_v: number | null, row: ParameterIdentification) => {
+          if (row.classification === "structurally_unidentifiable") return "fail";
+          if (row.classification === "practically_unidentifiable") return "warn";
+          return undefined;
+        },
       },
     }),
   ];

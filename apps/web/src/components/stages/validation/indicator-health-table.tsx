@@ -1,4 +1,3 @@
-import { Badge } from "@/components/ui/badge";
 import { HeaderWithTooltip, InfoTable } from "@/components/ui/info-table";
 import { formatNumber } from "@/lib/utils/format";
 import type { CellStatus, IndicatorHealth } from "@causal-ssm/api-types";
@@ -6,10 +5,10 @@ import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 
 const col = createColumnHelper<IndicatorHealth>();
 
-/** Map a backend cell status to a text-color class. */
-function statusClass(status: CellStatus | undefined): string | undefined {
-  if (status === "error") return "text-destructive font-semibold";
-  if (status === "warning") return "text-warning-foreground font-semibold";
+/** Map a backend cell status to severity. */
+function cellSeverity(status: CellStatus | undefined): "fail" | "warn" | undefined {
+  if (status === "error") return "fail";
+  if (status === "warning") return "warn";
   return undefined;
 }
 
@@ -25,11 +24,11 @@ const columns = [
         tooltip="Number of non-null observations after extraction. More observations generally yield more reliable estimates."
       />
     ),
-    cell: (info) => {
-      const cls = statusClass(info.row.original.cell_statuses?.n_obs);
-      return <span className={cls}>{info.getValue().toLocaleString()}</span>;
+    cell: (info) => info.getValue().toLocaleString(),
+    meta: {
+      align: "right",
+      severity: (_v, row) => cellSeverity(row.cell_statuses?.n_obs),
     },
-    meta: { align: "right" },
   }),
   col.accessor("variance", {
     header: () => (
@@ -40,11 +39,12 @@ const columns = [
     ),
     cell: (info) => {
       const v = info.getValue();
-      if (v === null) return "--";
-      const cls = statusClass(info.row.original.cell_statuses?.variance);
-      return <span className={cls}>{formatNumber(v)}</span>;
+      return v === null ? "--" : formatNumber(v);
     },
-    meta: { align: "right" },
+    meta: {
+      align: "right",
+      severity: (_v, row) => cellSeverity(row.cell_statuses?.variance),
+    },
   }),
   col.accessor("time_coverage_ratio", {
     header: () => (
@@ -55,11 +55,12 @@ const columns = [
     ),
     cell: (info) => {
       const v = info.getValue();
-      if (v === null) return "--";
-      const cls = statusClass(info.row.original.cell_statuses?.time_coverage_ratio);
-      return <span className={cls}>{formatNumber(v)}</span>;
+      return v === null ? "--" : formatNumber(v);
     },
-    meta: { align: "right" },
+    meta: {
+      align: "right",
+      severity: (_v, row) => cellSeverity(row.cell_statuses?.time_coverage_ratio),
+    },
   }),
   col.accessor("max_gap_ratio", {
     header: () => (
@@ -70,11 +71,12 @@ const columns = [
     ),
     cell: (info) => {
       const v = info.getValue();
-      if (v === null) return "--";
-      const cls = statusClass(info.row.original.cell_statuses?.max_gap_ratio);
-      return <span className={cls}>{formatNumber(v)}</span>;
+      return v === null ? "--" : formatNumber(v);
     },
-    meta: { align: "right" },
+    meta: {
+      align: "right",
+      severity: (_v, row) => cellSeverity(row.cell_statuses?.max_gap_ratio),
+    },
   }),
   col.accessor("dtype_violations", {
     header: () => (
@@ -83,15 +85,11 @@ const columns = [
         tooltip="Number of values that could not be converted to the expected numeric type. Non-zero counts suggest data quality issues at the source."
       />
     ),
-    cell: (info) => {
-      const v = info.getValue();
-      const status = info.row.original.cell_statuses?.dtype_violations;
-      if (v > 0) {
-        return <Badge variant={status === "error" ? "destructive" : "warning"}>{v}</Badge>;
-      }
-      return "0";
+    cell: (info) => info.getValue(),
+    meta: {
+      align: "right",
+      severity: (_v, row) => cellSeverity(row.cell_statuses?.dtype_violations),
     },
-    meta: { align: "right" },
   }),
   col.accessor("duplicate_pct", {
     header: () => (
@@ -100,11 +98,11 @@ const columns = [
         tooltip="Percentage of duplicate timestamp-value pairs. High duplication may indicate redundant data or extraction errors."
       />
     ),
-    cell: (info) => {
-      const cls = statusClass(info.row.original.cell_statuses?.duplicate_pct);
-      return <span className={cls}>{formatNumber(info.getValue())}</span>;
+    cell: (info) => formatNumber(info.getValue()),
+    meta: {
+      align: "right",
+      severity: (_v, row) => cellSeverity(row.cell_statuses?.duplicate_pct),
     },
-    meta: { align: "right" },
   }),
   col.accessor("arithmetic_sequence_detected", {
     header: () => (
@@ -115,10 +113,13 @@ const columns = [
     ),
     cell: (info) =>
       info.getValue() ? (
-        <Badge variant="warning">detected</Badge>
+        "detected"
       ) : (
         <span className="text-muted-foreground">none</span>
       ),
+    meta: {
+      severity: (v: boolean) => (v ? "warn" : undefined),
+    },
   }),
 ];
 

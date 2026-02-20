@@ -2,12 +2,10 @@
 
 import { HeaderWithTooltip } from "@/components/ui/info-table";
 import { InfoTable } from "@/components/ui/info-table";
-import { Badge } from "@/components/ui/badge";
 import { formatNumber } from "@/lib/utils/format";
 import { buildHistogram } from "@/lib/utils/histogram";
 import type { PPCWarning, PPCTestStat, PPCOverlay } from "@causal-ssm/api-types";
 import { type ColumnDef, createColumnHelper } from "@tanstack/react-table";
-import { Check, X } from "lucide-react";
 import {
   Area,
   Bar,
@@ -57,23 +55,6 @@ function buildRows(
   return Array.from(map.values());
 }
 
-// ── Check cell (icon + value, message on hover) ─────────
-
-function CheckCell({ warning }: { warning?: PPCWarning }) {
-  if (!warning)
-    return <span className="text-xs text-muted-foreground">—</span>;
-  return (
-    <span className="inline-flex items-center gap-1.5" title={warning.message}>
-      {warning.passed ? (
-        <Check className="h-3.5 w-3.5 text-success shrink-0" />
-      ) : (
-        <X className="h-3.5 w-3.5 text-destructive shrink-0" />
-      )}
-      <span className="font-mono text-xs">{formatNumber(warning.value)}</span>
-    </span>
-  );
-}
-
 // ── Test stat sparkline (mini histogram + p-value) ──────
 
 function TestStatSparkline({ stat }: { stat?: PPCTestStat }) {
@@ -84,16 +65,10 @@ function TestStatSparkline({ stat }: { stat?: PPCTestStat }) {
   const pValue =
     stat.rep_values.filter((v) => v >= stat.observed_value).length /
     stat.rep_values.length;
-  const isExtreme = pValue < 0.05 || pValue > 0.95;
 
   return (
     <div className="space-y-1">
-      <Badge
-        variant={isExtreme ? "destructive" : "success"}
-        className="text-[10px]"
-      >
-        p = {formatNumber(pValue, 2)}
-      </Badge>
+      <span className="text-xs font-mono">p = {formatNumber(pValue, 2)}</span>
       <div className="h-14 w-28">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
@@ -210,6 +185,10 @@ const STAT_TOOLTIPS: Record<StatName, string> = {
   max: "Compares observed maximum to distribution of replicated maxima.",
 };
 
+function pValueForStat(stat: PPCTestStat): number {
+  return stat.rep_values.filter((v) => v >= stat.observed_value).length / stat.rep_values.length;
+}
+
 const columns: ColumnDef<PPCVariableRow, unknown>[] = [
   col.display({
     id: "variable",
@@ -239,7 +218,21 @@ const columns: ColumnDef<PPCVariableRow, unknown>[] = [
           tooltip={CHECK_TOOLTIPS[ct]}
         />
       ),
-      cell: ({ row }) => <CheckCell warning={row.original.checks[ct]} />,
+      cell: ({ row }) => {
+        const warning = row.original.checks[ct];
+        if (!warning) return <span className="text-xs text-muted-foreground">—</span>;
+        return (
+          <span className="font-mono text-xs" title={warning.message}>
+            {formatNumber(warning.value)}
+          </span>
+        );
+      },
+      meta: {
+        severity: (_v: unknown, row: PPCVariableRow) => {
+          const warning = row.checks[ct];
+          return warning && !warning.passed ? "fail" : undefined;
+        },
+      },
     }),
   ),
   ...STAT_NAMES.map((sn) =>
@@ -252,6 +245,14 @@ const columns: ColumnDef<PPCVariableRow, unknown>[] = [
         />
       ),
       cell: ({ row }) => <TestStatSparkline stat={row.original.testStats[sn]} />,
+      meta: {
+        severity: (_v: unknown, row: PPCVariableRow) => {
+          const stat = row.testStats[sn];
+          if (!stat) return undefined;
+          const p = pValueForStat(stat);
+          return (p < 0.05 || p > 0.95) ? "fail" : undefined;
+        },
+      },
     }),
   ),
 ];
