@@ -17,13 +17,18 @@ from causal_ssm_agent.workers.agents import WorkerResult, process_chunk_async
 
 # Lazy-initialized semaphore limits concurrent LLM calls to stay under
 # API rate limits and avoid exhausting local resources.
+# We track the event loop because Prefect's task runner may use a different
+# loop than where the semaphore was first created, causing RuntimeError.
 _worker_semaphore: asyncio.Semaphore | None = None
+_worker_semaphore_loop: asyncio.AbstractEventLoop | None = None
 
 
 def _get_worker_semaphore() -> asyncio.Semaphore:
-    global _worker_semaphore
-    if _worker_semaphore is None:
+    global _worker_semaphore, _worker_semaphore_loop
+    loop = asyncio.get_running_loop()
+    if _worker_semaphore is None or _worker_semaphore_loop is not loop:
         _worker_semaphore = asyncio.Semaphore(get_config().stage2_workers.max_concurrent)
+        _worker_semaphore_loop = loop
     return _worker_semaphore
 
 
