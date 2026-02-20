@@ -719,6 +719,7 @@
       "enum": [
         "identity",
         "log",
+        "inverse",
         "logit",
         "probit",
         "cumulative_logit",

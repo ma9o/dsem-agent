@@ -37,7 +37,7 @@ export type DistributionFamily =
 /**
  * Link functions mapping linear predictor to distribution mean.
  */
-export type LinkFunction = "identity" | "log" | "logit" | "probit" | "cumulative_logit" | "softmax";
+export type LinkFunction = "identity" | "log" | "inverse" | "logit" | "probit" | "cumulative_logit" | "softmax";
 /**
  * Role of a parameter in the model.
  */
