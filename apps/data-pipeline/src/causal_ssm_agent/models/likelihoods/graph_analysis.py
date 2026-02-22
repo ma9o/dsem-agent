@@ -199,3 +199,133 @@ def analyze_first_pass_rb(spec: SSMSpec) -> RBPartition:
         obs_kalman_idx=obs_kalman_idx,
         obs_particle_idx=obs_particle_idx,
     )
+
+
+def kalman_block_profile_indices(spec: SSMSpec, partition: RBPartition) -> list[int]:
+    """Return flat parameter vector indices that belong to the Kalman block.
+
+    Only these indices should be profiled in the parametric identifiability
+    check — particle-block parameters have stochastic likelihoods that make
+    profile curves unreliable.
+
+    Mirrors the NumPyro site layout from SSMModel._sample_* methods exactly.
+    """
+
+    kalman_set = {int(i) for i in partition.kalman_idx}
+    obs_kalman_set = {int(i) for i in partition.obs_kalman_idx}
+    n = spec.n_latent
+    m = spec.n_manifest
+    indices: list[int] = []
+    offset = 0
+
+    # --- drift_diag_pop: shape (n,), index k → latent k ---
+    if isinstance(spec.drift, str) and spec.drift == "free":
+        for k in range(n):
+            if k in kalman_set:
+                indices.append(offset + k)
+        offset += n
+
+        # --- drift_offdiag_pop: shape (n_offdiag,) ---
+        # Reconstruct offdiag_positions exactly as SSMModel._sample_drift does
+        offdiag_positions: list[tuple[int, int]] = []
+        if spec.drift_mask is not None:
+            for i in range(n):
+                for j in range(n):
+                    if i != j and spec.drift_mask[i, j]:
+                        offdiag_positions.append((i, j))
+        else:
+            for i in range(n):
+                for j in range(n):
+                    if i != j:
+                        offdiag_positions.append((i, j))
+
+        for idx, (i, j) in enumerate(offdiag_positions):
+            if i in kalman_set and j in kalman_set:
+                indices.append(offset + idx)
+        offset += len(offdiag_positions)
+
+    # --- diffusion_diag_pop: shape (n,), index k → latent k ---
+    if isinstance(spec.diffusion, str):
+        for k in range(n):
+            if k in kalman_set:
+                indices.append(offset + k)
+        offset += n
+
+        # --- diffusion_lower: shape (n*(n-1)//2,) ---
+        if spec.diffusion == "free":
+            n_lower = n * (n - 1) // 2
+            lower_idx = 0
+            for i in range(n):
+                for j in range(i):
+                    if i in kalman_set and j in kalman_set:
+                        indices.append(offset + lower_idx)
+                    lower_idx += 1
+            offset += n_lower
+
+    # --- cint_pop: shape (n,), index k → latent k ---
+    if spec.cint is not None and isinstance(spec.cint, str) and spec.cint == "free":
+        for k in range(n):
+            if k in kalman_set:
+                indices.append(offset + k)
+        offset += n
+
+    # --- lambda_free: variable layout depending on mode ---
+    if isinstance(spec.lambda_mat, str) and spec.lambda_mat == "free":
+        # Legacy mode: extra rows beyond identity
+        if m > n:
+            n_free = (m - n) * n
+            idx = 0
+            for i in range(n, m):
+                for j in range(n):
+                    if i in obs_kalman_set and j in kalman_set:
+                        indices.append(offset + idx)
+                    idx += 1
+            offset += n_free
+    elif not isinstance(spec.lambda_mat, str) and spec.lambda_mask is not None:
+        # Template+mask mode
+        for i in range(m):
+            for j in range(n):
+                if spec.lambda_mask[i, j]:
+                    if i in obs_kalman_set and j in kalman_set:
+                        indices.append(offset)
+                    offset += 1
+
+    # --- manifest_means: shape (m,), index k → manifest k ---
+    if isinstance(getattr(spec, "manifest_means", None), str) and spec.manifest_means == "free":
+        for k in range(m):
+            if k in obs_kalman_set:
+                indices.append(offset + k)
+        offset += m
+
+    # --- manifest_var_diag: shape (m,), index k → manifest k ---
+    if isinstance(spec.manifest_var, str):
+        for k in range(m):
+            if k in obs_kalman_set:
+                indices.append(offset + k)
+        offset += m
+
+    # --- t0_means_pop: shape (n,), index k → latent k ---
+    if isinstance(spec.t0_means, str) and spec.t0_means == "free":
+        for k in range(n):
+            if k in kalman_set:
+                indices.append(offset + k)
+        offset += n
+
+    # --- t0_var_diag: shape (n,), index k → latent k ---
+    if isinstance(spec.t0_var, str):
+        for k in range(n):
+            if k in kalman_set:
+                indices.append(offset + k)
+        offset += n
+
+    # Noise family hyperparams (obs_df, proc_df, etc.) are global scalars —
+    # include only if the entire model is Kalman-tractable.
+    if not partition.has_particle_block:
+        # All remaining scalar sites are Kalman-safe
+        # (obs_df, obs_shape, obs_r, obs_concentration, proc_df)
+        # They are appended after the above sites in alphabetical order
+        # by _discover_sites. We don't know exactly how many there are
+        # without tracing, so we skip them in the mixed case.
+        pass
+
+    return indices

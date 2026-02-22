@@ -553,6 +553,7 @@ def profile_likelihood(
     observations: jnp.ndarray,
     times: jnp.ndarray,
     profile_params: list[str] | None = None,
+    profile_indices: list[int] | None = None,
     n_grid: int = 20,
     confidence: float = 0.95,
     seed: int = 42,
@@ -569,6 +570,9 @@ def profile_likelihood(
         observations: (T, n_manifest) observed data
         times: (T,) observation times
         profile_params: parameter group names to profile (None = all)
+        profile_indices: scalar indices into the flat parameter vector to
+            profile. Overrides profile_params when set. Used by the RB
+            partition to restrict profiling to Kalman-block parameters.
         n_grid: number of grid points per parameter
         confidence: confidence level for threshold (0.95 or 0.99)
         seed: random seed
@@ -617,7 +621,9 @@ def profile_likelihood(
     scalar_names = _build_scalar_names(param_names, site_info)
 
     # 6. Determine which scalar indices to profile
-    if profile_params is not None:
+    if profile_indices is not None:
+        indices = [i for i in profile_indices if i < D]
+    elif profile_params is not None:
         indices = []
         for pname in profile_params:
             if pname in param_index:

@@ -94,11 +94,32 @@ def parametric_id_task(
                 ),
             }
 
-        # Run profile likelihood check
+        # Compute RB partition to restrict profiling to Kalman-block params
+        kalman_indices = None
+        if ssm_model.spec.first_pass_rb:
+            try:
+                from causal_ssm_agent.models.likelihoods.graph_analysis import (
+                    analyze_first_pass_rb,
+                    kalman_block_profile_indices,
+                )
+
+                partition = analyze_first_pass_rb(ssm_model.spec)
+                if partition.has_particle_block:
+                    kalman_indices = kalman_block_profile_indices(ssm_model.spec, partition)
+                    logger.info(
+                        "RB partition: profiling %d/%d Kalman-block params (skipping particle block)",
+                        len(kalman_indices),
+                        ssm_model.spec.n_latent,
+                    )
+            except Exception:
+                logger.debug("RB partition for profile filtering failed", exc_info=True)
+
+        # Run profile likelihood check (only Kalman-block params when mixed)
         result = profile_likelihood(
             model=ssm_model,
             observations=observations,
             times=times,
+            profile_indices=kalman_indices,
             n_grid=n_grid,
             confidence=confidence,
         )
@@ -143,6 +164,31 @@ def parametric_id_task(
         }
 
 
+def _compute_rb_partition_payload(builder: Any) -> dict | None:
+    """Compute RB partition from builder for both profile filtering and UI."""
+    try:
+        from causal_ssm_agent.models.likelihoods.graph_analysis import analyze_first_pass_rb
+
+        spec = builder._model.spec
+        partition = analyze_first_pass_rb(spec)
+        latent_names = spec.latent_names or [f"latent_{i}" for i in range(spec.n_latent)]
+        manifest_names = spec.manifest_names or [f"obs_{i}" for i in range(spec.n_manifest)]
+
+        return {
+            "latent_variables": [
+                {"name": latent_names[i], "method": "kalman" if i in partition.kalman_idx else "particle"}
+                for i in range(spec.n_latent)
+            ],
+            "obs_variables": [
+                {"name": manifest_names[i], "method": "kalman" if i in partition.obs_kalman_idx else "particle"}
+                for i in range(spec.n_manifest)
+            ],
+        }
+    except Exception:
+        logger.debug("RB partition computation skipped", exc_info=True)
+        return None
+
+
 @flow(name="stage4b-parametric-id", log_prints=True, persist_result=True, result_serializer="json")
 def stage4b_parametric_id_flow(
     stage4_result: dict,
@@ -160,41 +206,18 @@ def stage4b_parametric_id_flow(
         builder: Pre-built SSMModelBuilder (avoids rebuilding)
 
     Returns:
-        stage4_result augmented with 'parametric_id' key
+        stage4_result augmented with 'parametric_id' and 'rb_partition' keys
     """
     model_spec = stage4_result["model_spec"]
     priors = stage4_result["priors"]
     causal_spec = stage4_result.get("causal_spec")
 
+    # Compute RB partition once — reused for profile filtering and UI
+    rb_partition = _compute_rb_partition_payload(builder) if builder is not None else None
+
     id_result = parametric_id_task(
         model_spec, priors, raw_data, causal_spec=causal_spec, builder=builder
     )
-
-    # Compute Rao-Blackwellization partition for the UI
-    rb_partition = None
-    try:
-        if builder is not None:
-            from causal_ssm_agent.models.likelihoods.graph_analysis import (
-                analyze_first_pass_rb,
-            )
-
-            spec = builder._model.spec
-            partition = analyze_first_pass_rb(spec)
-            latent_names = spec.latent_names or [f"latent_{i}" for i in range(spec.n_latent)]
-            manifest_names = spec.manifest_names or [f"obs_{i}" for i in range(spec.n_manifest)]
-
-            rb_partition = {
-                "latent_variables": [
-                    {"name": latent_names[i], "method": "kalman" if i in partition.kalman_idx else "particle"}
-                    for i in range(spec.n_latent)
-                ],
-                "obs_variables": [
-                    {"name": manifest_names[i], "method": "kalman" if i in partition.obs_kalman_idx else "particle"}
-                    for i in range(spec.n_manifest)
-                ],
-            }
-    except Exception:
-        logger.debug("RB partition computation skipped", exc_info=True)
 
     return {
         **stage4_result,
