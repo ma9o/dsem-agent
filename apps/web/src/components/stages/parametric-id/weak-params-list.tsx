@@ -93,18 +93,6 @@ function buildColumns(threshold: number) {
       ),
       meta: { mono: true },
     }),
-    col.display({
-      id: "profile",
-      header: () => (
-        <HeaderWithTooltip
-          label="Profile Likelihood"
-          tooltip="Profile likelihood curve: shows how log-likelihood changes as each parameter is varied with others optimized out. The dashed line is the chi-squared threshold — if the curve stays above it, the parameter is unidentifiable."
-        />
-      ),
-      cell: (info) => (
-        <ProfileSparkline param={info.row.original} threshold={threshold} />
-      ),
-    }),
     col.accessor("contraction_ratio", {
       header: () => (
         <HeaderWithTooltip
@@ -117,7 +105,6 @@ function buildColumns(threshold: number) {
         return v != null ? formatNumber(v) : "--";
       },
       meta: {
-        align: "right",
         mono: true,
         severity: (_v: number | null, row: ParameterIdentification) => {
           if (row.classification === "structurally_unidentifiable") return "fail";
@@ -125,6 +112,18 @@ function buildColumns(threshold: number) {
           return undefined;
         },
       },
+    }),
+    col.display({
+      id: "profile",
+      header: () => (
+        <HeaderWithTooltip
+          label="Profile Likelihood"
+          tooltip="Profile likelihood curve: shows how log-likelihood changes as each parameter is varied with others optimized out. The dashed line is the chi-squared threshold — if the curve stays above it, the parameter is unidentifiable."
+        />
+      ),
+      cell: (info) => (
+        <ProfileSparkline param={info.row.original} threshold={threshold} />
+      ),
     }),
   ];
 }
@@ -137,5 +136,5 @@ export function WeakParamsList({
   threshold?: number | null;
 }) {
   const columns = buildColumns(threshold ?? 1.92);
-  return <InfoTable columns={columns as ColumnDef<ParameterIdentification, unknown>[]} data={params} />;
+  return <InfoTable columns={columns as ColumnDef<ParameterIdentification, unknown>[]} data={params} estimateRowHeight={80} />;
 }
