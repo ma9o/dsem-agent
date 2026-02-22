@@ -1763,6 +1763,54 @@
       "title": "PriorSource",
       "type": "object"
     },
+    "RBPartitionResult": {
+      "description": "First-pass Rao-Blackwellization partition for frontend display.",
+      "properties": {
+        "latent_variables": {
+          "items": {
+            "$ref": "#/$defs/RBVariable"
+          },
+          "title": "Latent Variables",
+          "type": "array"
+        },
+        "obs_variables": {
+          "items": {
+            "$ref": "#/$defs/RBVariable"
+          },
+          "title": "Obs Variables",
+          "type": "array"
+        }
+      },
+      "required": [
+        "latent_variables",
+        "obs_variables"
+      ],
+      "title": "RBPartitionResult",
+      "type": "object"
+    },
+    "RBVariable": {
+      "description": "A single variable's Rao-Blackwellization assignment.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "method": {
+          "enum": [
+            "kalman",
+            "particle"
+          ],
+          "title": "Method",
+          "type": "string"
+        }
+      },
+      "required": [
+        "method",
+        "name"
+      ],
+      "title": "RBVariable",
+      "type": "object"
+    },
     "RankHistogram": {
       "description": "Per-parameter rank histogram for chain mixing assessment.",
       "properties": {
@@ -2184,6 +2232,17 @@
       "properties": {
         "parametric_id": {
           "$ref": "#/$defs/ParametricIdResult"
+        },
+        "rb_partition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RBPartitionResult"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "gate_failed": {
           "anyOf": [

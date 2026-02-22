@@ -74,6 +74,9 @@ export type {
   ParameterIdentification,
 } from "./generated/models";
 
+// Rao-Blackwellization partition types
+export type { RBPartitionResult, RBVariable } from "./generated/models";
+
 // LLM trace types
 export type { LLMTrace, TraceMessage, TraceUsage } from "./generated/models";
 

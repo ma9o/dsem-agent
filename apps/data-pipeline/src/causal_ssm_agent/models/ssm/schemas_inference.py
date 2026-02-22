@@ -190,6 +190,20 @@ class ParametricIdResult(BaseModel):
     error: str | None = None
 
 
+class RBVariable(BaseModel):
+    """A single variable's Rao-Blackwellization assignment."""
+
+    name: str
+    method: Literal["kalman", "particle"]
+
+
+class RBPartitionResult(BaseModel):
+    """First-pass Rao-Blackwellization partition for frontend display."""
+
+    latent_variables: list[RBVariable]
+    obs_variables: list[RBVariable]
+
+
 # ---------------------------------------------------------------------------
 # Treatment effects
 # ---------------------------------------------------------------------------

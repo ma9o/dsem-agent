@@ -170,7 +170,34 @@ def stage4b_parametric_id_flow(
         model_spec, priors, raw_data, causal_spec=causal_spec, builder=builder
     )
 
+    # Compute Rao-Blackwellization partition for the UI
+    rb_partition = None
+    try:
+        if builder is not None:
+            from causal_ssm_agent.models.likelihoods.graph_analysis import (
+                analyze_first_pass_rb,
+            )
+
+            spec = builder._model.spec
+            partition = analyze_first_pass_rb(spec)
+            latent_names = spec.latent_names or [f"latent_{i}" for i in range(spec.n_latent)]
+            manifest_names = spec.manifest_names or [f"obs_{i}" for i in range(spec.n_manifest)]
+
+            rb_partition = {
+                "latent_variables": [
+                    {"name": latent_names[i], "method": "kalman" if i in partition.kalman_idx else "particle"}
+                    for i in range(spec.n_latent)
+                ],
+                "obs_variables": [
+                    {"name": manifest_names[i], "method": "kalman" if i in partition.obs_kalman_idx else "particle"}
+                    for i in range(spec.n_manifest)
+                ],
+            }
+    except Exception:
+        logger.debug("RB partition computation skipped", exc_info=True)
+
     return {
         **stage4_result,
         "parametric_id": id_result,
+        "rb_partition": rb_partition,
     }

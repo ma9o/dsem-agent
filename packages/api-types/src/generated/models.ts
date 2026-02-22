@@ -490,6 +490,7 @@ export interface ValidationRetryContract {
 }
 export interface Stage4BContract {
   parametric_id: ParametricIdResult;
+  rb_partition?: RBPartitionResult | null;
   gate_failed?: boolean | null;
   gate_overridden?: GateOverrideContract | null;
   context?: string | null;
@@ -543,6 +544,20 @@ export interface ParameterIdentification {
   contraction_ratio?: number | null;
   profile_x?: number[] | null;
   profile_ll?: number[] | null;
+}
+/**
+ * First-pass Rao-Blackwellization partition for frontend display.
+ */
+export interface RBPartitionResult {
+  latent_variables: RBVariable[];
+  obs_variables: RBVariable[];
+}
+/**
+ * A single variable's Rao-Blackwellization assignment.
+ */
+export interface RBVariable {
+  name: string;
+  method: "kalman" | "particle";
 }
 export interface Stage5Contract {
   intervention_results: TreatmentEffectContract[];

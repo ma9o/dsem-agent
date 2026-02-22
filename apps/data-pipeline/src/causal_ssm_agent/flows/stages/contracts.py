@@ -21,6 +21,7 @@ from causal_ssm_agent.models.ssm.schemas_inference import (  # noqa: TC001
     ParametricIdResult,
     PosteriorMarginal,
     PosteriorPair,
+    RBPartitionResult,
     SVIDiagnostics,
     TemporalEffect,
 )
@@ -178,6 +179,7 @@ class Stage4bContract(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     parametric_id: ParametricIdResult
+    rb_partition: RBPartitionResult | None = None
     gate_failed: bool | None = None
     gate_overridden: GateOverrideContract | None = None
     context: str | None = None

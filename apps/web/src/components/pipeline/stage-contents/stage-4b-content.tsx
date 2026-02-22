@@ -1,3 +1,4 @@
+import { RBPartitionCard } from "@/components/stages/parametric-id/rb-partition-card";
 import { TRuleCard } from "@/components/stages/parametric-id/t-rule-card";
 import { WeakParamsList } from "@/components/stages/parametric-id/weak-params-list";
 import { HardGateAlert } from "@/components/ui/custom/hard-gate-alert";
@@ -16,6 +17,7 @@ export default function Stage4bContent({ data }: { data: Stage4bData }) {
         />
       )}
       {pid.t_rule && <TRuleCard tRule={pid.t_rule} />}
+      {data.rb_partition && <RBPartitionCard partition={data.rb_partition} />}
       {pid.per_param_classification && pid.per_param_classification.length > 0 && (
         <WeakParamsList params={pid.per_param_classification} threshold={pid.threshold} />
       )}
