@@ -10,7 +10,7 @@ export default function Stage3Content({ data }: { data: Stage3Data }) {
       {!report.is_valid && (
         <HardGateAlert
           title="Data Validation Failed"
-          explanation="The extracted data failed validation checks. No usable data remains after filtering."
+          explanation="The extracted data failed validation checks."
           suggestion="Check data source quality, add more indicators, or broaden measurement criteria."
         />
       )}
